@@ -1,0 +1,8 @@
+{
+  "name": "Remix Bright Scholar School",
+  "description": "School Website and Complete Management System for Bright Scholar School with Student \u0026 Teacher Portals, Class Attendance, Leaves, Fees \u0026 Fine tracking, Tests, and Reports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
