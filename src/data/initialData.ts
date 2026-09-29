@@ -15,7 +15,7 @@ import {
 
 export const initialSettings: SystemSettings = {
   adminPassword: 'admin',
-  teacherPassword: 'teacher',
+  teacherPassword: 'teacher123',
   finePerAbsentDay: 30, // Rs. 30 per unapproved absent day
   schoolName: 'Bright Scholar School',
   schoolSlogan: 'Pehle Tarbiyat, Phir Taleem',
@@ -24,113 +24,17 @@ export const initialSettings: SystemSettings = {
   schoolWhatsApp: '0302-5053993',
 };
 
-export const initialTeachers: Teacher[] = [
-  {
-    id: 't-1',
-    name: 'Sir Muhammad Ali',
-    qualification: 'M.Sc. Mathematics (UAF)',
-    subject: 'Mathematics & Science',
-    assignedClasses: 'Class 5, Class 6, Class 7, Class 8 / Middle',
-    contactNo: '0302-5053993',
-    whatsappNo: '0302-5053993',
-    joiningDate: '2022-03-01',
-    salary: 32000,
-    allowances: 2000,
-    deductions: 0,
-    personalPassword: 'ali123'
-  },
-  {
-    id: 't-2',
-    name: 'Madam Fatima Zahra',
-    qualification: 'M.A. English & B.Ed',
-    subject: 'English & Urdu',
-    assignedClasses: 'Class 1, Class 2, Class 3, Class 4',
-    contactNo: '0301-7654321',
-    whatsappNo: '0302-5053993',
-    joiningDate: '2023-01-15',
-    salary: 28000,
-    allowances: 0,
-    deductions: 500,
-    personalPassword: 'fatima123'
-  },
-  {
-    id: 't-3',
-    name: 'Madam Ayesha Noor',
-    qualification: 'M.A. Islamic Studies, Montessori Certified',
-    subject: 'Early Childhood Education & Tarbiyat',
-    assignedClasses: 'Play Group, Nursery, Prep',
-    contactNo: '0304-1122334',
-    whatsappNo: '0302-5053993',
-    joiningDate: '2023-08-01',
-    salary: 25000,
-    allowances: 1000,
-    deductions: 0,
-    personalPassword: 'ayesha123'
-  },
-  {
-    id: 't-4',
-    name: 'Qari Hafiz Abdul Rehman',
-    qualification: 'Dars-e-Nizami & Wafaq-ul-Madaris',
-    subject: 'Nazra Quran, Tajweed & Islamiat',
-    assignedClasses: 'All Classes (Play Group to Middle)',
-    contactNo: '0306-9988776',
-    whatsappNo: '0302-5053993',
-    joiningDate: '2021-09-01',
-    salary: 26000,
-    allowances: 1500,
-    deductions: 0,
-    personalPassword: 'rehman123'
-  }
-];
+export const initialTeachers: Teacher[] = [];
 
-export const initialSalaryTransactions: import('../types').SalaryTransaction[] = [
-  {
-    id: 'sal-1',
-    teacherId: 't-1',
-    teacherName: 'Sir Muhammad Ali',
-    month: 'September 2026',
-    amount: 2000,
-    type: 'Addition',
-    reason: 'Exam preparation & extra evening revision classes bonus',
-    date: '2026-09-20'
-  },
-  {
-    id: 'sal-2',
-    teacherId: 't-2',
-    teacherName: 'Madam Fatima Zahra',
-    month: 'September 2026',
-    amount: 500,
-    type: 'Deduction',
-    reason: 'Advance salary withdrawal installment',
-    date: '2026-09-15'
-  }
-];
+export const initialSalaryTransactions: import('../types').SalaryTransaction[] = [];
 
 export const initialStudents: Student[] = [];
 
 export const initialAttendance: StudentAttendance[] = [];
 
-export const initialTeacherAttendance: TeacherAttendance[] = [
-  { id: 'ta-1', teacherId: 't-1', teacherName: 'Sir Muhammad Ali', date: '2026-09-29', month: '2026-09', status: 'Present' },
-  { id: 'ta-2', teacherId: 't-2', teacherName: 'Madam Fatima Zahra', date: '2026-09-29', month: '2026-09', status: 'Present' },
-  { id: 'ta-3', teacherId: 't-3', teacherName: 'Madam Ayesha Noor', date: '2026-09-29', month: '2026-09', status: 'Present' },
-  { id: 'ta-4', teacherId: 't-4', teacherName: 'Qari Hafiz Abdul Rehman', date: '2026-09-29', month: '2026-09', status: 'Present' },
-];
+export const initialTeacherAttendance: TeacherAttendance[] = [];
 
-export const initialLeaves: LeaveRequest[] = [
-  {
-    id: 'l-3',
-    applicantId: 't-2',
-    applicantName: 'Madam Fatima Zahra',
-    role: 'teacher',
-    fromDate: '2026-10-05',
-    toDate: '2026-10-05',
-    numberOfDays: 1,
-    reason: 'Medical appointment',
-    status: 'Pending',
-    appliedDate: '2026-09-28',
-  }
-];
+export const initialLeaves: LeaveRequest[] = [];
 
 export const initialFeeRecords: FeeRecord[] = [];
 
