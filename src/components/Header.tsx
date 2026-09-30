@@ -11,7 +11,8 @@ import {
   Search,
   Menu,
   X,
-  FileText
+  FileText,
+  Download
 } from 'lucide-react';
 import { useSchool } from '../context/SchoolContext';
 import { WebsiteTab, PortalType } from '../types';
@@ -182,6 +183,17 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
+            {/* 1-Click Install App button */}
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('open-install-guide'))}
+              className="flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-[#07193B] font-extrabold text-xs sm:text-sm px-2.5 sm:px-3 py-2 rounded-lg shadow transition active:scale-95"
+              title="Install Mobile App"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Install App</span>
+              <span className="sm:hidden">ایپ</span>
+            </button>
+
             {/* Mobile menu toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -302,6 +314,16 @@ export const Header: React.FC<HeaderProps> = ({
               ))}
 
               <div className="pt-2 border-t border-white/10 flex flex-col gap-2">
+                <button
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('open-install-guide'));
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-center py-2 rounded-lg text-sm flex items-center justify-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>📲 موبائل ایپ انسٹال کریں (Install App)</span>
+                </button>
                 <button
                   onClick={() => {
                     onOpenAdmission();

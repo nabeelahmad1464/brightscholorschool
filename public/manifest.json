@@ -1,0 +1,16 @@
+{
+  "short_name": "Bright Scholar",
+  "name": "Bright Scholar School Management",
+  "icons": [
+    {
+      "src": "/school_logo.jpg",
+      "type": "image/jpeg",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0D285F",
+  "theme_color": "#0D285F",
+  "display": "standalone",
+  "orientation": "portrait"
+}

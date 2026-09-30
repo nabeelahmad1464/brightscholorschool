@@ -3,6 +3,8 @@ import { SchoolProvider, useSchool } from './context/SchoolContext';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
+import { InstallAppBanner } from './components/InstallAppBanner';
+import { MobileBottomNav } from './components/MobileBottomNav';
 import { OnlineAdmissionModal } from './components/OnlineAdmissionModal';
 import { StudentProfileModal } from './components/StudentProfileModal';
 import { LoginModal } from './pages/LoginModal';
@@ -46,6 +48,9 @@ const MainApp: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
+      {/* 1-Tap App Install Banner */}
+      <InstallAppBanner />
+
       {/* Top Main Navigation Header */}
       <Header
         currentTab={currentTab}
@@ -55,7 +60,7 @@ const MainApp: React.FC = () => {
       />
 
       {/* Main Dynamic Viewport */}
-      <main className="flex-1">
+      <main className="flex-1 pb-16 md:pb-0">
         {currentPortal === 'PUBLIC_WEBSITE' && (
           currentTab === 'SEARCH' ? (
             <StudentSearchPage
@@ -96,6 +101,14 @@ const MainApp: React.FC = () => {
 
       {/* Floating 24/7 WhatsApp Assistance */}
       <FloatingWhatsApp />
+
+      {/* Native App-like Mobile Bottom Navigation Bar */}
+      <MobileBottomNav
+        currentTab={currentTab}
+        onTabChange={handleTabChange}
+        onOpenLogin={() => setShowLoginModal(true)}
+        onOpenAdmission={() => setShowAdmissionModal(true)}
+      />
 
       {/* Modals */}
       <OnlineAdmissionModal

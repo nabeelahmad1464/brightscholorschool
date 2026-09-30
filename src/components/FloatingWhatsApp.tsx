@@ -6,7 +6,7 @@ export const FloatingWhatsApp: React.FC = () => {
   const { openWhatsApp, settings } = useSchool();
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2 group">
+    <div className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-50 flex flex-col items-end gap-2 group">
       {/* Speech bubble label */}
       <div className="bg-[#07193B] text-white text-xs px-3.5 py-1.5 rounded-full shadow-lg border border-amber-400/40 hidden sm:flex items-center gap-1.5 transform transition-all group-hover:scale-105">
         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
