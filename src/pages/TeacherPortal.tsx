@@ -206,11 +206,11 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Select Class</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Select Class (کلاس منتخب کریں)</label>
               <select
                 value={selectedClass}
                 onChange={(e) => setSelectedClass(e.target.value as ClassLevel)}
-                className="w-full px-3 py-2 text-sm border rounded-lg bg-white"
+                className="w-full px-3 py-2 text-sm border rounded-lg bg-white font-medium"
               >
                 {SCHOOL_CLASSES.map(cls => (
                   <option key={cls} value={cls}>{cls}</option>
@@ -219,72 +219,126 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Attendance Date</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Attendance Date (تاریخ)</label>
               <input
                 type="date"
                 value={attDate}
                 onChange={(e) => setAttDate(e.target.value)}
-                className="w-full px-3 py-2 text-sm border rounded-lg"
+                className="w-full px-3 py-2 text-sm border rounded-lg font-medium"
               />
             </div>
           </div>
 
-          <div className="border border-slate-200 rounded-xl overflow-hidden">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100 text-slate-700">
-                <tr>
-                  <th className="p-3">Roll No</th>
-                  <th className="p-3">Student Name</th>
-                  <th className="p-3 text-center">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {classStudents.map(st => {
-                  const currentStatus = statusMap[st.id] ||
-                    attendance.find(a => a.studentId === st.id && a.date === attDate)?.status ||
-                    'Present';
+          {/* Class Summary Bar */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="bg-[#0D285F] text-amber-300 font-bold px-2.5 py-0.5 rounded text-xs">
+                  {selectedClass}
+                </span>
+                <span className="text-xs font-bold text-slate-800">
+                  کل طلباء: {classStudents.length} بچے (Total: {classStudents.length} Students)
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                غیر حاضری پر روزانہ {settings.finePerAbsentDay} روپے جرمانہ خود بخود فیس میں شامل ہوتا ہے۔
+              </p>
+            </div>
 
-                  return (
-                    <tr key={st.id} className="hover:bg-slate-50">
-                      <td className="p-3 font-bold">{st.rollNo}</td>
-                      <td className="p-3 font-semibold text-slate-900">{st.name}</td>
-                      <td className="p-3">
-                        <div className="flex justify-center gap-1">
-                          {(['Present', 'Absent', 'Leave', 'Late'] as const).map(status => (
-                            <button
-                              key={status}
-                              type="button"
-                              onClick={() => setStatusMap(prev => ({ ...prev, [st.id]: status }))}
-                              className={`px-3 py-1 rounded text-xs font-bold transition ${
-                                currentStatus === status
-                                  ? status === 'Present'
-                                    ? 'bg-emerald-600 text-white'
-                                    : status === 'Absent'
-                                    ? 'bg-red-600 text-white'
-                                    : status === 'Leave'
-                                    ? 'bg-amber-500 text-white'
-                                    : 'bg-purple-600 text-white'
-                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                              }`}
-                            >
-                              {status}
-                            </button>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            {/* Quick Bulk Actions */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const map: Record<string, 'Present' | 'Absent' | 'Leave' | 'Late'> = {};
+                  classStudents.forEach(s => { map[s.id] = 'Present'; });
+                  setStatusMap(map);
+                }}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition shadow-sm"
+              >
+                ✓ Mark All Present (سب کو حاضر کریں)
+              </button>
+            </div>
           </div>
 
-          <div className="flex justify-end">
+          {classStudents.length === 0 ? (
+            <div className="text-center py-12 text-slate-500 text-xs italic bg-slate-50 rounded-xl border border-dashed border-slate-300">
+              اس کلاس ({selectedClass}) میں ابھی کوئی بچہ داخل نہیں ہے۔ ایڈمن پورٹل سے بچوں کو ایڈ کیا جا سکتا ہے۔
+            </div>
+          ) : (
+            <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#07193B] text-white">
+                  <tr>
+                    <th className="p-3">Roll No</th>
+                    <th className="p-3">Student & Father Name</th>
+                    <th className="p-3 text-center">Mark Attendance (حاضری لگائیں)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {classStudents.map(st => {
+                    const currentStatus = statusMap[st.id] ||
+                      attendance.find(a => a.studentId === st.id && a.date === attDate)?.status ||
+                      'Present';
+
+                    return (
+                      <tr key={st.id} className="hover:bg-slate-50 transition">
+                        <td className="p-3 font-bold text-slate-900">
+                          <span className="w-7 h-7 rounded-full bg-slate-100 border border-slate-300 inline-flex items-center justify-center font-mono">
+                            {st.rollNo}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <div className="font-bold text-slate-900 text-sm">{st.name}</div>
+                          <div className="text-[11px] text-slate-500">
+                            ولدیت: {st.fatherName} • Adm #{st.admissionNo}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex justify-center items-center gap-1.5 flex-wrap">
+                            {[
+                              { key: 'Present', label: 'حاضر (Present)', color: 'bg-emerald-600' },
+                              { key: 'Absent', label: 'غیر حاضر (Absent)', color: 'bg-red-600' },
+                              { key: 'Leave', label: 'رخصت (Leave)', color: 'bg-amber-500' },
+                              { key: 'Late', label: 'لیٹ (Late)', color: 'bg-purple-600' }
+                            ].map(item => (
+                              <button
+                                key={item.key}
+                                type="button"
+                                onClick={() => setStatusMap(prev => ({ ...prev, [st.id]: item.key as any }))}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm ${
+                                  currentStatus === item.key
+                                    ? `${item.color} text-white ring-2 ring-offset-1 ring-slate-400`
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                              >
+                                {item.label}
+                              </button>
+                            ))}
+                          </div>
+                          {currentStatus === 'Absent' && (
+                            <div className="text-center text-[10px] text-red-600 font-bold mt-1">
+                              ⚠️ غیر حاضری پر Rs. {settings.finePerAbsentDay} فائن لاگو ہو گا
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="flex justify-between items-center pt-2">
+            <span className="text-xs text-slate-500">
+              حاضری لگانے کے بعد بٹن پر کلک کرنا لازمی ہے۔
+            </span>
             <button
               onClick={handleSaveAttendance}
-              className="bg-[#0D285F] text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-[#07193B]"
+              className="bg-[#0D285F] hover:bg-[#07193B] text-white px-7 py-2.5 rounded-xl font-bold text-sm shadow transition"
             >
-              Submit Attendance
+              Save Attendance (حاضری محفوظ کریں)
             </button>
           </div>
         </div>

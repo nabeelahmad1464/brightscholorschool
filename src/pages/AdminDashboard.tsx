@@ -93,11 +93,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
     deleteNotice,
     updateAdmissionStatus,
     approveAndEnrollAdmission,
-    updateSettings
+    updateSettings,
+    getStudentFullReport
   } = useSchool();
 
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [selectedClassFolder, setSelectedClassFolder] = useState<ClassLevel>('Class 5');
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
 
   // Student Add / Edit state
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
@@ -551,46 +553,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
       {/* TAB 2: CLASS FOLDERS & STUDENT MANAGEMENT (ADD / EDIT / DELETE) */}
       {activeTab === 'classes' && (
         <div className="space-y-6">
-          <div className="bg-white p-4 rounded-xl border border-slate-200">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Select Class to Manage Students:
-              </h3>
+          {/* Search Bar Across Entire School */}
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[260px]">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+              <input
+                type="text"
+                value={studentSearchQuery}
+                onChange={(e) => setStudentSearchQuery(e.target.value)}
+                placeholder="Search student by name, father name, Roll No (e.g. 01), or Admission ID..."
+                className="w-full pl-10 pr-4 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0D285F] outline-none"
+              />
+            </div>
+            {studentSearchQuery && (
               <button
-                onClick={() => openAddStudentModal(selectedClassFolder)}
-                className="bg-[#0D285F] text-amber-300 font-bold text-xs px-3.5 py-1.5 rounded-lg flex items-center gap-1 shadow"
+                type="button"
+                onClick={() => setStudentSearchQuery('')}
+                className="text-xs text-slate-500 hover:text-slate-800 font-semibold px-2 py-1"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Student to {selectedClassFolder}</span>
+                Clear Search
               </button>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {SCHOOL_CLASSES.map(cls => {
-                const count = students.filter(s => s.className === cls).length;
-                const isSelected = selectedClassFolder === cls;
-                return (
-                  <button
-                    key={cls}
-                    onClick={() => setSelectedClassFolder(cls)}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition border ${
-                      isSelected
-                        ? 'bg-[#0D285F] text-amber-300 border-[#0D285F] shadow-sm'
-                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    <Folder className={`w-4 h-4 ${isSelected ? 'text-amber-400' : 'text-amber-500'}`} />
-                    <span>{cls}</span>
-                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                      isSelected ? 'bg-amber-400 text-[#07193B]' : 'bg-slate-200 text-slate-700'
-                    }`}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            )}
+            <button
+              onClick={() => openAddStudentModal(selectedClassFolder)}
+              className="bg-[#0D285F] text-amber-300 font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 shadow"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add New Student</span>
+            </button>
           </div>
+
+          {!studentSearchQuery && (
+            <div className="bg-white p-4 rounded-xl border border-slate-200">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Select Class to Manage Students:
+                </h3>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {SCHOOL_CLASSES.map(cls => {
+                  const count = students.filter(s => s.className === cls).length;
+                  const isSelected = selectedClassFolder === cls;
+                  return (
+                    <button
+                      key={cls}
+                      onClick={() => setSelectedClassFolder(cls)}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition border ${
+                        isSelected
+                          ? 'bg-[#0D285F] text-amber-300 border-[#0D285F] shadow-sm'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Folder className={`w-4 h-4 ${isSelected ? 'text-amber-400' : 'text-amber-500'}`} />
+                      <span>{cls}</span>
+                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                        isSelected ? 'bg-amber-400 text-[#07193B]' : 'bg-slate-200 text-slate-700'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Folder Content Table */}
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
@@ -598,94 +625,154 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
               <div>
                 <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
                   <Folder className="w-5 h-5 text-amber-500" />
-                  <span>{selectedClassFolder} Student Roster</span>
+                  <span>
+                    {studentSearchQuery ? `Search Results for "${studentSearchQuery}"` : `${selectedClassFolder} Student Roster`}
+                  </span>
                 </h3>
                 <p className="text-xs text-slate-500">
-                  {classStudents.length} students enrolled • Monthly Tuition: Rs. {getDefaultMonthlyFee(selectedClassFolder)}
+                  {studentSearchQuery
+                    ? `Showing matching students across all classes`
+                    : `${classStudents.length} students enrolled • Monthly Tuition: Rs. ${getDefaultMonthlyFee(selectedClassFolder)}`}
                 </p>
               </div>
             </div>
 
-            {classStudents.length === 0 ? (
-              <div className="text-center py-12 text-slate-500 text-xs italic bg-slate-50 rounded-xl">
-                No students enrolled in {selectedClassFolder} yet.
-                <div className="mt-2">
-                  <button
-                    onClick={() => openAddStudentModal(selectedClassFolder)}
-                    className="bg-[#0D285F] text-white px-4 py-2 rounded-lg text-xs font-bold"
-                  >
-                    + Enroll First Student
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#07193B] text-white">
-                    <tr>
-                      <th className="p-3">Roll</th>
-                      <th className="p-3">Adm ID</th>
-                      <th className="p-3">Student Name</th>
-                      <th className="p-3">Father Name</th>
-                      <th className="p-3">Monthly Fee</th>
-                      <th className="p-3">Status</th>
-                      <th className="p-3">Phone</th>
-                      <th className="p-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {classStudents.map(st => (
-                      <tr key={st.id} className="hover:bg-slate-50">
-                        <td className="p-3 font-bold text-slate-900">{st.rollNo}</td>
-                        <td className="p-3 font-mono text-slate-500">{st.admissionNo}</td>
-                        <td className="p-3 font-semibold text-slate-900">{st.name}</td>
-                        <td className="p-3 text-slate-600">{st.fatherName}</td>
-                        <td className="p-3 font-bold text-emerald-800">Rs. {st.monthlyFee}</td>
-                        <td className="p-3">
-                          <button
-                            onClick={() => toggleStudentActive(st.id)}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              st.isActive
-                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                                : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                            }`}
-                            title="Click to toggle Active/Inactive"
-                          >
-                            {st.isActive ? 'Active' : 'Inactive'}
-                          </button>
-                        </td>
-                        <td className="p-3 text-slate-500">{st.contactNo}</td>
-                        <td className="p-3 text-right space-x-1.5 whitespace-nowrap">
-                          <button
-                            onClick={() => onSelectStudent(st)}
-                            className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-semibold hover:bg-blue-100 transition"
-                            title="View complete 360 profile"
-                          >
-                            Dossier
-                          </button>
-                          <button
-                            onClick={() => openEditStudentModal(st)}
-                            className="bg-amber-50 text-amber-800 px-2 py-1 rounded text-xs font-semibold hover:bg-amber-100 transition"
-                            title="Edit details"
-                          >
-                            <Edit className="w-3.5 h-3.5 inline mr-1" />
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => setStudentToDelete(st)}
-                            className="bg-red-50 text-red-600 px-2 py-1 rounded text-xs font-semibold hover:bg-red-100 transition"
-                            title="Delete student"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 inline mr-1" />
-                            Delete
-                          </button>
-                        </td>
+            {(() => {
+              const listToDisplay = studentSearchQuery.trim()
+                ? students.filter(s =>
+                    s.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                    s.fatherName.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                    s.rollNo.includes(studentSearchQuery) ||
+                    s.admissionNo.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                    s.className.toLowerCase().includes(studentSearchQuery.toLowerCase())
+                  )
+                : classStudents;
+
+              if (listToDisplay.length === 0) {
+                return (
+                  <div className="text-center py-12 text-slate-500 text-xs italic bg-slate-50 rounded-xl">
+                    No students match your criteria.
+                    <div className="mt-2">
+                      <button
+                        onClick={() => openAddStudentModal(selectedClassFolder)}
+                        className="bg-[#0D285F] text-white px-4 py-2 rounded-lg text-xs font-bold"
+                      >
+                        + Enroll Student
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#07193B] text-white">
+                      <tr>
+                        <th className="p-3">Roll & Class</th>
+                        <th className="p-3">Student & Father Name</th>
+                        <th className="p-3">Attendance & Fines</th>
+                        <th className="p-3">Monthly Tuition</th>
+                        <th className="p-3">Paid / Remaining</th>
+                        <th className="p-3">Fee Status</th>
+                        <th className="p-3 text-right">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {listToDisplay.map(st => {
+                        const report = getStudentFullReport(st.id);
+                        return (
+                          <tr key={st.id} className="hover:bg-slate-50 transition">
+                            <td className="p-3">
+                              <span className="font-bold text-slate-900 font-mono">Roll: {st.rollNo}</span>
+                              <div className="text-[10px] text-slate-500">{st.className}</div>
+                              <div className="text-[9px] text-slate-400 font-mono">{st.admissionNo}</div>
+                            </td>
+                            <td className="p-3">
+                              <div className="font-bold text-slate-900 text-sm">{st.name}</div>
+                              <div className="text-slate-500 text-[11px]">S/O {st.fatherName}</div>
+                              <div className="text-slate-400 text-[10px]">{st.contactNo}</div>
+                            </td>
+                            <td className="p-3">
+                              {report ? (
+                                <div>
+                                  <span className="font-bold text-blue-900">{report.attendancePercentage}% Attendance</span>
+                                  <div className="text-[11px] text-slate-500">
+                                    {report.presentDays} Present / {report.absentDays} Absents
+                                  </div>
+                                  {report.totalFineAmount > 0 ? (
+                                    <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">
+                                      Fine: Rs. {report.totalFineAmount}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-emerald-600 font-semibold">No Fine</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="p-3 font-bold text-slate-800">
+                              Rs. {st.monthlyFee.toLocaleString()}
+                            </td>
+                            <td className="p-3">
+                              {report ? (
+                                <div>
+                                  <div className="text-emerald-700 font-bold">Paid: Rs. {report.paidAmount.toLocaleString()}</div>
+                                  <div className={`text-[11px] font-bold ${report.balanceRemaining > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                                    Due: Rs. {report.balanceRemaining.toLocaleString()}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              {report ? (
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  report.feeStatus === 'Paid'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : report.feeStatus === 'Partial'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {report.feeStatus}
+                                </span>
+                              ) : null}
+                            </td>
+                            <td className="p-3 text-right space-x-1.5 whitespace-nowrap">
+                              <button
+                                onClick={() => onSelectStudent(st)}
+                                className="bg-[#0D285F] text-amber-300 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-[#07193B] transition shadow-sm"
+                                title="View complete 360 student dossier"
+                              >
+                                Dossier (مکمل ریکارڈ)
+                              </button>
+                              <button
+                                onClick={() => openEditStudentModal(st)}
+                                className="bg-amber-50 text-amber-800 px-2.5 py-1.5 rounded-lg text-xs font-semibold hover:bg-amber-100 transition"
+                                title="Edit details"
+                              >
+                                <Edit className="w-3.5 h-3.5 inline mr-1" />
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => setStudentToDelete(st)}
+                                className="bg-red-50 text-red-600 px-2.5 py-1.5 rounded-lg text-xs font-semibold hover:bg-red-100 transition"
+                                title="Delete student"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 inline mr-1" />
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
