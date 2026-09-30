@@ -134,7 +134,7 @@ const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
 
 function loadFromStorage<T>(key: string, defaultValue: T): T {
   try {
-    const item = localStorage.getItem(`bss_v6_${key}`);
+    const item = localStorage.getItem(`bss_v7_${key}`);
     return item ? JSON.parse(item) : defaultValue;
   } catch (e) {
     return defaultValue;
@@ -143,9 +143,9 @@ function loadFromStorage<T>(key: string, defaultValue: T): T {
 
 function saveToStorage<T>(key: string, value: T) {
   try {
-    localStorage.setItem(`bss_v6_${key}`, JSON.stringify(value));
+    localStorage.setItem(`bss_v7_${key}`, JSON.stringify(value));
   } catch (e) {
-    console.error(`Failed to save bss_v6_${key}`, e);
+    console.error(`Failed to save bss_v7_${key}`, e);
   }
 }
 
