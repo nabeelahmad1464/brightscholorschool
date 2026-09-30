@@ -287,6 +287,33 @@ Kindly issue official receipt.`;
         )}
       </div>
 
+      {/* School Notices for Parents */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+        <div className="flex items-center gap-2 border-b pb-3">
+          <FileText className="w-5 h-5 text-amber-500" />
+          <h3 className="font-bold text-sm text-slate-900">School Notices & Circulars (اسکول کے اہم اعلانات)</h3>
+        </div>
+
+        <div className="space-y-3">
+          {useSchool().notices.length === 0 ? (
+            <p className="text-xs text-slate-500">No active notices at this moment.</p>
+          ) : (
+            useSchool().notices.map(n => (
+              <div key={n.id} className="p-3.5 rounded-xl border border-slate-200 bg-amber-50/50 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900">
+                    {n.category}
+                  </span>
+                  <span className="text-[10px] text-slate-400">{n.date}</span>
+                </div>
+                <h4 className="text-xs font-bold text-slate-900">{n.title}</h4>
+                <p className="text-xs text-slate-600">{n.content}</p>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
       {/* Fee Payment CTA */}
       <div className="bg-slate-100 rounded-xl p-5 border border-slate-200 flex flex-wrap items-center justify-between gap-4">
         <div>

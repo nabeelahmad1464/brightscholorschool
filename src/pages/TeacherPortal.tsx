@@ -7,7 +7,11 @@ import {
   CheckCircle,
   FileText,
   User,
-  Plus
+  Plus,
+  KeyRound,
+  Bell,
+  Check,
+  X
 } from 'lucide-react';
 import { useSchool } from '../context/SchoolContext';
 import { Student, ClassLevel, SCHOOL_CLASSES } from '../types';
@@ -27,15 +31,22 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
     addTestResult,
     tests,
     submitLeave,
-    settings
+    settings,
+    setTeacherPassword,
+    notices
   } = useSchool();
 
   const teacher = teachers.find(t => t.id === currentTeacherId) || teachers[0];
 
-  const [activeTab, setActiveTab] = useState<'attendance' | 'tarbiyat' | 'tests' | 'leave'>('attendance');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'tarbiyat' | 'tests' | 'leave' | 'notices'>('attendance');
   const [selectedClass, setSelectedClass] = useState<ClassLevel>('Class 5');
   const [attDate, setAttDate] = useState(new Date().toISOString().split('T')[0]);
   const [statusMap, setStatusMap] = useState<Record<string, 'Present' | 'Absent' | 'Leave' | 'Late'>>({});
+
+  // Password change modal
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
 
   // Daily report state
   const [repStudentId, setRepStudentId] = useState(students[0]?.id || '');
@@ -145,21 +156,35 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
             <span className="text-xs text-amber-300 font-semibold uppercase tracking-wider">
               Faculty Member Portal
             </span>
-            <h1 className="text-xl sm:text-2xl font-bold">{teacher ? teacher.name : 'Sir Muhammad Ali'}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold">{teacher ? teacher.name : 'Faculty Member'}</h1>
             <p className="text-xs text-slate-300">
               {teacher?.qualification} • Assigned: <strong>{teacher?.assignedClasses}</strong>
             </p>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setNewPasswordInput(teacher?.personalPassword || 'teacher123');
+            setPasswordSuccess('');
+            setShowPasswordModal(true);
+          }}
+          className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition border border-white/20"
+        >
+          <KeyRound className="w-4 h-4 text-amber-300" />
+          <span>Change Password (پاس ورڈ بدلیں)</span>
+        </button>
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-xl p-1 border border-slate-200 flex gap-2 text-xs font-semibold">
+      <div className="bg-white rounded-xl p-1 border border-slate-200 flex flex-wrap gap-2 text-xs font-semibold">
         {[
           { id: 'attendance', label: 'Mark Class Attendance', icon: <Calendar className="w-4 h-4" /> },
           { id: 'tarbiyat', label: 'Tarbiyat & Homework Report', icon: <BookOpen className="w-4 h-4" /> },
           { id: 'tests', label: 'Enter Test Marks', icon: <Award className="w-4 h-4" /> },
           { id: 'leave', label: 'Submit Leave', icon: <FileText className="w-4 h-4" /> },
+          { id: 'notices', label: 'School Notices', icon: <Bell className="w-4 h-4" /> },
         ].map(t => (
           <button
             key={t.id}
@@ -437,6 +462,113 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
             Submit Leave Request
           </button>
         </form>
+      )}
+
+      {/* 5: NOTICES */}
+      {activeTab === 'notices' && (
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+          <div className="border-b pb-3">
+            <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+              <Bell className="w-5 h-5 text-amber-500" />
+              <span>School Notices & Announcements (اسکول کے اعلانات)</span>
+            </h3>
+            <p className="text-xs text-slate-500">Official circulars issued by School Administration</p>
+          </div>
+
+          <div className="space-y-3">
+            {notices.length === 0 ? (
+              <p className="text-xs text-slate-500 py-4 text-center">No active notices at this time.</p>
+            ) : (
+              notices.map(n => (
+                <div key={n.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900">
+                      {n.category}
+                    </span>
+                    <span className="text-[11px] text-slate-400">{n.date}</span>
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-900">{n.title}</h4>
+                  <p className="text-xs text-slate-600 leading-relaxed">{n.content}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Change Password Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 border border-slate-200 shadow-2xl">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-amber-500" />
+                <h3 className="font-bold text-slate-900 text-sm">Change My Password</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPasswordModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {passwordSuccess ? (
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-xl text-xs flex items-center gap-2">
+                <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                <span>{passwordSuccess}</span>
+              </div>
+            ) : null}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!teacher) return;
+                if (!newPasswordInput.trim()) return;
+                setTeacherPassword(teacher.id, newPasswordInput.trim());
+                setPasswordSuccess('Password successfully updated!');
+                setTimeout(() => {
+                  setShowPasswordModal(false);
+                }, 1500);
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  New Password (نیا پاس ورڈ)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newPasswordInput}
+                  onChange={(e) => setNewPasswordInput(e.target.value)}
+                  placeholder="Enter your new password"
+                  className="w-full px-3 py-2 text-sm border rounded-lg font-mono font-bold"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  You can set any easy or confidential password for your login.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-[#0D285F] text-white px-5 py-2 rounded-xl text-xs font-bold hover:bg-[#07193B]"
+                >
+                  Save New Password
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

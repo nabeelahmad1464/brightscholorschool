@@ -14,7 +14,7 @@ import {
 } from '../types';
 
 export const initialSettings: SystemSettings = {
-  adminPassword: 'admin',
+  adminPassword: 'Nabeel#0',
   teacherPassword: 'teacher123',
   finePerAbsentDay: 30, // Rs. 30 per unapproved absent day
   schoolName: 'Bright Scholar School',
@@ -24,7 +24,64 @@ export const initialSettings: SystemSettings = {
   schoolWhatsApp: '0302-5053993',
 };
 
-export const initialTeachers: Teacher[] = [];
+export const initialTeachers: Teacher[] = [
+  {
+    id: 't-1',
+    name: 'Madam (Senior Teacher)',
+    qualification: 'M.A. English / B.Ed',
+    subject: 'English & Urdu',
+    assignedClasses: 'Class 1, Class 2, Class 3, Class 4',
+    contactNo: '0302-5053993',
+    whatsappNo: '0302-5053993',
+    joiningDate: '2023-01-01',
+    salary: 25000,
+    allowances: 0,
+    deductions: 0,
+    personalPassword: 'teacher123'
+  },
+  {
+    id: 't-2',
+    name: 'Sir (Science & Mathematics)',
+    qualification: 'M.Sc. Mathematics',
+    subject: 'Mathematics & Science',
+    assignedClasses: 'Class 5, Class 6, Class 7, Class 8 / Middle',
+    contactNo: '0302-5053993',
+    whatsappNo: '0302-5053993',
+    joiningDate: '2023-01-01',
+    salary: 28000,
+    allowances: 0,
+    deductions: 0,
+    personalPassword: 'teacher123'
+  },
+  {
+    id: 't-3',
+    name: 'Madam (Early Childhood & Prep)',
+    qualification: 'Montessori Certified / B.A.',
+    subject: 'Play Group, Nursery, Prep',
+    assignedClasses: 'Play Group, Nursery, Prep',
+    contactNo: '0302-5053993',
+    whatsappNo: '0302-5053993',
+    joiningDate: '2023-08-01',
+    salary: 22000,
+    allowances: 0,
+    deductions: 0,
+    personalPassword: 'teacher123'
+  },
+  {
+    id: 't-4',
+    name: 'Qari Sahib (Nazra Quran & Islamiat)',
+    qualification: 'Dars-e-Nizami / Hafiz-e-Quran',
+    subject: 'Nazra Quran & Tajweed',
+    assignedClasses: 'All Classes',
+    contactNo: '0302-5053993',
+    whatsappNo: '0302-5053993',
+    joiningDate: '2022-09-01',
+    salary: 24000,
+    allowances: 0,
+    deductions: 0,
+    personalPassword: 'teacher123'
+  }
+];
 
 export const initialSalaryTransactions: import('../types').SalaryTransaction[] = [];
 

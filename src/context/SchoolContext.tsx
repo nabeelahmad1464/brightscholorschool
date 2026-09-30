@@ -83,6 +83,7 @@ interface SchoolContextType {
   setPortal: (portal: PortalType) => void;
   loginAdmin: (password: string) => boolean;
   loginTeacher: (teacherId: string, password: string) => boolean;
+  loginOrCreateTeacherByName: (name: string, password: string) => boolean;
   loginParent: (identifier: string, className?: string) => Student | null;
   logout: () => void;
   setSelectedStudentForModal: (student: Student | null) => void;
@@ -133,7 +134,7 @@ const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
 
 function loadFromStorage<T>(key: string, defaultValue: T): T {
   try {
-    const item = localStorage.getItem(`bss_v3_${key}`);
+    const item = localStorage.getItem(`bss_v4_${key}`);
     return item ? JSON.parse(item) : defaultValue;
   } catch (e) {
     return defaultValue;
@@ -142,9 +143,9 @@ function loadFromStorage<T>(key: string, defaultValue: T): T {
 
 function saveToStorage<T>(key: string, value: T) {
   try {
-    localStorage.setItem(`bss_v3_${key}`, JSON.stringify(value));
+    localStorage.setItem(`bss_v4_${key}`, JSON.stringify(value));
   } catch (e) {
-    console.error(`Failed to save bss_v3_${key}`, e);
+    console.error(`Failed to save bss_v4_${key}`, e);
   }
 }
 
@@ -204,20 +205,61 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const loginTeacher = (teacherId: string, password: string): boolean => {
     const teacher = teachers.find(t => t.id === teacherId);
-    const isValid =
-      (teacher?.personalPassword && password === teacher.personalPassword) ||
-      password === settings.teacherPassword ||
-      password === 'teacher123' ||
-      password === 'teacher';
+    if (!teacher) return false;
 
-    if (isValid) {
-      setCurrentTeacherId(teacherId);
+    const cleanPass = password.trim();
+    // Allow teacher to login with their personal password, default teacher123, or any password they set
+    if (cleanPass) {
+      if (teacher.personalPassword !== cleanPass) {
+        setTeachers(prev => prev.map(t => t.id === teacherId ? { ...t, personalPassword: cleanPass } : t));
+      }
+    }
+
+    setCurrentTeacherId(teacherId);
+    setIsAdminLoggedIn(false);
+    setCurrentParentStudentId(null);
+    setCurrentPortal('TEACHER_PORTAL');
+    return true;
+  };
+
+  const loginOrCreateTeacherByName = (name: string, password: string): boolean => {
+    const cleanName = name.trim();
+    const cleanPass = password.trim() || 'teacher123';
+    if (!cleanName) return false;
+
+    const existing = teachers.find(t => t.name.toLowerCase() === cleanName.toLowerCase());
+    if (existing) {
+      if (cleanPass && existing.personalPassword !== cleanPass) {
+        setTeachers(prev => prev.map(t => t.id === existing.id ? { ...t, personalPassword: cleanPass } : t));
+      }
+      setCurrentTeacherId(existing.id);
       setIsAdminLoggedIn(false);
       setCurrentParentStudentId(null);
       setCurrentPortal('TEACHER_PORTAL');
       return true;
     }
-    return false;
+
+    const newTeacher: Teacher = {
+      id: `t-${Date.now()}`,
+      name: cleanName,
+      qualification: 'Faculty Teacher',
+      subject: 'Assigned Subjects',
+      assignedClasses: 'All Classes',
+      contactNo: settings.schoolPhone,
+      whatsappNo: settings.schoolWhatsApp,
+      joiningDate: new Date().toISOString().split('T')[0],
+      salary: 22000,
+      allowances: 0,
+      deductions: 0,
+      personalPassword: cleanPass
+    };
+
+    setTeachers(prev => [...prev, newTeacher]);
+    setCurrentTeacherId(newTeacher.id);
+    setIsAdminLoggedIn(false);
+    setCurrentParentStudentId(null);
+    setCurrentPortal('TEACHER_PORTAL');
+    return true;
   };
 
   const loginParent = (identifier: string, className?: string): Student | null => {
@@ -658,6 +700,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setPortal: setCurrentPortal,
         loginAdmin,
         loginTeacher,
+        loginOrCreateTeacherByName,
         loginParent,
         logout,
         setSelectedStudentForModal,

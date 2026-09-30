@@ -18,11 +18,13 @@ interface LoginModalProps {
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
-  const { loginAdmin, loginTeacher, loginParent, teachers, students } = useSchool();
+  const { loginAdmin, loginTeacher, loginOrCreateTeacherByName, loginParent, teachers, students } = useSchool();
 
   const [activeRole, setActiveRole] = useState<'admin' | 'teacher' | 'parent'>('admin');
-  const [adminPassword, setAdminPassword] = useState('admin');
+  const [adminPassword, setAdminPassword] = useState('');
   const [teacherId, setTeacherId] = useState(teachers[0]?.id || '');
+  const [teacherMode, setTeacherMode] = useState<'select' | 'custom'>('select');
+  const [customTeacherName, setCustomTeacherName] = useState('');
   const [teacherPassword, setTeacherPassword] = useState('teacher123');
   const [parentIdentifier, setParentIdentifier] = useState('01');
   const [parentClass, setParentClass] = useState('Class 5');
@@ -37,22 +39,37 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     if (success) {
       onClose();
     } else {
-      setError('Incorrect admin password. (Default is: admin)');
+      setError('Incorrect admin password. Please enter your valid administrator password.');
     }
   };
 
   const handleTeacherSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!teacherId) {
-      setError('Please select a teacher.');
-      return;
-    }
-    const success = loginTeacher(teacherId, teacherPassword);
-    if (success) {
-      onClose();
+
+    if (teacherMode === 'custom') {
+      if (!customTeacherName.trim()) {
+        setError('Please enter your full name (استاد کا نام لکھیں).');
+        return;
+      }
+      const success = loginOrCreateTeacherByName(customTeacherName, teacherPassword);
+      if (success) {
+        onClose();
+      } else {
+        setError('Unable to log in. Please try again.');
+      }
     } else {
-      setError('Incorrect teacher password. (Default is: teacher)');
+      const selectedId = teacherId || teachers[0]?.id;
+      if (!selectedId) {
+        setError('Please select a teacher or type your name.');
+        return;
+      }
+      const success = loginTeacher(selectedId, teacherPassword);
+      if (success) {
+        onClose();
+      } else {
+        setError('Unable to log in. Please try again.');
+      }
     }
   };
 
@@ -150,7 +167,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900">
                 <span className="font-bold">Administrative Dashboard:</span> Manage students, teachers, fee vouchers, absent fines, reports, and settings.
                 <div className="mt-1 text-[11px] text-amber-800">
-                  Default password: <code className="bg-amber-200/60 px-1 py-0.5 rounded font-mono font-bold">admin</code>
+                  Protected Principal Portal. Enter your confidential admin password to continue.
                 </div>
               </div>
 
@@ -186,69 +203,98 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
                 <span className="font-bold">Faculty Portal:</span> Mark attendance, record daily homework & tarbiyat remarks, enter test marks.
                 <div className="mt-1 text-[11px] text-blue-800">
-                  Default password for all teachers: <code className="bg-blue-200/60 px-1 py-0.5 rounded font-mono font-bold">teacher123</code>
+                  اساتذہ اپنا نام منتخب کر کے کوئی بھی پاس ورڈ لگا کر لاگ ان کر سکتے ہیں۔
                 </div>
               </div>
 
-              {teachers.length === 0 ? (
-                <div className="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-center">
-                  <Users className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-slate-700">No Teachers Added Yet</p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Please log in as <span className="font-bold text-[#0D285F]">Admin</span> to add your faculty members first.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setActiveRole('admin')}
-                    className="mt-3 text-xs font-bold text-[#0D285F] hover:underline"
+              {/* Mode Toggle: Select from List or Type Name */}
+              <div className="flex bg-slate-100 p-1 rounded-lg text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setTeacherMode('select')}
+                  className={`flex-1 py-1.5 rounded-md text-center transition ${
+                    teacherMode === 'select'
+                      ? 'bg-white text-[#0D285F] shadow-sm font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Select from List (لسٹ سے منتخب کریں)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTeacherMode('custom')}
+                  className={`flex-1 py-1.5 rounded-md text-center transition ${
+                    teacherMode === 'custom'
+                      ? 'bg-white text-[#0D285F] shadow-sm font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Type Name (اپنا نام لکھیں)
+                </button>
+              </div>
+
+              {teacherMode === 'select' ? (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Select Faculty Member (استاد کا نام)
+                  </label>
+                  <select
+                    value={teacherId}
+                    onChange={(e) => setTeacherId(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0D285F] outline-none bg-white"
                   >
-                    Go to Admin Login →
-                  </button>
+                    {teachers.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({t.subject})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               ) : (
-                <>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Select Faculty Member
-                    </label>
-                    <select
-                      value={teacherId}
-                      onChange={(e) => setTeacherId(e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0D285F] outline-none bg-white"
-                    >
-                      {teachers.map(t => (
-                        <option key={t.id} value={t.id}>
-                          {t.name} ({t.subject})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Teacher Password
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="password"
-                        required
-                        value={teacherPassword}
-                        onChange={(e) => setTeacherPassword(e.target.value)}
-                        placeholder="Enter teacher password (teacher123)"
-                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0D285F] outline-none"
-                      />
-                      <KeyRound className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full bg-[#0D285F] hover:bg-[#07193B] text-white py-2.5 rounded-xl font-bold text-sm shadow transition"
-                  >
-                    Enter Teacher Portal
-                  </button>
-                </>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Enter Faculty Full Name (استاد کا نام لکھیں)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={customTeacherName}
+                    onChange={(e) => setCustomTeacherName(e.target.value)}
+                    placeholder="e.g. Madam Saba, Sir Usman, etc."
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0D285F] outline-none"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    اگر آپ کا نام لسٹ میں نہیں ہے تو اپنا نام لکھ کر داخل ہو سکتے ہیں۔
+                  </p>
+                </div>
               )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Teacher Password (پاس ورڈ)
+                </label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    required
+                    value={teacherPassword}
+                    onChange={(e) => setTeacherPassword(e.target.value)}
+                    placeholder="Enter any password (کوئی بھی پاس ورڈ لکھیں)"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0D285F] outline-none"
+                  />
+                  <KeyRound className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  You can use <span className="font-mono font-bold text-slate-600">teacher123</span> or set any personal password.
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-[#0D285F] hover:bg-[#07193B] text-white py-2.5 rounded-xl font-bold text-sm shadow transition"
+              >
+                Enter Teacher Portal (پورٹل میں داخل ہوں)
+              </button>
             </form>
           )}
 
