@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Lock,
@@ -29,6 +29,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
   const [parentIdentifier, setParentIdentifier] = useState('01');
   const [parentClass, setParentClass] = useState('Class 5');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (teachers.length > 0 && (!teacherId || !teachers.some(t => t.id === teacherId))) {
+      setTeacherId(teachers[0].id);
+    }
+  }, [teachers, teacherId]);
 
   if (!isOpen) return null;
 
