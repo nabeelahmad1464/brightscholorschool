@@ -124,6 +124,7 @@ interface SchoolContextType {
   approveAndEnrollAdmission: (admissionId: string) => Student | null;
 
   updateSettings: (newSettings: Partial<SystemSettings>) => void;
+  resetAllDataToZero: () => void;
 
   // Reporting
   getStudentFullReport: (studentId: string) => StudentFullReport | null;
@@ -190,6 +191,39 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => saveToStorage('isAdminLoggedIn', isAdminLoggedIn), [isAdminLoggedIn]);
   useEffect(() => saveToStorage('currentTeacherId', currentTeacherId), [currentTeacherId]);
   useEffect(() => saveToStorage('currentParentStudentId', currentParentStudentId), [currentParentStudentId]);
+
+  // If students list is empty, ensure fee records, attendance, and reports are also 0
+  useEffect(() => {
+    if (students.length === 0) {
+      if (feeRecords.length > 0) setFeeRecords([]);
+      if (attendance.length > 0) setAttendance([]);
+      if (dailyReports.length > 0) setDailyReports([]);
+      if (testResults.length > 0) setTestResults([]);
+    }
+  }, [students.length, feeRecords.length, attendance.length, dailyReports.length, testResults.length]);
+
+  const resetAllDataToZero = () => {
+    setStudents([]);
+    setAttendance([]);
+    setFeeRecords([]);
+    setDailyReports([]);
+    setTests([]);
+    setTestResults([]);
+    setLeaves([]);
+    setOnlineAdmissions([]);
+    setSalaryTransactions([]);
+    try {
+      const keys = ['students', 'attendance', 'feeRecords', 'dailyReports', 'tests', 'testResults', 'leaves', 'admissions', 'salaryTransactions'];
+      keys.forEach(k => {
+        localStorage.removeItem(`bss_v7_${k}`);
+        localStorage.removeItem(`bss_v6_${k}`);
+        localStorage.removeItem(`bss_v5_${k}`);
+        localStorage.removeItem(`bss_v4_${k}`);
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Auth
   const loginAdmin = (password: string): boolean => {
@@ -730,6 +764,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         updateAdmissionStatus,
         approveAndEnrollAdmission,
         updateSettings,
+        resetAllDataToZero,
         getStudentFullReport,
         openWhatsApp
       }}

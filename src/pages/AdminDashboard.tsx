@@ -94,6 +94,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
     updateAdmissionStatus,
     approveAndEnrollAdmission,
     updateSettings,
+    resetAllDataToZero,
     getStudentFullReport
   } = useSchool();
 
@@ -172,8 +173,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
   const totalTeachers = teachers.length;
   const pendingLeavesCount = leaves.filter(l => l.status === 'Pending').length;
   const pendingAdmissionsCount = onlineAdmissions.filter(a => a.status === 'Pending').length;
-  const totalFeesCollected = feeRecords.reduce((acc, curr) => acc + curr.paidAmount, 0);
-  const totalFeesPending = feeRecords.reduce((acc, curr) => acc + curr.balanceRemaining, 0);
+  const totalFeesCollected = students.length === 0 ? 0 : feeRecords.reduce((acc, curr) => acc + curr.paidAmount, 0);
+  const totalFeesPending = students.length === 0 ? 0 : feeRecords.reduce((acc, curr) => acc + curr.balanceRemaining, 0);
 
   // Class students for folder view
   const classStudents = students.filter(s => s.className === selectedClassFolder);
@@ -490,19 +491,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-xs text-slate-500 font-semibold block">Fees Collected</span>
+              <span className="text-xs text-slate-500 font-semibold block">Fees Collected (وصول شدہ فیس)</span>
               <span className="text-2xl font-black text-emerald-700 mt-1 block">
                 Rs. {totalFeesCollected.toLocaleString()}
               </span>
-              <span className="text-[11px] text-slate-400">Recorded Receipts</span>
+              <span className="text-[11px] text-slate-400">
+                {totalFeesCollected === 0 ? 'کوئی فیس وصول نہیں ہوئی (0 روپے)' : 'Recorded Receipts'}
+              </span>
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-xs text-slate-500 font-semibold block">Unpaid Fees Balance</span>
+              <span className="text-xs text-slate-500 font-semibold block">Unpaid Fees Balance (بقایا فیس)</span>
               <span className="text-2xl font-black text-amber-700 mt-1 block">
                 Rs. {totalFeesPending.toLocaleString()}
               </span>
-              <span className="text-[11px] text-red-500">Includes absent fines</span>
+              <span className="text-[11px] text-slate-400">
+                {totalFeesPending === 0 ? 'کوئی بقایا نہیں (0 روپے)' : 'Includes absent fines'}
+              </span>
             </div>
           </div>
 
@@ -1233,64 +1238,70 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
             </button>
           </div>
 
-          <div className="overflow-x-auto border border-slate-200 rounded-xl">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-[#07193B] text-white">
-                <tr>
-                  <th className="p-3">Student</th>
-                  <th className="p-3">Class</th>
-                  <th className="p-3">Month</th>
-                  <th className="p-3">Tuition</th>
-                  <th className="p-3">Absents (Fine)</th>
-                  <th className="p-3">Total Payable</th>
-                  <th className="p-3">Paid</th>
-                  <th className="p-3">Balance</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3 text-right">Collect</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {feeRecords.map(f => (
-                  <tr key={f.id} className="hover:bg-slate-50">
-                    <td className="p-3 font-semibold text-slate-900">{f.studentName}</td>
-                    <td className="p-3">{f.className}</td>
-                    <td className="p-3 text-slate-500">{f.month}</td>
-                    <td className="p-3">Rs. {f.tuitionFee}</td>
-                    <td className="p-3 text-red-600 font-bold">
-                      {f.absentDays} days (Rs. {f.fineAmount})
-                    </td>
-                    <td className="p-3 font-bold text-slate-900">Rs. {f.totalPayable}</td>
-                    <td className="p-3 text-emerald-600 font-bold">Rs. {f.paidAmount}</td>
-                    <td className="p-3 font-bold">Rs. {f.balanceRemaining}</td>
-                    <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        f.status === 'Paid'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : f.status === 'Partial'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {f.status}
-                      </span>
-                    </td>
-                    <td className="p-3 text-right">
-                      {f.balanceRemaining > 0 && (
-                        <button
-                          onClick={() => {
-                            setPaymentFeeId(f.id);
-                            setPaymentAmount(f.balanceRemaining);
-                          }}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded text-xs font-semibold transition"
-                        >
-                          Collect
-                        </button>
-                      )}
-                    </td>
+          {feeRecords.length === 0 ? (
+            <div className="text-center py-12 text-slate-500 text-xs italic bg-slate-50 rounded-xl border border-dashed border-slate-300">
+              ابھی کوئی فیس واؤچر یا ریکارڈ موجود نہیں ہے۔ جیسے ہی آپ نئے طلباء داخل کریں گے، ان کا فیس ریکارڈ یہاں خود بخود آ جائے گا۔
+            </div>
+          ) : (
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#07193B] text-white">
+                  <tr>
+                    <th className="p-3">Student</th>
+                    <th className="p-3">Class</th>
+                    <th className="p-3">Month</th>
+                    <th className="p-3">Tuition</th>
+                    <th className="p-3">Absents (Fine)</th>
+                    <th className="p-3">Total Payable</th>
+                    <th className="p-3">Paid</th>
+                    <th className="p-3">Balance</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3 text-right">Collect</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {feeRecords.map(f => (
+                    <tr key={f.id} className="hover:bg-slate-50">
+                      <td className="p-3 font-semibold text-slate-900">{f.studentName}</td>
+                      <td className="p-3">{f.className}</td>
+                      <td className="p-3 text-slate-500">{f.month}</td>
+                      <td className="p-3">Rs. {f.tuitionFee}</td>
+                      <td className="p-3 text-red-600 font-bold">
+                        {f.absentDays} days (Rs. {f.fineAmount})
+                      </td>
+                      <td className="p-3 font-bold text-slate-900">Rs. {f.totalPayable}</td>
+                      <td className="p-3 text-emerald-600 font-bold">Rs. {f.paidAmount}</td>
+                      <td className="p-3 font-bold">Rs. {f.balanceRemaining}</td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          f.status === 'Paid'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : f.status === 'Partial'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {f.status}
+                        </span>
+                      </td>
+                      <td className="p-3 text-right">
+                        {f.balanceRemaining > 0 && (
+                          <button
+                            onClick={() => {
+                              setPaymentFeeId(f.id);
+                              setPaymentAmount(f.balanceRemaining);
+                            }}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded text-xs font-semibold transition"
+                          >
+                            Collect
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {paymentFeeId && (
             <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl">
@@ -1752,6 +1763,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
             >
               Save Security & Fine Settings
             </button>
+
+            {/* Danger Zone: Reset All Student & Fee Data to Zero */}
+            <div className="bg-red-50/60 border border-red-200 p-4 rounded-xl space-y-2 mt-4">
+              <span className="text-xs font-bold text-red-950 block">
+                Reset All Student & Fee Data to Zero (تمام ڈیٹا صفر / ری سیٹ کریں)
+              </span>
+              <p className="text-[11px] text-red-800">
+                اگر آپ تمام سابقہ ریکارڈز صاف کر کے نئے سرے سے طلباء اور فیس درج کرنا چاہتے ہیں تو یہ بٹن دبائیں۔ اس سے تمام طالب علم اور فیس کے اعداد و شمار فوری طور پر 0 ہو جائیں گے۔
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('کیا آپ واقعی تمام طلباء اور فیس کا ڈیٹا صفر (Zero) کرنا چاہتے ہیں؟ اس کے بعد آپ نئے طلباء خود شامل کر سکیں گے۔')) {
+                    resetAllDataToZero();
+                    alert('تمام طلباء اور فیس کا ڈیٹا کامیابی سے صفر (0) کر دیا گیا ہے!');
+                  }
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm"
+              >
+                Reset All Data to Zero (ڈیٹا صفر کریں)
+              </button>
+            </div>
           </div>
         </div>
       )}
