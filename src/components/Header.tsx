@@ -12,7 +12,8 @@ import {
   Menu,
   X,
   FileText,
-  Download
+  Download,
+  RefreshCw
 } from 'lucide-react';
 import { useSchool } from '../context/SchoolContext';
 import { WebsiteTab, PortalType } from '../types';
@@ -182,6 +183,17 @@ export const Header: React.FC<HeaderProps> = ({
                 <span>Portal Login</span>
               </button>
             )}
+
+            {/* Sync Data Button */}
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('open-sync-modal'))}
+              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm px-2.5 sm:px-3 py-2 rounded-lg shadow transition active:scale-95"
+              title="دوسرے موبائل سے ڈیٹا شامل کریں (Sync Data)"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-emerald-200" />
+              <span className="hidden md:inline">Sync Data</span>
+              <span className="md:hidden">Sync</span>
+            </button>
 
             {/* 1-Click Install App button */}
             <button

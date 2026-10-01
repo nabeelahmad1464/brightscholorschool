@@ -126,6 +126,10 @@ interface SchoolContextType {
   updateSettings: (newSettings: Partial<SystemSettings>) => void;
   resetAllDataToZero: () => void;
 
+  // Cross-Device Sync & Backup
+  exportAllSchoolData: () => string;
+  importSchoolData: (jsonString: string) => { success: boolean; studentCount: number; message: string };
+
   // Reporting
   getStudentFullReport: (studentId: string) => StudentFullReport | null;
   openWhatsApp: (phone?: string, message?: string) => void;
@@ -710,6 +714,94 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     window.open(url, '_blank');
   };
 
+  const exportAllSchoolData = (): string => {
+    const payload = {
+      version: 'bss_v7',
+      exportedAt: new Date().toISOString(),
+      schoolName: 'Bright Scholar School',
+      students,
+      teachers,
+      attendance,
+      teacherAttendance,
+      leaves,
+      feeRecords,
+      dailyReports,
+      tests,
+      testResults,
+      notices,
+      onlineAdmissions,
+      settings,
+      salaryTransactions
+    };
+    return JSON.stringify(payload, null, 2);
+  };
+
+  const importSchoolData = (jsonString: string): { success: boolean; studentCount: number; message: string } => {
+    try {
+      const data = JSON.parse(jsonString);
+      if (!data) throw new Error('Empty data');
+
+      let count = 0;
+      if (Array.isArray(data.students)) {
+        setStudents(data.students);
+        saveToStorage('students', data.students);
+        count = data.students.length;
+      }
+      if (Array.isArray(data.teachers)) {
+        setTeachers(data.teachers);
+        saveToStorage('teachers', data.teachers);
+      }
+      if (Array.isArray(data.attendance)) {
+        setAttendance(data.attendance);
+        saveToStorage('attendance', data.attendance);
+      }
+      if (Array.isArray(data.teacherAttendance)) {
+        setTeacherAttendance(data.teacherAttendance);
+        saveToStorage('teacherAttendance', data.teacherAttendance);
+      }
+      if (Array.isArray(data.feeRecords)) {
+        setFeeRecords(data.feeRecords);
+        saveToStorage('feeRecords', data.feeRecords);
+      }
+      if (Array.isArray(data.dailyReports)) {
+        setDailyReports(data.dailyReports);
+        saveToStorage('dailyReports', data.dailyReports);
+      }
+      if (Array.isArray(data.tests)) {
+        setTests(data.tests);
+        saveToStorage('tests', data.tests);
+      }
+      if (Array.isArray(data.testResults)) {
+        setTestResults(data.testResults);
+        saveToStorage('testResults', data.testResults);
+      }
+      if (Array.isArray(data.notices)) {
+        setNotices(data.notices);
+        saveToStorage('notices', data.notices);
+      }
+      if (data.settings && typeof data.settings === 'object') {
+        setSettings(data.settings);
+        saveToStorage('settings', data.settings);
+      }
+      if (Array.isArray(data.salaryTransactions)) {
+        setSalaryTransactions(data.salaryTransactions);
+        saveToStorage('salaryTransactions', data.salaryTransactions);
+      }
+
+      return {
+        success: true,
+        studentCount: count,
+        message: `${count} طلباء اور تمام اسکول ریکارڈز کامیابی سے شامل ہو گئے ہیں!`
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        studentCount: 0,
+        message: 'ڈیٹا درآمد کرنے میں خرابی: براہ کرم درست فائل یا ٹیکسٹ پیسٹ کریں۔'
+      };
+    }
+  };
+
   return (
     <SchoolContext.Provider
       value={{
@@ -765,6 +857,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         approveAndEnrollAdmission,
         updateSettings,
         resetAllDataToZero,
+        exportAllSchoolData,
+        importSchoolData,
         getStudentFullReport,
         openWhatsApp
       }}
