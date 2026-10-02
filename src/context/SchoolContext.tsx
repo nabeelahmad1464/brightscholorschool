@@ -81,6 +81,7 @@ interface SchoolContextType {
 
   // Navigation & Auth actions
   setPortal: (portal: PortalType) => void;
+  setCurrentParentStudentId: (id: string | null) => void;
   loginAdmin: (password: string) => boolean;
   loginTeacher: (teacherId: string, password: string) => boolean;
   loginOrCreateTeacherByName: (name: string, password: string) => boolean;
@@ -137,6 +138,7 @@ interface SchoolContextType {
   isCloudSyncing: boolean;
   lastCloudSyncTime: string | null;
   syncNowWithCloud: () => Promise<void>;
+  forceSyncAllToCloud: () => Promise<{ success: boolean; studentCount: number; message: string }>;
 
   // Reporting
   getStudentFullReport: (studentId: string) => StudentFullReport | null;
@@ -217,7 +219,77 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const lastKnownServerUpdatedAt = React.useRef<string | null>(null);
   const hasInitializedFromCloud = React.useRef(false);
 
-  // Pull data from Cloud Server
+  // Synchronous State Reference to avoid stale closure issues
+  const stateRef = React.useRef({
+    students,
+    teachers,
+    attendance,
+    teacherAttendance,
+    leaves,
+    feeRecords,
+    dailyReports,
+    tests,
+    testResults,
+    notices,
+    onlineAdmissions,
+    settings,
+    salaryTransactions,
+    teacherSalaryPayments
+  });
+
+  // Always keep stateRef strictly in sync with latest render state
+  stateRef.current = {
+    students,
+    teachers,
+    attendance,
+    teacherAttendance,
+    leaves,
+    feeRecords,
+    dailyReports,
+    tests,
+    testResults,
+    notices,
+    onlineAdmissions,
+    settings,
+    salaryTransactions,
+    teacherSalaryPayments
+  };
+
+  // Push current data to Cloud Server
+  const pushCurrentDataToCloud = async (override?: Partial<typeof stateRef.current>): Promise<boolean> => {
+    try {
+      setIsCloudSyncing(true);
+      const payload = {
+        ...stateRef.current,
+        ...(override || {})
+      };
+
+      const res = await fetch('/api/school-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setIsCloudConnected(true);
+        lastKnownServerUpdatedAt.current = data.updatedAt || new Date().toISOString();
+        setLastCloudSyncTime(new Date().toLocaleTimeString('ur-PK'));
+        return true;
+      } else {
+        setIsCloudConnected(false);
+        return false;
+      }
+    } catch (e) {
+      console.warn('Failed to push update to cloud server:', e);
+      setIsCloudConnected(false);
+      return false;
+    } finally {
+      setIsCloudSyncing(false);
+    }
+  };
+
+  // Pull data from Cloud Server with Two-Way Resilient Merge
   const pullFromCloudDatabase = async () => {
     try {
       const res = await fetch('/api/school-data');
@@ -235,74 +307,105 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return;
       }
 
-      // If local storage has students but server has 0 students on very first load:
-      if (!hasInitializedFromCloud.current && students.length > 0 && (!data.students || data.students.length === 0)) {
-        hasInitializedFromCloud.current = true;
-        pushCurrentDataToCloud();
-        return;
-      }
-      hasInitializedFromCloud.current = true;
+      const currentLocal = stateRef.current;
 
-      // Apply server data to state
+      // Two-Way Merge: Never drop local additions that aren't on server yet!
+      const mergeEntities = <T extends { id: string }>(serverItems?: T[], localItems?: T[]): T[] => {
+        if (!Array.isArray(serverItems) || serverItems.length === 0) return localItems || [];
+        if (!Array.isArray(localItems) || localItems.length === 0) return serverItems;
+
+        const map = new Map<string, T>();
+        // Add server items first
+        serverItems.forEach(item => map.set(item.id, item));
+        // Preserve any locally added items
+        localItems.forEach(item => {
+          if (!map.has(item.id)) {
+            map.set(item.id, item);
+          }
+        });
+        return Array.from(map.values());
+      };
+
+      const mergedStudents = mergeEntities(data.students, currentLocal.students);
+      const mergedTeachers = mergeEntities(data.teachers, currentLocal.teachers);
+      const mergedAttendance = mergeEntities(data.attendance, currentLocal.attendance);
+      const mergedTeacherAttendance = mergeEntities(data.teacherAttendance, currentLocal.teacherAttendance);
+      const mergedLeaves = mergeEntities(data.leaves, currentLocal.leaves);
+      const mergedFees = mergeEntities(data.feeRecords, currentLocal.feeRecords);
+      const mergedReports = mergeEntities(data.dailyReports, currentLocal.dailyReports);
+      const mergedTests = mergeEntities(data.tests, currentLocal.tests);
+      const mergedTestResults = mergeEntities(data.testResults, currentLocal.testResults);
+      const mergedNotices = mergeEntities(data.notices, currentLocal.notices);
+      const mergedAdmissions = mergeEntities(data.onlineAdmissions, currentLocal.onlineAdmissions);
+      const mergedSalaryTx = mergeEntities(data.salaryTransactions, currentLocal.salaryTransactions);
+      const mergedSalaryPmts = mergeEntities(data.teacherSalaryPayments, currentLocal.teacherSalaryPayments);
+
       isApplyingRemoteUpdate.current = true;
       lastKnownServerUpdatedAt.current = data.updatedAt || new Date().toISOString();
+      hasInitializedFromCloud.current = true;
       setLastCloudSyncTime(new Date().toLocaleTimeString('ur-PK'));
 
-      if (Array.isArray(data.students)) {
-        setStudents(data.students);
-        saveToStorage('students', data.students);
-      }
-      if (Array.isArray(data.teachers)) {
-        setTeachers(data.teachers);
-        saveToStorage('teachers', data.teachers);
-      }
-      if (Array.isArray(data.attendance)) {
-        setAttendance(data.attendance);
-        saveToStorage('attendance', data.attendance);
-      }
-      if (Array.isArray(data.teacherAttendance)) {
-        setTeacherAttendance(data.teacherAttendance);
-        saveToStorage('teacherAttendance', data.teacherAttendance);
-      }
-      if (Array.isArray(data.leaves)) {
-        setLeaves(data.leaves);
-        saveToStorage('leaves', data.leaves);
-      }
-      if (Array.isArray(data.feeRecords)) {
-        setFeeRecords(data.feeRecords);
-        saveToStorage('feeRecords', data.feeRecords);
-      }
-      if (Array.isArray(data.dailyReports)) {
-        setDailyReports(data.dailyReports);
-        saveToStorage('dailyReports', data.dailyReports);
-      }
-      if (Array.isArray(data.tests)) {
-        setTests(data.tests);
-        saveToStorage('tests', data.tests);
-      }
-      if (Array.isArray(data.testResults)) {
-        setTestResults(data.testResults);
-        saveToStorage('testResults', data.testResults);
-      }
-      if (Array.isArray(data.notices)) {
-        setNotices(data.notices);
-        saveToStorage('notices', data.notices);
-      }
-      if (Array.isArray(data.onlineAdmissions)) {
-        setOnlineAdmissions(data.onlineAdmissions);
-        saveToStorage('admissions', data.onlineAdmissions);
-      }
-      if (Array.isArray(data.salaryTransactions)) {
-        setSalaryTransactions(data.salaryTransactions);
-        saveToStorage('salaryTransactions', data.salaryTransactions);
-      }
-      if (Array.isArray(data.teacherSalaryPayments)) {
-        setTeacherSalaryPayments(data.teacherSalaryPayments);
-        saveToStorage('teacherSalaryPayments', data.teacherSalaryPayments);
-      }
+      setStudents(mergedStudents);
+      saveToStorage('students', mergedStudents);
+
+      setTeachers(mergedTeachers);
+      saveToStorage('teachers', mergedTeachers);
+
+      setAttendance(mergedAttendance);
+      saveToStorage('attendance', mergedAttendance);
+
+      setTeacherAttendance(mergedTeacherAttendance);
+      saveToStorage('teacherAttendance', mergedTeacherAttendance);
+
+      setLeaves(mergedLeaves);
+      saveToStorage('leaves', mergedLeaves);
+
+      setFeeRecords(mergedFees);
+      saveToStorage('feeRecords', mergedFees);
+
+      setDailyReports(mergedReports);
+      saveToStorage('dailyReports', mergedReports);
+
+      setTests(mergedTests);
+      saveToStorage('tests', mergedTests);
+
+      setTestResults(mergedTestResults);
+      saveToStorage('testResults', mergedTestResults);
+
+      setNotices(mergedNotices);
+      saveToStorage('notices', mergedNotices);
+
+      setOnlineAdmissions(mergedAdmissions);
+      saveToStorage('admissions', mergedAdmissions);
+
+      setSalaryTransactions(mergedSalaryTx);
+      saveToStorage('salaryTransactions', mergedSalaryTx);
+
+      setTeacherSalaryPayments(mergedSalaryPmts);
+      saveToStorage('teacherSalaryPayments', mergedSalaryPmts);
+
       if (data.settings && typeof data.settings === 'object') {
         setSettings(data.settings);
         saveToStorage('settings', data.settings);
+      }
+
+      // If local had items not yet on the server, push merged list back to cloud server!
+      if (mergedStudents.length > (data.students?.length || 0) || mergedFees.length > (data.feeRecords?.length || 0)) {
+        pushCurrentDataToCloud({
+          students: mergedStudents,
+          teachers: mergedTeachers,
+          attendance: mergedAttendance,
+          teacherAttendance: mergedTeacherAttendance,
+          leaves: mergedLeaves,
+          feeRecords: mergedFees,
+          dailyReports: mergedReports,
+          tests: mergedTests,
+          testResults: mergedTestResults,
+          notices: mergedNotices,
+          onlineAdmissions: mergedAdmissions,
+          salaryTransactions: mergedSalaryTx,
+          teacherSalaryPayments: mergedSalaryPmts
+        });
       }
 
       setTimeout(() => {
@@ -314,52 +417,48 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const pushCurrentDataToCloud = async () => {
+  // Force manual cloud sync action
+  const forceSyncAllToCloud = async (): Promise<{ success: boolean; studentCount: number; message: string }> => {
     try {
       setIsCloudSyncing(true);
-      const payload = {
-        students,
-        teachers,
-        attendance,
-        teacherAttendance,
-        leaves,
-        feeRecords,
-        dailyReports,
-        tests,
-        testResults,
-        notices,
-        onlineAdmissions,
-        settings,
-        salaryTransactions,
-        teacherSalaryPayments
-      };
+      const payload = { ...stateRef.current };
       const res = await fetch('/api/school-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       if (res.ok) {
+        const data = await res.json();
         setIsCloudConnected(true);
-        const now = new Date().toISOString();
-        lastKnownServerUpdatedAt.current = now;
+        lastKnownServerUpdatedAt.current = data.updatedAt || new Date().toISOString();
         setLastCloudSyncTime(new Date().toLocaleTimeString('ur-PK'));
+        return {
+          success: true,
+          studentCount: payload.students.length,
+          message: `تمام ${payload.students.length} طلباء اور اسکول کا مکمل ریکارڈ لائیو کلاؤڈ سرور پر محفوظ ہو گیا ہے!`
+        };
+      } else {
+        return { success: false, studentCount: payload.students.length, message: 'کلاؤڈ سرور سے رابطہ نہیں ہو سکا۔' };
       }
-    } catch (e) {
-      console.warn('Failed to push update to cloud server:', e);
-      setIsCloudConnected(false);
+    } catch (e: any) {
+      return { success: false, studentCount: stateRef.current.students.length, message: e.message || 'Error syncing' };
     } finally {
       setIsCloudSyncing(false);
     }
   };
 
-  // Sync to Cloud Server when local data changes (debounced)
+  const syncNowWithCloud = async () => {
+    await forceSyncAllToCloud();
+  };
+
+  // Sync to Cloud Server when local data changes (debounced backup)
   useEffect(() => {
     if (isApplyingRemoteUpdate.current) return;
     if (!hasInitializedFromCloud.current) return;
 
     const timer = setTimeout(() => {
       pushCurrentDataToCloud();
-    }, 700);
+    }, 1000);
 
     return () => clearTimeout(timer);
   }, [
@@ -501,13 +600,24 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const loginParent = (identifier: string, className?: string): Student | null => {
-    const cleanId = identifier.trim().toLowerCase();
+    const clean = identifier.trim().toLowerCase();
+    if (!clean) return null;
+    const cleanNum = clean.replace(/^0+/, ''); // '01' -> '1'
+
     const student = students.find(s => {
-      const matchRoll = s.rollNo.toLowerCase() === cleanId || s.admissionNo.toLowerCase() === cleanId;
-      const matchClass = !className || s.className.toLowerCase() === className.toLowerCase();
-      const matchName = s.name.toLowerCase().includes(cleanId);
-      return (matchRoll || matchName) && matchClass;
-    }) || students.find(s => s.admissionNo.toLowerCase() === cleanId || s.rollNo.toLowerCase() === cleanId);
+      const rollClean = s.rollNo.trim().toLowerCase();
+      const rollNum = rollClean.replace(/^0+/, '');
+      const matchRoll = rollClean === clean || (cleanNum !== '' && rollNum === cleanNum);
+      const matchAdm = s.admissionNo.toLowerCase() === clean || s.admissionNo.toLowerCase().includes(clean);
+      const matchName = s.name.toLowerCase().includes(clean) || s.fatherName.toLowerCase().includes(clean);
+      const matchClass = !className || className === 'All' || s.className.toLowerCase() === className.toLowerCase();
+
+      return (matchRoll || matchAdm || matchName) && matchClass;
+    }) || students.find(s => {
+      const rollClean = s.rollNo.trim().toLowerCase();
+      const rollNum = rollClean.replace(/^0+/, '');
+      return rollClean === clean || (cleanNum !== '' && rollNum === cleanNum) || s.admissionNo.toLowerCase() === clean;
+    });
 
     if (student) {
       setCurrentParentStudentId(student.id);
@@ -526,13 +636,15 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setCurrentPortal('PUBLIC_WEBSITE');
   };
 
-  // Student CRUD
+  // Student CRUD with Immediate Cloud Sync
   const addStudent = (stData: Omit<Student, 'id'>): Student => {
     const newStudent: Student = {
       ...stData,
       id: `s-${Date.now()}`
     };
-    setStudents(prev => [newStudent, ...prev]);
+    const updatedStudents = [newStudent, ...stateRef.current.students];
+    setStudents(updatedStudents);
+    saveToStorage('students', updatedStudents);
 
     // Automatically create initial fee voucher for current month
     const feeAmount = stData.monthlyFee || getDefaultMonthlyFee(stData.className);
@@ -542,30 +654,48 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       studentName: newStudent.name,
       fatherName: newStudent.fatherName,
       className: newStudent.className,
-      month: 'September 2026',
+      month: 'October 2026',
       tuitionFee: feeAmount,
       absentDays: 0,
       fineAmount: 0,
       totalPayable: feeAmount,
       paidAmount: 0,
       balanceRemaining: feeAmount,
-      status: 'Unpaid'
+      status: 'Unpaid',
+      receiptNo: `REC-BSS-${Date.now().toString().slice(-4)}`
     };
-    setFeeRecords(prev => [newFeeRecord, ...prev]);
+    const updatedFees = [newFeeRecord, ...stateRef.current.feeRecords];
+    setFeeRecords(updatedFees);
+    saveToStorage('feeRecords', updatedFees);
+
+    // Push immediately to cloud database so other devices see it instantly
+    pushCurrentDataToCloud({
+      students: updatedStudents,
+      feeRecords: updatedFees
+    });
 
     return newStudent;
   };
 
   const updateStudent = (updated: Student) => {
-    setStudents(prev => prev.map(s => s.id === updated.id ? updated : s));
+    const updatedList = stateRef.current.students.map(s => s.id === updated.id ? updated : s);
+    setStudents(updatedList);
+    saveToStorage('students', updatedList);
+    pushCurrentDataToCloud({ students: updatedList });
   };
 
   const deleteStudent = (id: string) => {
-    setStudents(prev => prev.filter(s => s.id !== id));
+    const updatedList = stateRef.current.students.filter(s => s.id !== id);
+    setStudents(updatedList);
+    saveToStorage('students', updatedList);
+    pushCurrentDataToCloud({ students: updatedList });
   };
 
   const toggleStudentActive = (id: string) => {
-    setStudents(prev => prev.map(s => s.id === id ? { ...s, isActive: !s.isActive } : s));
+    const updatedList = stateRef.current.students.map(s => s.id === id ? { ...s, isActive: !s.isActive } : s);
+    setStudents(updatedList);
+    saveToStorage('students', updatedList);
+    pushCurrentDataToCloud({ students: updatedList });
   };
 
   // Teacher CRUD
@@ -1057,6 +1187,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         currentParentStudentId,
         selectedStudentForModal,
         setPortal: setCurrentPortal,
+        setCurrentParentStudentId,
         loginAdmin,
         loginTeacher,
         loginOrCreateTeacherByName,
@@ -1097,7 +1228,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isCloudConnected,
         isCloudSyncing,
         lastCloudSyncTime,
-        syncNowWithCloud: pullFromCloudDatabase,
+        syncNowWithCloud,
+        forceSyncAllToCloud,
         getStudentFullReport,
         openWhatsApp
       }}

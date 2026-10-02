@@ -279,8 +279,7 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
               <button
                 onClick={() => {
-                  if (currentParentStudentId) setPortal('PARENT_PORTAL');
-                  else onOpenLogin();
+                  setPortal('PARENT_PORTAL');
                 }}
                 className="hover:text-amber-300 text-slate-300 px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition"
               >

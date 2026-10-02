@@ -18,7 +18,7 @@ interface LoginModalProps {
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
-  const { loginAdmin, loginTeacher, loginOrCreateTeacherByName, loginParent, teachers, students } = useSchool();
+  const { loginAdmin, loginTeacher, loginOrCreateTeacherByName, loginParent, teachers, students, setPortal } = useSchool();
 
   const [activeRole, setActiveRole] = useState<'admin' | 'teacher' | 'parent'>('admin');
   const [adminPassword, setAdminPassword] = useState('');
@@ -86,11 +86,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
       setError('Please enter Student Roll Number or Admission ID.');
       return;
     }
-    const student = loginParent(parentIdentifier, parentClass);
+    const student = loginParent(parentIdentifier, parentClass) || loginParent(parentIdentifier, undefined);
     if (student) {
       onClose();
     } else {
-      setError(`Student with Roll No / ID "${parentIdentifier}" not found in ${parentClass}. Try Roll No "01" or Admission "BSS-101".`);
+      setError(`طالب علم "${parentIdentifier}" نہیں ملا۔ براہ کرم رول نمبر (e.g. 01) یا نام چیک کریں یا نیچے 'Browse All' پر کلک کریں۔`);
     }
   };
 
@@ -313,7 +313,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Select Child's Class
+                  Select Child's Class (کلاس منتخب کریں)
                 </label>
                 <select
                   value={parentClass}
@@ -326,9 +326,31 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                 </select>
               </div>
 
+              {/* Student Dropdown for that class */}
+              {students.filter(s => s.className === parentClass).length > 0 ? (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Select Your Child by Name / Roll No (اپنے بچے کا نام منتخب کریں)
+                  </label>
+                  <select
+                    onChange={(e) => setParentIdentifier(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0D285F] outline-none bg-white font-bold text-[#0D285F]"
+                  >
+                    <option value="">-- بچے کا نام منتخب کریں (Select Student) --</option>
+                    {students
+                      .filter(s => s.className === parentClass)
+                      .map(s => (
+                        <option key={s.id} value={s.rollNo}>
+                          {s.name} (ولدیت: {s.fatherName} • Roll #{s.rollNo})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              ) : null}
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Student Roll Number or Admission ID
+                  Or Type Roll Number / Admission ID (یا رول نمبر لکھیں)
                 </label>
                 <input
                   type="text"
@@ -340,31 +362,24 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                 />
               </div>
 
-              {/* Quick sample chips */}
-              <div className="text-[11px] text-slate-500">
-                <span>Quick demo students: </span>
+              <div className="pt-1 flex flex-col gap-2">
                 <button
-                  type="button"
-                  onClick={() => { setParentClass('Class 5'); setParentIdentifier('01'); }}
-                  className="text-blue-600 font-semibold underline mr-2"
+                  type="submit"
+                  className="w-full bg-[#0D285F] hover:bg-[#07193B] text-white py-2.5 rounded-xl font-bold text-sm shadow transition"
                 >
-                  Abdullah (Class 5 - Roll 01)
+                  View Child's Portal (پورٹل کھولیں)
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setParentClass('Class 1'); setParentIdentifier('01'); }}
-                  className="text-blue-600 font-semibold underline"
+                  onClick={() => {
+                    onClose();
+                    setPortal('PARENT_PORTAL');
+                  }}
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 py-2 rounded-xl font-bold text-xs transition border border-slate-300"
                 >
-                  Ali (Class 1 - Roll 01)
+                  🔍 بغیر رول نمبر کے تمام طلباء کی لسٹ سے منتخب کریں (Browse All)
                 </button>
               </div>
-
-              <button
-                type="submit"
-                className="w-full bg-[#0D285F] hover:bg-[#07193B] text-white py-2.5 rounded-xl font-bold text-sm shadow transition"
-              >
-                View Child's Portal
-              </button>
             </form>
           )}
         </div>

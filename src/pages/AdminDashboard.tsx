@@ -29,7 +29,9 @@ import {
   UserMinus,
   RefreshCw,
   Printer,
-  X
+  X,
+  Database,
+  CheckCircle2
 } from 'lucide-react';
 import { useSchool } from '../context/SchoolContext';
 import {
@@ -102,12 +104,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
     approveAndEnrollAdmission,
     updateSettings,
     resetAllDataToZero,
-    getStudentFullReport
+    getStudentFullReport,
+    forceSyncAllToCloud,
+    isCloudConnected,
+    isCloudSyncing,
+    lastCloudSyncTime
   } = useSchool();
 
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [selectedClassFolder, setSelectedClassFolder] = useState<ClassLevel>('Class 5');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [syncStatusMessage, setSyncStatusMessage] = useState<string | null>(null);
+
+  const handleManualSync = async () => {
+    const res = await forceSyncAllToCloud();
+    setSyncStatusMessage(res.message);
+    setTimeout(() => setSyncStatusMessage(null), 6000);
+  };
 
   // Student Add / Edit state
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
@@ -613,6 +626,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
       {/* TAB 2: CLASS FOLDERS & STUDENT MANAGEMENT (ADD / EDIT / DELETE) */}
       {activeTab === 'classes' && (
         <div className="space-y-6">
+          {/* Live Cloud Database Status & Instant Manual Sync Card */}
+          <div className="bg-gradient-to-r from-[#0D285F] via-[#10337A] to-[#1E3A8A] text-white p-4 sm:p-5 rounded-2xl shadow-md border-b-4 border-amber-400 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-amber-300 shadow-inner flex-shrink-0">
+                  <Database className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-extrabold text-sm sm:text-base tracking-tight">
+                      ریئل ٹائم کلاؤڈ ڈیٹابیس (Real-Time Cloud Synchronization)
+                    </h4>
+                    <span className="bg-emerald-500/25 text-emerald-300 border border-emerald-400/40 text-[10px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                      <span>لائیو آن لائن ایکٹو</span>
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1">
+                    اسکول کے تمام رجسٹرڈ طلباء (<strong>{students.length} طلباء</strong>) کا مکمل ریکارڈ لائیو سرور پر محفوظ ہے۔ اب ہر والدین اپنے موبائل پر پیرنٹ پورٹل کے ذریعے فوری اپنا بچہ دیکھ سکتے ہیں۔
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleManualSync}
+                  disabled={isCloudSyncing}
+                  className="bg-amber-400 hover:bg-amber-300 active:bg-amber-500 text-[#07193B] font-extrabold text-xs px-4 py-2.5 rounded-xl transition shadow flex items-center gap-2 active:scale-95 disabled:opacity-70 cursor-pointer"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isCloudSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isCloudSyncing ? 'کلاؤڈ پر محفوظ ہو رہا ہے...' : 'ابھی تمام طلباء کلاؤڈ پر محفوظ کریں (Sync to Cloud)'}</span>
+                </button>
+              </div>
+            </div>
+
+            {syncStatusMessage && (
+              <div className="bg-emerald-900/90 border border-emerald-400/60 p-3 rounded-xl text-xs text-emerald-100 font-bold flex items-center gap-2.5 animate-in fade-in">
+                <CheckCircle2 className="w-5 h-5 text-emerald-300 flex-shrink-0" />
+                <span>{syncStatusMessage}</span>
+              </div>
+            )}
+          </div>
+
           {/* Search Bar Across Entire School */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[260px]">

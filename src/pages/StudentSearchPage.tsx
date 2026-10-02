@@ -14,11 +14,18 @@ export const StudentSearchPage: React.FC<StudentSearchPageProps> = ({ onSelectSt
 
   const filtered = students.filter(s => {
     const matchClass = selectedClass === 'All' || s.className === selectedClass;
+    const q = query.trim().toLowerCase();
+    if (!q) return matchClass;
+
+    const cleanNum = q.replace(/^0+/, '');
+    const rollClean = s.rollNo.trim().toLowerCase();
+    const rollNum = rollClean.replace(/^0+/, '');
+    const matchRoll = rollClean === q || (cleanNum !== '' && rollNum === cleanNum);
     const matchQuery =
-      s.name.toLowerCase().includes(query.toLowerCase()) ||
-      s.fatherName.toLowerCase().includes(query.toLowerCase()) ||
-      s.rollNo.includes(query) ||
-      s.admissionNo.toLowerCase().includes(query.toLowerCase());
+      s.name.toLowerCase().includes(q) ||
+      s.fatherName.toLowerCase().includes(q) ||
+      matchRoll ||
+      s.admissionNo.toLowerCase().includes(q);
     return matchClass && matchQuery;
   });
 
@@ -29,7 +36,7 @@ export const StudentSearchPage: React.FC<StudentSearchPageProps> = ({ onSelectSt
           Student Search & 360° Academic Profile
         </h2>
         <p className="text-xs sm:text-sm text-slate-500 mb-6">
-          Look up any enrolled student to review live attendance statistics, absence fine ledger (Rs. 30/day), fee clearance status, exam marks, and daily tarbiyat records.
+          Look up any enrolled student to review live attendance statistics, absence fine ledger (Rs. 50/day), fee clearance status, exam marks, and daily tarbiyat records.
         </p>
 
         {/* Filters */}

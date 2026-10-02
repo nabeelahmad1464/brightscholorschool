@@ -69,20 +69,19 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           <span className="text-[10px]">داخلہ</span>
         </button>
 
-        {/* 3: Student Search / Result */}
+        {/* 3: Parent Portal */}
         <button
           onClick={() => {
-            setPortal('PUBLIC_WEBSITE');
-            onTabChange('SEARCH');
+            setPortal('PARENT_PORTAL');
           }}
           className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg transition ${
-            currentPortal === 'PUBLIC_WEBSITE' && currentTab === 'SEARCH'
+            currentPortal === 'PARENT_PORTAL'
               ? 'text-amber-400 font-bold scale-105'
               : 'text-slate-300 hover:text-white'
           }`}
         >
-          <Search className="w-5 h-5 mb-0.5 text-blue-400" />
-          <span className="text-[10px]">رزلٹ/طلباء</span>
+          <Search className="w-5 h-5 mb-0.5 text-amber-400" />
+          <span className="text-[10px]">پیرنٹ پورٹل</span>
         </button>
 
         {/* 4: Teacher Portal */}

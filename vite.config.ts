@@ -4,20 +4,36 @@ import fs from 'fs';
 import path from 'path';
 
 function schoolDatabasePlugin(): Plugin {
-  const dbFile = path.resolve(__dirname, 'src/data/school_database.json');
+  const dbFile = path.resolve(__dirname, 'server_database.json');
+  const fallbackDbFile = path.resolve(__dirname, 'src/data/school_database.json');
+
+  const ensureDbExists = () => {
+    if (!fs.existsSync(dbFile)) {
+      if (fs.existsSync(fallbackDbFile)) {
+        try {
+          fs.copyFileSync(fallbackDbFile, dbFile);
+        } catch (e) {
+          // fallback
+        }
+      }
+    }
+  };
+
+  ensureDbExists();
 
   const handleApiRequest = (req: any, res: any, next: any) => {
     if (req.url === '/api/school-data' || req.url?.startsWith('/api/school-data?')) {
       if (req.method === 'GET') {
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Access-Control-Allow-Origin', '*');
+        ensureDbExists();
         if (fs.existsSync(dbFile)) {
           const content = fs.readFileSync(dbFile, 'utf-8');
           res.statusCode = 200;
           res.end(content);
         } else {
-          res.statusCode = 404;
-          res.end(JSON.stringify({ exists: false }));
+          res.statusCode = 200;
+          res.end(JSON.stringify({ students: [], teachers: [], attendance: [], feeRecords: [] }));
         }
         return;
       }
@@ -32,10 +48,16 @@ function schoolDatabasePlugin(): Plugin {
             const parsed = JSON.parse(body);
             parsed.updatedAt = new Date().toISOString();
             fs.writeFileSync(dbFile, JSON.stringify(parsed, null, 2), 'utf-8');
+            try {
+              fs.writeFileSync(fallbackDbFile, JSON.stringify(parsed, null, 2), 'utf-8');
+            } catch (err) {
+              // fallback
+            }
             res.setHeader('Content-Type', 'application/json');
             res.setHeader('Access-Control-Allow-Origin', '*');
             res.statusCode = 200;
-            res.end(JSON.stringify({ success: true, timestamp: Date.now() }));
+            const count = Array.isArray(parsed.students) ? parsed.students.length : 0;
+            res.end(JSON.stringify({ success: true, timestamp: Date.now(), updatedAt: parsed.updatedAt, studentCount: count }));
           } catch (e: any) {
             res.statusCode = 400;
             res.setHeader('Content-Type', 'application/json');
@@ -75,6 +97,9 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 3000,
+    watch: {
+      ignored: ['**/server_database.json', '**/school_database.json', '**/*.json.bak']
+    }
   },
 });
 
