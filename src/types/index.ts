@@ -25,6 +25,20 @@ export const SCHOOL_CLASSES: ClassLevel[] = [
   'Class 8 / Middle'
 ];
 
+export const SCHOOL_SUBJECTS = [
+  'Mathematics (ریاضی)',
+  'English (انگریزی)',
+  'Urdu (اردو)',
+  'General Science (جنرل سائنس)',
+  'Islamiat & Nazra Quran (اسلامیات و ناظرہ)',
+  'Social Studies / Pak Studies (معاشرتی علوم)',
+  'Computer Science (کمپیوٹر سائنس)',
+  'General Knowledge (جنرل نالج)',
+  'Drawing / Art (ڈرائنگ)',
+  'Arabic (عربی)',
+  'Ethics / Akhlaqiat (اخلاقیات)'
+];
+
 export function getDefaultMonthlyFee(className: string): number {
   switch (className) {
     case 'Play Group':
@@ -81,6 +95,15 @@ export interface SalaryTransaction {
   type: 'Addition' | 'Deduction'; // Addition (Bonus/Allowance) or Deduction (Advance/Penalty)
   reason: string;
   date: string;
+}
+
+export interface TeacherSalaryPayment {
+  id: string;
+  teacherId: string;
+  month: string;
+  isPaid: boolean;
+  paidDate?: string;
+  amount: number;
 }
 
 export type AttendanceStatus = 'Present' | 'Absent' | 'Leave' | 'Late';

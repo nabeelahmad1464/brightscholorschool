@@ -63,7 +63,7 @@ export const WebsiteHome: React.FC<WebsiteHomeProps> = ({
           {/* Official Crest Badge */}
           <div className="inline-flex items-center gap-2 bg-amber-400/15 border border-amber-400/30 rounded-full px-4 py-1.5 mb-6 text-amber-300 text-xs sm:text-sm font-semibold shadow-inner">
             <Sparkles className="w-4 h-4 text-amber-400 animate-spin" />
-            <span>Admissions Open for Session 2026-2027 • Play Group to Class 8</span>
+            <span>Serving Quality Education Since 2017 (سنس 2017) • Admissions Open 2026-2027</span>
           </div>
 
           {/* School Logo */}

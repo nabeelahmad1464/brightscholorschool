@@ -44,7 +44,7 @@ export const Footer: React.FC = () => {
             </p>
             <div className="flex items-center gap-2 text-xs text-amber-300 bg-white/5 p-2 rounded-lg border border-amber-400/20">
               <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-              <span>Registered & Verified Educational Institution</span>
+              <span>Registered & Verified Educational Institution • Serving Since 2017 (سنس 2017)</span>
             </div>
           </div>
 
@@ -92,7 +92,7 @@ export const Footer: React.FC = () => {
                   <span className="font-bold text-white">Rs. 3,000 / mo</span>
                 </div>
                 <div className="text-[11px] text-red-300 mt-1">
-                  * Absence fine: Rs. 30 per unapproved leave
+                  * Absence fine: Rs. 50 per unapproved leave
                 </div>
               </div>
 

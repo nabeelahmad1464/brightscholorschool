@@ -16,7 +16,7 @@ import {
 export const initialSettings: SystemSettings = {
   adminPassword: 'Nabeel#0',
   teacherPassword: 'teacher123',
-  finePerAbsentDay: 30, // Rs. 30 per unapproved absent day
+  finePerAbsentDay: 50, // Rs. 50 per unapproved absent day
   schoolName: 'Bright Scholar School',
   schoolSlogan: 'Pehle Tarbiyat, Phir Taleem',
   schoolAddress: 'Chak No. 47 GB, Samundri, Faisalabad, Punjab, Pakistan',
@@ -101,7 +101,7 @@ export const initialNotices: Notice[] = [
     title: 'Absence Fine Policy & Punctuality',
     category: 'Fee Notice',
     date: '2026-09-20',
-    content: 'As per school discipline rules, unapproved absence will incur a fine of Rs. 30 per day. Please submit leave requests in advance through the Parent Portal.',
+    content: 'As per school discipline rules, unapproved absence will incur a fine of Rs. 50 per day. Please submit leave requests in advance through the Parent Portal.',
     targetAudience: 'Parents',
   },
   {

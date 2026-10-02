@@ -32,7 +32,7 @@ import {
   initialSettings,
   initialSalaryTransactions
 } from '../data/initialData';
-import { SalaryTransaction } from '../types';
+import { SalaryTransaction, TeacherSalaryPayment } from '../types';
 
 export interface StudentFullReport {
   student: Student;
@@ -99,6 +99,8 @@ interface SchoolContextType {
   deleteTeacher: (id: string) => void;
   adjustTeacherSalary: (teacherId: string, amount: number, type: 'Addition' | 'Deduction', reason: string, month?: string) => void;
   setTeacherPassword: (teacherId: string, newPassword: string) => void;
+  teacherSalaryPayments: TeacherSalaryPayment[];
+  toggleTeacherSalaryPayment: (teacherId: string, month: string, amount: number) => void;
 
   markStudentAttendance: (record: Omit<StudentAttendance, 'id'>) => void;
   markClassAttendance: (className: string, date: string, records: { studentId: string; status: 'Present' | 'Absent' | 'Leave' | 'Late' }[]) => void;
@@ -176,6 +178,9 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [salaryTransactions, setSalaryTransactions] = useState<SalaryTransaction[]>(() =>
     loadFromStorage('salaryTransactions', initialSalaryTransactions)
   );
+  const [teacherSalaryPayments, setTeacherSalaryPayments] = useState<TeacherSalaryPayment[]>(() =>
+    loadFromStorage('teacherSalaryPayments', [])
+  );
 
   // Portal & Auth State
   const [currentPortal, setCurrentPortal] = useState<PortalType>('PUBLIC_WEBSITE');
@@ -198,6 +203,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => saveToStorage('admissions', onlineAdmissions), [onlineAdmissions]);
   useEffect(() => saveToStorage('settings', settings), [settings]);
   useEffect(() => saveToStorage('salaryTransactions', salaryTransactions), [salaryTransactions]);
+  useEffect(() => saveToStorage('teacherSalaryPayments', teacherSalaryPayments), [teacherSalaryPayments]);
   useEffect(() => saveToStorage('isAdminLoggedIn', isAdminLoggedIn), [isAdminLoggedIn]);
   useEffect(() => saveToStorage('currentTeacherId', currentTeacherId), [currentTeacherId]);
   useEffect(() => saveToStorage('currentParentStudentId', currentParentStudentId), [currentParentStudentId]);
@@ -290,6 +296,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setSalaryTransactions(data.salaryTransactions);
         saveToStorage('salaryTransactions', data.salaryTransactions);
       }
+      if (Array.isArray(data.teacherSalaryPayments)) {
+        setTeacherSalaryPayments(data.teacherSalaryPayments);
+        saveToStorage('teacherSalaryPayments', data.teacherSalaryPayments);
+      }
       if (data.settings && typeof data.settings === 'object') {
         setSettings(data.settings);
         saveToStorage('settings', data.settings);
@@ -320,7 +330,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         notices,
         onlineAdmissions,
         settings,
-        salaryTransactions
+        salaryTransactions,
+        teacherSalaryPayments
       };
       const res = await fetch('/api/school-data', {
         method: 'POST',
@@ -364,7 +375,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     notices,
     onlineAdmissions,
     settings,
-    salaryTransactions
+    salaryTransactions,
+    teacherSalaryPayments
   ]);
 
   // Periodic polling & window focus pull
@@ -616,6 +628,35 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setTeachers(prev => prev.map(t => t.id === teacherId ? { ...t, personalPassword: newPassword } : t));
   };
 
+  const toggleTeacherSalaryPayment = (teacherId: string, month: string, amount: number) => {
+    const today = new Date().toISOString().split('T')[0];
+    setTeacherSalaryPayments(prev => {
+      const idx = prev.findIndex(p => p.teacherId === teacherId && p.month === month);
+      if (idx >= 0) {
+        const copy = [...prev];
+        const nextState = !copy[idx].isPaid;
+        copy[idx] = {
+          ...copy[idx],
+          isPaid: nextState,
+          paidDate: nextState ? today : undefined,
+          amount
+        };
+        return copy;
+      }
+      return [
+        ...prev,
+        {
+          id: `tsp-${Date.now()}-${teacherId}`,
+          teacherId,
+          month,
+          isPaid: true,
+          paidDate: today,
+          amount
+        }
+      ];
+    });
+  };
+
   // Attendance
   const markStudentAttendance = (record: Omit<StudentAttendance, 'id'>) => {
     const fineAmount = record.status === 'Absent' ? settings.finePerAbsentDay : 0;
@@ -777,11 +818,15 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const addTestResult = (resultData: Omit<TestResult, 'id'>) => {
-    const newResult: TestResult = {
-      ...resultData,
-      id: `tr-${Date.now()}`
-    };
-    setTestResults(prev => [newResult, ...prev]);
+    setTestResults(prev => {
+      const idx = prev.findIndex(r => r.testId === resultData.testId && r.studentId === resultData.studentId);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...resultData, id: copy[idx].id };
+        return copy;
+      }
+      return [{ ...resultData, id: `tr-${Date.now()}-${resultData.studentId}` }, ...prev];
+    });
   };
 
   // Notices
@@ -1027,6 +1072,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         deleteTeacher,
         adjustTeacherSalary,
         setTeacherPassword,
+        teacherSalaryPayments,
+        toggleTeacherSalaryPayment,
         markStudentAttendance,
         markClassAttendance,
         markTeacherAttendance,

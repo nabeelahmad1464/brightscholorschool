@@ -14,7 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { useSchool } from '../context/SchoolContext';
-import { Student, ClassLevel, SCHOOL_CLASSES } from '../types';
+import { Student, ClassLevel, SCHOOL_CLASSES, SCHOOL_SUBJECTS } from '../types';
 
 interface TeacherPortalProps {
   onSelectStudent: (student: Student) => void;
@@ -28,8 +28,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
     attendance,
     markClassAttendance,
     addDailyReport,
-    addTestResult,
     tests,
+    addTest,
+    testResults,
+    addTestResult,
     submitLeave,
     settings,
     setTeacherPassword,
@@ -54,10 +56,18 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
   const [repBehavior, setRepBehavior] = useState<'Disciplined' | 'Good' | 'Mischievous'>('Disciplined');
   const [repRemarks, setRepRemarks] = useState('Showed keen interest in class and Nazra Quran.');
 
-  // Test marks state
+  // Test marks & creation state
   const [selectedTestId, setSelectedTestId] = useState(tests[0]?.id || '');
   const [testStudentId, setTestStudentId] = useState(students[0]?.id || '');
   const [marksObtained, setMarksObtained] = useState<number>(45);
+  const [testSubTab, setTestSubTab] = useState<'enter_marks' | 'create_test'>('enter_marks');
+  const [newTestClass, setNewTestClass] = useState<ClassLevel>(selectedClass);
+  const [newTestSubject, setNewTestSubject] = useState('Mathematics (ریاضی)');
+  const [customSubjectInput, setCustomSubjectInput] = useState('');
+  const [newTestTotalMarks, setNewTestTotalMarks] = useState<number>(50);
+  const [newTestTitle, setNewTestTitle] = useState('Mathematics Monthly Test');
+  const [teacherMarksMap, setTeacherMarksMap] = useState<Record<string, number>>({});
+  const [teacherRemarksMap, setTeacherRemarksMap] = useState<Record<string, string>>({});
 
   // Leave state
   const [leaveDays, setLeaveDays] = useState(1);
@@ -123,6 +133,63 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
     });
 
     alert(`Marks recorded for ${st.name}: ${marksObtained}/${total} (Grade: ${grade})`);
+  };
+
+  const handleCreateTest = (e: React.FormEvent) => {
+    e.preventDefault();
+    const finalSubject = newTestSubject === 'Other (دیگر مضمون)' ? (customSubjectInput.trim() || 'General') : newTestSubject;
+    const testTitle = newTestTitle.trim() || `${finalSubject} Assessment - ${newTestClass}`;
+
+    const created = addTest({
+      title: testTitle,
+      className: newTestClass,
+      subject: finalSubject,
+      totalMarks: Number(newTestTotalMarks) || 50,
+      testDate: new Date().toISOString().split('T')[0],
+      description: 'Class Assessment'
+    });
+
+    setSelectedTestId(created.id);
+    setTestSubTab('enter_marks');
+    alert(`Assessment created: ${testTitle} (${newTestTotalMarks} Marks). Now enter student marks.`);
+  };
+
+  const handleSaveAllMarksForClass = () => {
+    const t = tests.find(test => test.id === selectedTestId);
+    if (!t) {
+      alert('Please select or create an assessment first.');
+      return;
+    }
+
+    const testStudents = students.filter(s => s.className === t.className);
+    if (testStudents.length === 0) {
+      alert(`No students found in ${t.className}`);
+      return;
+    }
+
+    const total = t.totalMarks;
+
+    testStudents.forEach(st => {
+      const marks = teacherMarksMap[st.id] ?? 0;
+      const pct = Math.round((marks / total) * 100);
+      const grade = pct >= 90 ? 'A+' : pct >= 80 ? 'A' : pct >= 70 ? 'B' : pct >= 60 ? 'C' : pct >= 50 ? 'D' : 'F';
+      const remarks = teacherRemarksMap[st.id] || (pct >= 80 ? 'Good work' : 'Practice needed');
+
+      addTestResult({
+        testId: t.id,
+        testTitle: t.title,
+        studentId: st.id,
+        studentName: st.name,
+        className: st.className,
+        subject: t.subject,
+        marksObtained: marks,
+        totalMarks: total,
+        grade,
+        remarks
+      });
+    });
+
+    alert(`Marks successfully recorded for all ${testStudents.length} students in ${t.className}!`);
   };
 
   const handleApplyLeave = (e: React.FormEvent) => {
@@ -412,54 +479,384 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
 
       {/* 3: TESTS */}
       {activeTab === 'tests' && (
-        <form onSubmit={handleSaveTestResult} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4 max-w-xl">
-          <h3 className="font-bold text-sm text-slate-900">Enter Student Examination Marks</h3>
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Select Test</label>
-            <select
-              value={selectedTestId}
-              onChange={(e) => setSelectedTestId(e.target.value)}
-              className="w-full px-3 py-2 text-sm border rounded-lg bg-white"
-            >
-              {tests.map(t => (
-                <option key={t.id} value={t.id}>
-                  {t.title} ({t.className} - {t.totalMarks} Marks)
-                </option>
-              ))}
-            </select>
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
+            <div>
+              <h3 className="font-bold text-base text-slate-900">Student Examinations & Marks Entry</h3>
+              <p className="text-xs text-slate-500">
+                سبجیکٹ اور ٹوٹل مارکس کے ساتھ ٹیسٹ بنائیں اور کلاس کے تمام طلباء کے نمبر درج کریں۔
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setTestSubTab('enter_marks')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
+                  testSubTab === 'enter_marks'
+                    ? 'bg-[#0D285F] text-amber-300'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Enter Marks (نمبر درج کریں)
+              </button>
+              <button
+                type="button"
+                onClick={() => setTestSubTab('create_test')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5 ${
+                  testSubTab === 'create_test'
+                    ? 'bg-[#0D285F] text-amber-300'
+                    : 'bg-amber-400 hover:bg-amber-300 text-[#07193B]'
+                }`}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ New Assessment (نیا ٹیسٹ بنائیں)</span>
+              </button>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Select Student</label>
-            <select
-              value={testStudentId}
-              onChange={(e) => setTestStudentId(e.target.value)}
-              className="w-full px-3 py-2 text-sm border rounded-lg bg-white"
-            >
-              {students.map(s => (
-                <option key={s.id} value={s.id}>{s.name} ({s.className})</option>
-              ))}
-            </select>
-          </div>
+          {/* SUB-VIEW 1: CREATE NEW ASSESSMENT */}
+          {testSubTab === 'create_test' && (
+            <form onSubmit={handleCreateTest} className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4 max-w-2xl">
+              <h4 className="font-extrabold text-xs text-[#0D285F] uppercase tracking-wider">
+                Create Assessment (مضمون اور کل نمبر سلیکٹ کریں)
+              </h4>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Marks Obtained</label>
-            <input
-              type="number"
-              required
-              value={marksObtained}
-              onChange={(e) => setMarksObtained(Number(e.target.value))}
-              className="w-full px-3 py-2 text-sm border rounded-lg"
-            />
-          </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Class */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Class (کلاس)</label>
+                  <select
+                    value={newTestClass}
+                    onChange={(e) => {
+                      const cls = e.target.value as ClassLevel;
+                      setNewTestClass(cls);
+                      setNewTestTitle(`${newTestSubject.split(' ')[0]} Assessment - ${cls}`);
+                    }}
+                    className="w-full px-3 py-2 text-sm border rounded-xl bg-white font-medium"
+                  >
+                    {SCHOOL_CLASSES.map(cls => (
+                      <option key={cls} value={cls}>{cls}</option>
+                    ))}
+                  </select>
+                </div>
 
-          <button
-            type="submit"
-            className="bg-[#0D285F] text-white px-6 py-2 rounded-xl text-xs font-bold"
-          >
-            Submit Marks
-          </button>
-        </form>
+                {/* Subject List */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Subject (مضمون کی فہرست)</label>
+                  <select
+                    value={newTestSubject}
+                    onChange={(e) => {
+                      const sub = e.target.value;
+                      setNewTestSubject(sub);
+                      if (sub !== 'Other (دیگر مضمون)') {
+                        setNewTestTitle(`${sub.split(' ')[0]} Assessment - ${newTestClass}`);
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-sm border rounded-xl bg-white font-medium"
+                  >
+                    {SCHOOL_SUBJECTS.map(sub => (
+                      <option key={sub} value={sub}>{sub}</option>
+                    ))}
+                    <option value="Other (دیگر مضمون)">Other (دیگر مضمون - خود لکھیں)</option>
+                  </select>
+                </div>
+
+                {/* Total Marks */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Total Marks (کل نمبر)</label>
+                  <select
+                    value={newTestTotalMarks}
+                    onChange={(e) => setNewTestTotalMarks(Number(e.target.value))}
+                    className="w-full px-3 py-2 text-sm border rounded-xl bg-white font-bold text-[#0D285F]"
+                  >
+                    {[20, 25, 50, 75, 100].map(m => (
+                      <option key={m} value={m}>{m} Total Marks</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Title */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Test Title (عنوان)</label>
+                  <input
+                    type="text"
+                    required
+                    value={newTestTitle}
+                    onChange={(e) => setNewTestTitle(e.target.value)}
+                    placeholder="e.g. Mathematics Monthly Test"
+                    className="w-full px-3 py-2 text-sm border rounded-xl bg-white"
+                  />
+                </div>
+              </div>
+
+              {newTestSubject === 'Other (دیگر مضمون)' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Enter Custom Subject Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={customSubjectInput}
+                    onChange={(e) => {
+                      setCustomSubjectInput(e.target.value);
+                      setNewTestTitle(`${e.target.value} Assessment - ${newTestClass}`);
+                    }}
+                    placeholder="e.g. Arabic Grammar, Qirat, Tarbiyat Viva"
+                    className="w-full px-3 py-2 text-sm border rounded-xl bg-white"
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setTestSubTab('enter_marks')}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-300 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-[#0D285F] hover:bg-[#07193B] text-white px-6 py-2 rounded-xl text-xs font-bold transition shadow"
+                >
+                  Create & Proceed to Marks
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* SUB-VIEW 2: ENTER STUDENT MARKS */}
+          {testSubTab === 'enter_marks' && (
+            <div className="space-y-6">
+              {tests.length === 0 ? (
+                <div className="text-center py-10 bg-slate-50 border border-dashed border-slate-300 rounded-2xl space-y-3">
+                  <p className="text-xs text-slate-500">
+                    ابھی تک کوئی ٹیسٹ شیڈول نہیں کیا گیا۔ پہلے نیا ٹیسٹ بنائیں۔
+                  </p>
+                  <button
+                    onClick={() => setTestSubTab('create_test')}
+                    className="bg-[#0D285F] text-amber-300 px-5 py-2.5 rounded-xl font-bold text-xs shadow transition"
+                  >
+                    + Schedule New Assessment (نیا ٹیسٹ بنائیں)
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Select Test Header */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex-1 min-w-[260px]">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Select Assessment / Test (ٹیسٹ منتخب کریں)
+                      </label>
+                      <select
+                        value={selectedTestId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          setSelectedTestId(id);
+                          // Populate existing marks
+                          const map: Record<string, number> = {};
+                          const rem: Record<string, string> = {};
+                          testResults.filter(r => r.testId === id).forEach(r => {
+                            map[r.studentId] = r.marksObtained;
+                            rem[r.studentId] = r.remarks;
+                          });
+                          setTeacherMarksMap(map);
+                          setTeacherRemarksMap(rem);
+                        }}
+                        className="w-full px-3 py-2 text-sm border rounded-xl bg-white font-semibold"
+                      >
+                        {tests.map(t => (
+                          <option key={t.id} value={t.id}>
+                            {t.title} • {t.className} • {t.subject} (Total: {t.totalMarks} Marks)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {selectedTestId && (() => {
+                      const t = tests.find(test => test.id === selectedTestId);
+                      if (!t) return null;
+                      return (
+                        <div className="flex items-center gap-3 bg-white p-2.5 px-4 rounded-xl border border-slate-200">
+                          <div>
+                            <span className="text-[10px] text-slate-400 block">Class & Subject:</span>
+                            <span className="font-extrabold text-[#0D285F] text-xs">{t.className} • {t.subject}</span>
+                          </div>
+                          <div className="border-l pl-3">
+                            <span className="text-[10px] text-slate-400 block">Total Marks:</span>
+                            <span className="font-extrabold text-amber-700 text-xs">{t.totalMarks} Marks</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Class Student Marks Table */}
+                  {selectedTestId && (() => {
+                    const currentTest = tests.find(t => t.id === selectedTestId);
+                    if (!currentTest) return null;
+                    const testClassStudents = students.filter(s => s.className === currentTest.className);
+
+                    if (testClassStudents.length === 0) {
+                      return (
+                        <p className="text-xs text-slate-500 italic py-6 text-center bg-slate-50 rounded-xl">
+                          اس کلاس ({currentTest.className}) میں ابھی کوئی طالب علم داخل نہیں ہے۔
+                        </p>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-extrabold text-xs text-[#0D285F] uppercase tracking-wider">
+                            Student Marks Sheet ({currentTest.className})
+                          </h4>
+                          <span className="text-[11px] text-slate-500">
+                            کل نمبر: <strong className="text-slate-900">{currentTest.totalMarks}</strong>
+                          </span>
+                        </div>
+
+                        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-[#07193B] text-white">
+                              <tr>
+                                <th className="p-3">Roll No</th>
+                                <th className="p-3">Student Name</th>
+                                <th className="p-3">Marks Obtained (out of {currentTest.totalMarks})</th>
+                                <th className="p-3">Percentage & Grade</th>
+                                <th className="p-3">Remarks / تبصرہ</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 bg-white">
+                              {testClassStudents.map(st => {
+                                const existingRes = testResults.find(r => r.testId === currentTest.id && r.studentId === st.id);
+                                const marks = teacherMarksMap[st.id] ?? existingRes?.marksObtained ?? 0;
+                                const total = currentTest.totalMarks;
+                                const pct = Math.round((marks / total) * 100);
+                                const grade = pct >= 90 ? 'A+' : pct >= 80 ? 'A' : pct >= 70 ? 'B' : pct >= 60 ? 'C' : pct >= 50 ? 'D' : 'F';
+
+                                return (
+                                  <tr key={st.id} className="hover:bg-slate-50">
+                                    <td className="p-3 font-bold font-mono text-[#0D285F]">
+                                      {st.rollNo}
+                                    </td>
+                                    <td className="p-3">
+                                      <div className="font-bold text-slate-900">{st.name}</div>
+                                      <div className="text-[10px] text-slate-400">ولدیت: {st.fatherName}</div>
+                                    </td>
+                                    <td className="p-3">
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          max={currentTest.totalMarks}
+                                          value={teacherMarksMap[st.id] ?? existingRes?.marksObtained ?? ''}
+                                          onChange={(e) => {
+                                            const val = Math.min(total, Math.max(0, Number(e.target.value)));
+                                            setTeacherMarksMap(prev => ({ ...prev, [st.id]: val }));
+                                          }}
+                                          placeholder="Marks"
+                                          className="w-24 px-3 py-1.5 border rounded-lg font-bold text-center text-sm"
+                                        />
+                                        <span className="text-slate-400 font-bold">/ {total}</span>
+                                      </div>
+                                    </td>
+                                    <td className="p-3">
+                                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${
+                                        pct >= 80
+                                          ? 'bg-emerald-100 text-emerald-800'
+                                          : pct >= 50
+                                          ? 'bg-blue-100 text-blue-800'
+                                          : 'bg-red-100 text-red-800'
+                                      }`}>
+                                        {pct}% • Grade {grade}
+                                      </span>
+                                    </td>
+                                    <td className="p-3">
+                                      <input
+                                        type="text"
+                                        value={teacherRemarksMap[st.id] ?? existingRes?.remarks ?? ''}
+                                        onChange={(e) => setTeacherRemarksMap(prev => ({ ...prev, [st.id]: e.target.value }))}
+                                        placeholder="e.g. Well prepared"
+                                        className="w-full px-2.5 py-1.5 border rounded-lg text-xs"
+                                      />
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-2">
+                          <span className="text-xs text-slate-500">
+                            نمبر درج کرنے کے بعد نیچے والا بٹن دبائیں۔
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleSaveAllMarksForClass}
+                            className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 font-bold text-xs px-6 py-2.5 rounded-xl shadow transition"
+                          >
+                            ✓ Save All Marks (تمام بچوں کے نمبر محفوظ کریں)
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Test Results Table */}
+          {testResults.length > 0 && (
+            <div className="space-y-3 pt-6 border-t border-slate-200">
+              <h4 className="font-bold text-xs text-slate-800 uppercase tracking-wider">
+                Submitted Student Test Results History (ریکارڈ شدہ ٹیسٹ رزلٹ)
+              </h4>
+              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#07193B] text-white">
+                    <tr>
+                      <th className="p-3">Student</th>
+                      <th className="p-3">Class</th>
+                      <th className="p-3">Subject</th>
+                      <th className="p-3">Test Title</th>
+                      <th className="p-3">Marks Obtained</th>
+                      <th className="p-3">Grade</th>
+                      <th className="p-3">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {testResults.slice(0, 15).map(tr => (
+                      <tr key={tr.id} className="hover:bg-slate-50">
+                        <td className="p-3 font-semibold text-slate-900">{tr.studentName}</td>
+                        <td className="p-3">{tr.className}</td>
+                        <td className="p-3 text-slate-700">{tr.subject}</td>
+                        <td className="p-3 text-slate-500">{tr.testTitle}</td>
+                        <td className="p-3 font-bold text-[#0D285F]">
+                          {tr.marksObtained} / {tr.totalMarks}
+                        </td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                            tr.grade === 'A+' || tr.grade === 'A'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : tr.grade === 'F'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {tr.grade}
+                          </span>
+                        </td>
+                        <td className="p-3 text-slate-500 italic">{tr.remarks}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* 4: LEAVE */}

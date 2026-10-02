@@ -142,8 +142,8 @@ export const Header: React.FC<HeaderProps> = ({
                 <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold tracking-tight text-white font-serif-crest uppercase">
                   Bright Scholar School
                 </h1>
-                <span className="hidden lg:inline-block bg-amber-400 text-[#07193B] text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
-                  Chak 47 GB
+                <span className="hidden lg:inline-block bg-amber-400 text-[#07193B] text-[10px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider">
+                  Est. 2017 • Chak 47 GB
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-amber-300 font-medium">

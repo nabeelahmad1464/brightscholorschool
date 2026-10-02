@@ -34,11 +34,16 @@ import {
 import { useSchool } from '../context/SchoolContext';
 import {
   SCHOOL_CLASSES,
+  SCHOOL_SUBJECTS,
   ClassLevel,
   getDefaultMonthlyFee,
   Student,
-  Teacher
+  Teacher,
+  FeeRecord,
+  Test,
+  TestResult
 } from '../types';
+import { FeeReceiptModal } from '../components/FeeReceiptModal';
 
 interface AdminDashboardProps {
   onSelectStudent: (student: Student) => void;
@@ -81,6 +86,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
     deleteTeacher,
     adjustTeacherSalary,
     setTeacherPassword,
+    teacherSalaryPayments,
+    toggleTeacherSalaryPayment,
     markClassAttendance,
     markTeacherAttendance,
     updateLeaveStatus,
@@ -133,7 +140,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
   const [adjAmount, setAdjAmount] = useState<number>(1000);
   const [adjType, setAdjType] = useState<'Addition' | 'Deduction'>('Addition');
   const [adjReason, setAdjReason] = useState('');
-  const [adjMonth, setAdjMonth] = useState('September 2026');
+  const [adjMonth, setAdjMonth] = useState('October 2026');
+  const [selectedSalaryMonth, setSelectedSalaryMonth] = useState('October 2026');
 
   // Teacher password modal
   const [passTeacher, setPassTeacher] = useState<Teacher | null>(null);
@@ -145,10 +153,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
   const [attendanceViewMode, setAttendanceViewMode] = useState<'daily' | 'monthlyRegister'>('daily');
   const [tempStatusMap, setTempStatusMap] = useState<Record<string, 'Present' | 'Absent' | 'Leave' | 'Late'>>({});
 
-  // Fee payment modal
+  // Fee payment modal & Receipt
   const [paymentFeeId, setPaymentFeeId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [receiptNo, setReceiptNo] = useState('');
+  const [selectedFeeForReceipt, setSelectedFeeForReceipt] = useState<FeeRecord | null>(null);
 
   // New Notice state
   const [newNoticeTitle, setNewNoticeTitle] = useState('');
@@ -156,10 +165,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
   const [newNoticeCategory, setNewNoticeCategory] = useState<'Announcement' | 'Holiday' | 'Exam' | 'Fee Notice' | 'Parent Meeting'>('Announcement');
 
   // New Test state
-  const [newTestTitle, setNewTestTitle] = useState('');
+  const [newTestTitle, setNewTestTitle] = useState('Mathematics Monthly Test');
   const [newTestClass, setNewTestClass] = useState<ClassLevel>('Class 5');
-  const [newTestSubject, setNewTestSubject] = useState('Mathematics');
-  const [newTestMarks, setNewTestMarks] = useState(50);
+  const [newTestSubject, setNewTestSubject] = useState('Mathematics (ریاضی)');
+  const [customSubjectInput, setCustomSubjectInput] = useState('');
+  const [newTestMarks, setNewTestMarks] = useState<number>(50);
+  const [selectedTestForMarks, setSelectedTestForMarks] = useState<Test | null>(null);
+  const [adminMarksMap, setAdminMarksMap] = useState<Record<string, number>>({});
+  const [adminRemarksMap, setAdminRemarksMap] = useState<Record<string, string>>({});
 
   // Settings state
   const [fineInput, setFineInput] = useState(settings.finePerAbsentDay);
@@ -358,7 +371,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
   const handleRecordPayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (paymentFeeId && paymentAmount > 0) {
+      const target = feeRecords.find(f => f.id === paymentFeeId);
       recordFeePayment(paymentFeeId, paymentAmount, receiptNo);
+      if (target) {
+        const newPaid = target.paidAmount + paymentAmount;
+        const newBal = Math.max(0, target.totalPayable - newPaid);
+        setSelectedFeeForReceipt({
+          ...target,
+          paidAmount: newPaid,
+          balanceRemaining: newBal,
+          status: newBal === 0 ? 'Paid' : 'Partial',
+          receiptNo: receiptNo || `REC-BSS-${Date.now().toString().slice(-4)}`
+        });
+      }
       setPaymentFeeId(null);
       setPaymentAmount(0);
       setReceiptNo('');
@@ -384,19 +409,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
 
   const handleAddTest = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTestTitle.trim()) return;
+    const finalSubject = newTestSubject === 'Other (دیگر مضمون)' ? (customSubjectInput.trim() || 'General') : newTestSubject;
+    const testTitle = newTestTitle.trim() || `${finalSubject} Assessment - ${newTestClass}`;
 
     addTest({
-      title: newTestTitle.trim(),
+      title: testTitle,
       className: newTestClass,
-      subject: newTestSubject,
-      totalMarks: Number(newTestMarks),
+      subject: finalSubject,
+      totalMarks: Number(newTestMarks) || 50,
       testDate: new Date().toISOString().split('T')[0],
       description: 'Regular Assessment'
     });
 
-    setNewTestTitle('');
-    alert('Test scheduled successfully!');
+    setNewTestTitle(`${finalSubject} Test`);
+    alert(`Assessment for ${newTestClass} - ${finalSubject} (${newTestMarks} Marks) created successfully!`);
+  };
+
+  const handleSaveAdminTestMarks = () => {
+    if (!selectedTestForMarks) return;
+    const testStudents = students.filter(s => s.className === selectedTestForMarks.className);
+    const total = selectedTestForMarks.totalMarks;
+
+    testStudents.forEach(st => {
+      const marks = adminMarksMap[st.id] ?? 0;
+      const pct = Math.round((marks / total) * 100);
+      const grade = pct >= 90 ? 'A+' : pct >= 80 ? 'A' : pct >= 70 ? 'B' : pct >= 60 ? 'C' : pct >= 50 ? 'D' : 'F';
+      const remarks = adminRemarksMap[st.id] || (pct >= 80 ? 'Well prepared!' : 'Needs revision');
+
+      addTestResult({
+        testId: selectedTestForMarks.id,
+        testTitle: selectedTestForMarks.title,
+        studentId: st.id,
+        studentName: st.name,
+        className: st.className,
+        subject: selectedTestForMarks.subject,
+        marksObtained: marks,
+        totalMarks: total,
+        grade,
+        remarks
+      });
+    });
+
+    alert(`Marks recorded successfully for ${testStudents.length} students in ${selectedTestForMarks.className}!`);
+    setSelectedTestForMarks(null);
   };
 
   return (
@@ -1023,29 +1078,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h3 className="font-bold text-slate-900 text-base">Faculty Directory & Salary Management</h3>
+              <h3 className="font-bold text-slate-900 text-base">Faculty Directory & Monthly Salary Disbursal</h3>
               <p className="text-xs text-slate-500">
-                Add teachers, increase/subtract salaries (allowances/deductions), and assign login passwords.
+                ٹیچرز کی ماہانہ تنخواہ کی ادائیگی ریکارڈ کریں (سبز بٹن: ادا شدہ، سرخ بٹن: غیر ادا شدہ)۔
               </p>
             </div>
 
-            <button
-              onClick={() => {
-                setEditingTeacher(null);
-                setTName('');
-                setTQualification('');
-                setTSubject('');
-                setTClasses('Class 1, Class 2');
-                setTPhone('0302-5053993');
-                setTSalary(25000);
-                setTPassword('teacher123');
-                setShowAddTeacherModal(true);
-              }}
-              className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 shadow"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add New Teacher</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-300">
+                <span className="text-[11px] font-bold text-slate-700 pl-1">Month:</span>
+                <select
+                  value={selectedSalaryMonth}
+                  onChange={(e) => setSelectedSalaryMonth(e.target.value)}
+                  className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-[#0D285F]"
+                >
+                  <option value="October 2026">October 2026</option>
+                  <option value="September 2026">September 2026</option>
+                  <option value="August 2026">August 2026</option>
+                  <option value="November 2026">November 2026</option>
+                </select>
+              </div>
+
+              <button
+                onClick={() => {
+                  setEditingTeacher(null);
+                  setTName('');
+                  setTQualification('');
+                  setTSubject('');
+                  setTClasses('Class 1, Class 2');
+                  setTPhone('0302-5053993');
+                  setTSalary(25000);
+                  setTPassword('teacher123');
+                  setShowAddTeacherModal(true);
+                }}
+                className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add New Teacher</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Monthly Salary KPI Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+            <div className="bg-white p-3 rounded-xl border border-slate-200">
+              <span className="text-[11px] text-slate-500 block">Total Faculty</span>
+              <span className="text-xl font-black text-slate-900 mt-0.5 block">{teachers.length} Members</span>
+            </div>
+            <div className="bg-white p-3 rounded-xl border border-emerald-200 bg-emerald-50/30">
+              <span className="text-[11px] text-emerald-800 font-bold block">🟢 Salaries Paid (ادا شدہ)</span>
+              <span className="text-xl font-black text-emerald-700 mt-0.5 block">
+                {teachers.filter(t => teacherSalaryPayments.some(p => p.teacherId === t.id && p.month === selectedSalaryMonth && p.isPaid)).length} Teachers
+              </span>
+            </div>
+            <div className="bg-white p-3 rounded-xl border border-red-200 bg-red-50/30">
+              <span className="text-[11px] text-red-800 font-bold block">🔴 Pending / Unpaid (باقی)</span>
+              <span className="text-xl font-black text-red-700 mt-0.5 block">
+                {teachers.filter(t => !teacherSalaryPayments.some(p => p.teacherId === t.id && p.month === selectedSalaryMonth && p.isPaid)).length} Teachers
+              </span>
+            </div>
+            <div className="bg-white p-3 rounded-xl border border-blue-200">
+              <span className="text-[11px] text-slate-500 block">Total Payroll ({selectedSalaryMonth})</span>
+              <span className="text-xl font-black text-[#0D285F] mt-0.5 block">
+                Rs. {teachers.reduce((acc, t) => acc + t.salary + (t.allowances || 0) - (t.deductions || 0), 0).toLocaleString()}
+              </span>
+            </div>
           </div>
 
           {/* Teachers Cards / Grid */}
@@ -1054,9 +1151,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
               const allowances = t.allowances || 0;
               const deductions = t.deductions || 0;
               const netPayable = t.salary + allowances - deductions;
+              const paymentRecord = teacherSalaryPayments.find(p => p.teacherId === t.id && p.month === selectedSalaryMonth);
+              const isSalaryPaid = !!paymentRecord?.isPaid;
 
               return (
-                <div key={t.id} className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-xs space-y-3">
+                <div key={t.id} className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-xs space-y-3 shadow-sm hover:border-[#0D285F] transition">
                   <div className="flex justify-between items-start">
                     <div>
                       <h4 className="font-bold text-sm text-[#0D285F]">{t.name}</h4>
@@ -1091,6 +1190,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
+                  </div>
+
+                  {/* Monthly Salary Paid / Unpaid Status Button (Red / Green) */}
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-[11px] text-slate-700">
+                        {selectedSalaryMonth} کی تنخواہ:
+                      </span>
+                      <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                        isSalaryPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {isSalaryPaid ? '✓ PAID (ادا شدہ)' : '✕ UNPAID (باقی ہے)'}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toggleTeacherSalaryPayment(t.id, selectedSalaryMonth, netPayable);
+                      }}
+                      className={`w-full py-2.5 px-3 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 shadow ${
+                        isSalaryPaid
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          : 'bg-red-600 hover:bg-red-700 text-white'
+                      }`}
+                    >
+                      {isSalaryPaid ? (
+                        <>
+                          <CheckCircle className="w-4 h-4 text-emerald-200" />
+                          <span>سیلری دے دی ہے (Paid) • کلک کر کے سرخ / ان پیڈ کریں</span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="w-4 h-4 text-red-200" />
+                          <span>سیلری ابھی نہیں دی (Unpaid) • کلک کر کے سبز / ادا کریں</span>
+                        </>
+                      )}
+                    </button>
+
+                    {isSalaryPaid && paymentRecord?.paidDate && (
+                      <p className="text-[10px] text-center text-emerald-700 font-bold">
+                        ✓ ادا شدہ تاریخ: {paymentRecord.paidDate} (رقم: Rs. {netPayable.toLocaleString()})
+                      </p>
+                    )}
                   </div>
 
                   {/* Salary Breakdown Box */}
@@ -1284,17 +1427,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
                         </span>
                       </td>
                       <td className="p-3 text-right">
-                        {f.balanceRemaining > 0 && (
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
-                            onClick={() => {
-                              setPaymentFeeId(f.id);
-                              setPaymentAmount(f.balanceRemaining);
-                            }}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded text-xs font-semibold transition"
+                            onClick={() => setSelectedFeeForReceipt(f)}
+                            className="bg-blue-50 hover:bg-blue-100 text-[#0D285F] border border-blue-200 px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1 shadow-sm"
+                            title="Print / View Fee Receipt"
                           >
-                            Collect
+                            <Printer className="w-3.5 h-3.5 text-blue-700" />
+                            <span>رسید</span>
                           </button>
-                        )}
+                          {f.balanceRemaining > 0 && (
+                            <button
+                              onClick={() => {
+                                setPaymentFeeId(f.id);
+                                setPaymentAmount(f.balanceRemaining);
+                              }}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded text-xs font-semibold transition shadow-sm"
+                            >
+                              Collect
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1351,60 +1504,325 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
             </div>
           </div>
 
-          <form onSubmit={handleAddTest} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-            <span className="font-bold text-xs text-slate-700 block">Schedule New Assessment</span>
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              <input
-                type="text"
-                required
-                value={newTestTitle}
-                onChange={(e) => setNewTestTitle(e.target.value)}
-                placeholder="Test Title (e.g. Science Monthly Test)"
-                className="px-3 py-2 text-xs border rounded-lg bg-white"
-              />
-              <select
-                value={newTestClass}
-                onChange={(e) => setNewTestClass(e.target.value as ClassLevel)}
-                className="px-3 py-2 text-xs border rounded-lg bg-white font-medium"
-              >
-                {SCHOOL_CLASSES.map(cls => (
-                  <option key={cls} value={cls}>{cls}</option>
-                ))}
-              </select>
-              <input
-                type="text"
-                required
-                value={newTestSubject}
-                onChange={(e) => setNewTestSubject(e.target.value)}
-                placeholder="Subject"
-                className="px-3 py-2 text-xs border rounded-lg bg-white"
-              />
+          <form onSubmit={handleAddTest} className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="font-extrabold text-xs text-[#0D285F] uppercase tracking-wider block">
+                Schedule New Assessment (نیا ٹیسٹ شیڈول کریں)
+              </span>
+              <span className="text-[11px] text-slate-500">
+                سبجیکٹ سلیکٹ کریں اور کل نمبر درج کریں
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* Class Select */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Class (کلاس)</label>
+                <select
+                  value={newTestClass}
+                  onChange={(e) => {
+                    const cls = e.target.value as ClassLevel;
+                    setNewTestClass(cls);
+                    setNewTestTitle(`${newTestSubject.split(' ')[0]} Test - ${cls}`);
+                  }}
+                  className="w-full px-3 py-2 text-xs border rounded-xl bg-white font-medium"
+                >
+                  {SCHOOL_CLASSES.map(cls => (
+                    <option key={cls} value={cls}>{cls}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Subject Select */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Subject (مضمون کی فہرست)</label>
+                <select
+                  value={newTestSubject}
+                  onChange={(e) => {
+                    const sub = e.target.value;
+                    setNewTestSubject(sub);
+                    if (sub !== 'Other (دیگر مضمون)') {
+                      setNewTestTitle(`${sub.split(' ')[0]} Assessment - ${newTestClass}`);
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-xs border rounded-xl bg-white font-medium"
+                >
+                  {SCHOOL_SUBJECTS.map(sub => (
+                    <option key={sub} value={sub}>{sub}</option>
+                  ))}
+                  <option value="Other (دیگر مضمون)">Other (دیگر مضمون - خود لکھیں)</option>
+                </select>
+              </div>
+
+              {/* Total Marks */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Total Marks (کل نمبر)</label>
+                <div className="flex gap-1.5">
+                  <select
+                    value={newTestMarks}
+                    onChange={(e) => setNewTestMarks(Number(e.target.value))}
+                    className="w-full px-3 py-2 text-xs border rounded-xl bg-white font-bold text-[#0D285F]"
+                  >
+                    {[20, 25, 50, 75, 100].map(m => (
+                      <option key={m} value={m}>{m} Marks</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Test Title */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Test Title (عنوان)</label>
+                <input
+                  type="text"
+                  required
+                  value={newTestTitle}
+                  onChange={(e) => setNewTestTitle(e.target.value)}
+                  placeholder="e.g. Mathematics Monthly Test"
+                  className="w-full px-3 py-2 text-xs border rounded-xl bg-white font-medium"
+                />
+              </div>
+            </div>
+
+            {newTestSubject === 'Other (دیگر مضمون)' && (
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Enter Custom Subject Name</label>
+                <input
+                  type="text"
+                  required
+                  value={customSubjectInput}
+                  onChange={(e) => {
+                    setCustomSubjectInput(e.target.value);
+                    setNewTestTitle(`${e.target.value} Assessment - ${newTestClass}`);
+                  }}
+                  placeholder="e.g. Arabic Grammar, Qirat, Tarbiyat Viva"
+                  className="w-full sm:w-1/2 px-3 py-2 text-xs border rounded-xl bg-white"
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end">
               <button
                 type="submit"
-                className="bg-[#0D285F] text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-[#07193B]"
+                className="bg-[#0D285F] hover:bg-[#07193B] text-white px-6 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow"
               >
-                Create Test
+                <Plus className="w-4 h-4 text-amber-400" />
+                <span>Create Assessment (ٹیسٹ درج کریں)</span>
               </button>
             </div>
           </form>
 
-          <div className="space-y-4">
-            <h4 className="font-bold text-xs text-slate-700">Scheduled Tests</h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {tests.map(t => (
-                <div key={t.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="bg-blue-50 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded">
-                      {t.className}
-                    </span>
-                    <span className="text-[11px] text-slate-400">{t.testDate}</span>
-                  </div>
-                  <h4 className="font-bold text-sm text-slate-900">{t.title}</h4>
-                  <p className="text-xs text-slate-500 mb-2">{t.subject} • Total: {t.totalMarks} Marks</p>
+          {/* ACTIVE TEST MARKS ENTRY SHEET MODAL */}
+          {selectedTestForMarks && (
+            <div className="bg-amber-50/70 border-2 border-amber-300 rounded-2xl p-5 space-y-4 shadow-sm animate-fadeIn">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200 pb-3">
+                <div>
+                  <span className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded uppercase">
+                    Marks Entry Sheet
+                  </span>
+                  <h4 className="text-base font-extrabold text-[#0D285F] mt-1">
+                    {selectedTestForMarks.title} ({selectedTestForMarks.className})
+                  </h4>
+                  <p className="text-xs text-slate-600">
+                    Subject: <strong>{selectedTestForMarks.subject}</strong> • Total Marks: <strong>{selectedTestForMarks.totalMarks}</strong>
+                  </p>
                 </div>
-              ))}
+                <button
+                  onClick={() => setSelectedTestForMarks(null)}
+                  className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-300 px-3 py-1.5 rounded-lg"
+                >
+                  ✕ Close Sheet
+                </button>
+              </div>
+
+              {students.filter(s => s.className === selectedTestForMarks.className).length === 0 ? (
+                <p className="text-xs text-slate-500 italic py-4">
+                  اس کلاس ({selectedTestForMarks.className}) میں ابھی کوئی طالب علم داخل نہیں ہے۔
+                </p>
+              ) : (
+                <div className="overflow-x-auto border border-amber-200 rounded-xl bg-white">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#07193B] text-white">
+                      <tr>
+                        <th className="p-2.5">Roll #</th>
+                        <th className="p-2.5">Student & Father</th>
+                        <th className="p-2.5">Marks Obtained (out of {selectedTestForMarks.totalMarks})</th>
+                        <th className="p-2.5">Percentage & Grade</th>
+                        <th className="p-2.5">Teacher Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {students
+                        .filter(s => s.className === selectedTestForMarks.className)
+                        .map(st => {
+                          const existingRes = testResults.find(r => r.testId === selectedTestForMarks.id && r.studentId === st.id);
+                          const currentMarks = adminMarksMap[st.id] ?? existingRes?.marksObtained ?? 0;
+                          const total = selectedTestForMarks.totalMarks;
+                          const pct = Math.round((currentMarks / total) * 100);
+                          const grade = pct >= 90 ? 'A+' : pct >= 80 ? 'A' : pct >= 70 ? 'B' : pct >= 60 ? 'C' : pct >= 50 ? 'D' : 'F';
+
+                          return (
+                            <tr key={st.id} className="hover:bg-slate-50">
+                              <td className="p-2.5 font-bold font-mono text-[#0D285F]">
+                                {st.rollNo}
+                              </td>
+                              <td className="p-2.5">
+                                <div className="font-bold text-slate-900">{st.name}</div>
+                                <div className="text-[10px] text-slate-400">ولدیت: {st.fatherName}</div>
+                              </td>
+                              <td className="p-2.5">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={selectedTestForMarks.totalMarks}
+                                    value={adminMarksMap[st.id] ?? existingRes?.marksObtained ?? ''}
+                                    onChange={(e) => {
+                                      const val = Math.min(total, Math.max(0, Number(e.target.value)));
+                                      setAdminMarksMap(prev => ({ ...prev, [st.id]: val }));
+                                    }}
+                                    placeholder="Marks"
+                                    className="w-24 px-3 py-1.5 border rounded-lg font-bold text-center text-sm"
+                                  />
+                                  <span className="text-slate-400 font-bold">/ {total}</span>
+                                </div>
+                              </td>
+                              <td className="p-2.5">
+                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${
+                                  pct >= 80
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : pct >= 50
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {pct}% • Grade {grade}
+                                </span>
+                              </td>
+                              <td className="p-2.5">
+                                <input
+                                  type="text"
+                                  value={adminRemarksMap[st.id] ?? existingRes?.remarks ?? ''}
+                                  onChange={(e) => setAdminRemarksMap(prev => ({ ...prev, [st.id]: e.target.value }))}
+                                  placeholder="e.g. Well prepared"
+                                  className="w-full px-2.5 py-1.5 border rounded-lg text-xs"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center pt-2">
+                <span className="text-xs text-slate-600">
+                  تمام بچوں کے نمبر درج کرنے کے بعد نیچے والا بٹن دبائیں۔
+                </span>
+                <button
+                  type="button"
+                  onClick={handleSaveAdminTestMarks}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow transition"
+                >
+                  ✓ Save All Marks (تمام نمبر محفوظ کریں)
+                </button>
+              </div>
             </div>
+          )}
+
+          {/* SCHEDULED TESTS LIST */}
+          <div className="space-y-4">
+            <h4 className="font-bold text-xs text-slate-700 uppercase tracking-wider">Scheduled Assessments & Tests</h4>
+            {tests.length === 0 ? (
+              <p className="text-xs text-slate-400 italic">No scheduled tests created yet. Use the form above to schedule a test.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {tests.map(t => (
+                  <div key={t.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3 hover:border-[#0D285F] transition">
+                    <div className="flex justify-between items-start">
+                      <span className="bg-blue-50 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded">
+                        {t.className}
+                      </span>
+                      <span className="text-[11px] text-slate-400">{t.testDate}</span>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-900">{t.title}</h4>
+                      <p className="text-xs text-slate-600 mt-0.5">
+                        {t.subject} • <strong className="text-[#0D285F]">{t.totalMarks} Marks</strong>
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedTestForMarks(t);
+                        // Populate marks map from existing results
+                        const map: Record<string, number> = {};
+                        const rem: Record<string, string> = {};
+                        testResults.filter(r => r.testId === t.id).forEach(r => {
+                          map[r.studentId] = r.marksObtained;
+                          rem[r.studentId] = r.remarks;
+                        });
+                        setAdminMarksMap(map);
+                        setAdminRemarksMap(rem);
+                      }}
+                      className="w-full bg-[#0D285F] hover:bg-[#07193B] text-amber-300 font-bold text-xs py-2 rounded-lg transition flex items-center justify-center gap-1.5 shadow-sm"
+                    >
+                      <Award className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Enter / Update Student Marks</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
+
+          {/* RECENT TEST RESULTS LEDGER */}
+          {testResults.length > 0 && (
+            <div className="space-y-3 pt-6 border-t border-slate-200">
+              <h4 className="font-bold text-xs text-slate-800 uppercase tracking-wider">
+                Submitted Student Test Results History (ریکارڈ شدہ ٹیسٹ رزلٹ)
+              </h4>
+              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#07193B] text-white">
+                    <tr>
+                      <th className="p-3">Student</th>
+                      <th className="p-3">Class</th>
+                      <th className="p-3">Subject</th>
+                      <th className="p-3">Test Title</th>
+                      <th className="p-3">Marks Obtained</th>
+                      <th className="p-3">Grade</th>
+                      <th className="p-3">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {testResults.slice(0, 20).map(tr => (
+                      <tr key={tr.id} className="hover:bg-slate-50">
+                        <td className="p-3 font-semibold text-slate-900">{tr.studentName}</td>
+                        <td className="p-3">{tr.className}</td>
+                        <td className="p-3 text-slate-700">{tr.subject}</td>
+                        <td className="p-3 text-slate-500">{tr.testTitle}</td>
+                        <td className="p-3 font-bold text-[#0D285F]">
+                          {tr.marksObtained} / {tr.totalMarks}
+                        </td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                            tr.grade === 'A+' || tr.grade === 'A'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : tr.grade === 'F'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {tr.grade}
+                          </span>
+                        </td>
+                        <td className="p-3 text-slate-500 italic">{tr.remarks}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -2238,6 +2656,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
           </div>
         </div>
       )}
+
+      {/* MODAL 7: FEE RECEIPT MODAL */}
+      <FeeReceiptModal
+        feeRecord={selectedFeeForReceipt}
+        onClose={() => setSelectedFeeForReceipt(null)}
+      />
     </div>
   );
 };
