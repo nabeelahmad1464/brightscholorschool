@@ -92,7 +92,7 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
               BRIGHT SCHOLAR SCHOOL
             </h2>
             <div className="inline-block bg-amber-400 text-[#07193B] text-[11px] font-extrabold px-3 py-0.5 rounded-full my-0.5">
-              “Pehle Tarbiyat, Phir Taleem” • Est. 2017
+              “Pehle Tarbiyat, Phir Taleem” • Since 2017 (سنس 2017)
             </div>
             <p className="text-[11px] text-slate-600">
               Chak No. 47 GB, Samundri, Faisalabad • Contact / WhatsApp: 0302-5053993

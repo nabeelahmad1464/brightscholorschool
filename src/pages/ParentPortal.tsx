@@ -1,23 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import {
-  User,
-  Calendar,
-  DollarSign,
-  Award,
-  BookOpen,
   Printer,
   MessageCircle,
   Clock,
   CheckCircle2,
   AlertCircle,
   GraduationCap,
-  Sparkles,
+  Calendar,
+  DollarSign,
+  Award,
+  BookOpen,
   Phone,
+  Search,
+  ShieldCheck,
   FileText
 } from 'lucide-react';
 import { useSchool } from '../context/SchoolContext';
 import { Student, ClassLevel, SCHOOL_CLASSES, FeeRecord } from '../types';
-import { FeeReceiptModal } from '../components/FeeReceiptModal';
 
 interface ParentPortalProps {
   onSelectStudent: (student: Student) => void;
@@ -37,26 +36,28 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
     dailyReports
   } = useSchool();
 
-  // Find initial class based on currentParentStudentId or default to Class 5
-  const getInitialClass = (): ClassLevel => {
-    if (currentParentStudentId) {
-      const match = students.find(s => s.id === currentParentStudentId);
-      if (match) return match.className;
-    }
-    return 'Class 5';
+  // Find initial student if parent was already logged in
+  const loggedInStudent = currentParentStudentId
+    ? students.find(s => s.id === currentParentStudentId)
+    : null;
+
+  const [inputClass, setInputClass] = useState<ClassLevel>(
+    loggedInStudent ? loggedInStudent.className : 'Class 5'
+  );
+  const [inputRollNo, setInputRollNo] = useState<string>(
+    loggedInStudent ? loggedInStudent.rollNo : ''
+  );
+  const [searchedStudent, setSearchedStudent] = useState<Student | null>(loggedInStudent || null);
+  const [hasSearched, setHasSearched] = useState<boolean>(!!loggedInStudent);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+
+  const handleResetSearch = () => {
+    setSearchedStudent(null);
+    setHasSearched(false);
+    setInputRollNo('');
+    setErrorMessage('');
+    setCurrentParentStudentId(null);
   };
-
-  const [selectedClass, setSelectedClass] = useState<ClassLevel>(getInitialClass);
-  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(() => {
-    if (currentParentStudentId && students.some(s => s.id === currentParentStudentId)) {
-      return currentParentStudentId;
-    }
-    const inClass = students.filter(s => s.className === 'Class 5');
-    return inClass[0]?.id || students[0]?.id || null;
-  });
-
-  const [rollSearchInput, setRollSearchInput] = useState<string>('');
-  const [viewingReceipt, setViewingReceipt] = useState<FeeRecord | null>(null);
 
   // Leave Form state
   const [leaveDays, setLeaveDays] = useState(1);
@@ -65,74 +66,100 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
   const [leaveTo, setLeaveTo] = useState(new Date().toISOString().split('T')[0]);
   const [leaveSubmitted, setLeaveSubmitted] = useState(false);
 
-  // All students belonging to the chosen class
-  const classStudents = students.filter(s => s.className === selectedClass);
-
-  // When class changes, automatically pick the first student in that class
-  const handleClassChange = (newClass: ClassLevel) => {
-    setSelectedClass(newClass);
-    setRollSearchInput('');
-    const inClass = students.filter(s => s.className === newClass);
-    if (inClass.length > 0) {
-      setSelectedStudentId(inClass[0].id);
-      setCurrentParentStudentId(inClass[0].id);
-    } else {
-      setSelectedStudentId(null);
-    }
-  };
-
-  // When parent selects student from dropdown
-  const handleStudentSelect = (studentId: string) => {
-    setSelectedStudentId(studentId);
-    setCurrentParentStudentId(studentId);
-    const found = students.find(s => s.id === studentId);
-    if (found) {
-      setSelectedClass(found.className);
-      setRollSearchInput(found.rollNo);
-    }
-  };
-
-  // When parent types a roll number or name
-  const handleRollSearch = (val: string) => {
-    setRollSearchInput(val);
-    const clean = val.trim().toLowerCase();
-    if (!clean) return;
-
-    const cleanNum = clean.replace(/^0+/, '');
-
-    // Search in current class first
-    let match = classStudents.find(s => {
-      const rollClean = s.rollNo.trim().toLowerCase();
-      const rollNum = rollClean.replace(/^0+/, '');
-      return rollClean === clean || (cleanNum !== '' && rollNum === cleanNum) || s.name.toLowerCase().includes(clean);
-    });
-
-    // If not found in current class, search across all school students
-    if (!match) {
-      match = students.find(s => {
-        const rollClean = s.rollNo.trim().toLowerCase();
-        const rollNum = rollClean.replace(/^0+/, '');
-        return rollClean === clean || (cleanNum !== '' && rollNum === cleanNum) || s.name.toLowerCase().includes(clean);
-      });
+  // If currentParentStudentId changes or logs in, sync searched student
+  useEffect(() => {
+    if (currentParentStudentId) {
+      const match = students.find(s => s.id === currentParentStudentId);
       if (match) {
-        setSelectedClass(match.className);
+        setSearchedStudent(match);
+        setInputClass(match.className);
+        setInputRollNo(match.rollNo);
+        setHasSearched(true);
+        setErrorMessage('');
       }
     }
+  }, [currentParentStudentId, students]);
+
+  // Handle Search strictly by Class and Roll Number
+  const handleSearch = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setErrorMessage('');
+    setLeaveSubmitted(false);
+
+    const cleanRoll = inputRollNo.trim().toLowerCase();
+    if (!cleanRoll) {
+      setErrorMessage('براہ کرم طالب علم کا رول نمبر درج کریں۔');
+      setSearchedStudent(null);
+      setHasSearched(true);
+      return;
+    }
+
+    const cleanNum = cleanRoll.replace(/^0+/, '');
+
+    // Search strictly within the selected class
+    const match = students.find(s => {
+      if (s.className !== inputClass) return false;
+      const rollClean = s.rollNo.trim().toLowerCase();
+      const rollNum = rollClean.replace(/^0+/, '');
+      return (
+        rollClean === cleanRoll ||
+        (cleanNum !== '' && rollNum === cleanNum) ||
+        s.admissionNo.toLowerCase() === cleanRoll ||
+        s.admissionNo.toLowerCase().includes(cleanRoll) ||
+        s.name.toLowerCase().includes(cleanRoll)
+      );
+    });
 
     if (match) {
-      setSelectedStudentId(match.id);
+      setSearchedStudent(match);
       setCurrentParentStudentId(match.id);
+      setHasSearched(true);
+      setErrorMessage('');
+    } else {
+      // If not in this class, check if student exists in another class to guide the parent
+      const anywhere = students.find(s => {
+        const rollClean = s.rollNo.trim().toLowerCase();
+        const rollNum = rollClean.replace(/^0+/, '');
+        return rollClean === cleanRoll || (cleanNum !== '' && rollNum === cleanNum);
+      });
+
+      if (anywhere) {
+        setErrorMessage(
+          `طالب علم رول نمبر "${inputRollNo}" کلاس "${inputClass}" میں نہیں ہے، بلکہ "${anywhere.className}" میں پایا گیا ہے۔`
+        );
+      } else {
+        setErrorMessage(
+          `رول نمبر "${inputRollNo}" کلاس "${inputClass}" میں نہیں ملا۔ براہ کرم رول نمبر درست درج کریں یا اسکول واٹس ایپ پر رابطہ فرمائیں۔`
+        );
+      }
+      setSearchedStudent(null);
+      setHasSearched(true);
     }
   };
 
-  // Ensure activeStudent is always populated if students exist
-  const activeStudent =
-    students.find(s => s.id === selectedStudentId) ||
-    classStudents[0] ||
-    students[0] ||
-    null;
-
+  const activeStudent = searchedStudent;
   const report = activeStudent ? getStudentFullReport(activeStudent.id) : null;
+
+  // Fee Record for Receipt
+  const studentFeeRecord = activeStudent && report ? (feeRecords.find(f => f.studentId === activeStudent.id) || {
+    id: `fee-${activeStudent.id}`,
+    studentId: activeStudent.id,
+    studentName: activeStudent.name,
+    fatherName: activeStudent.fatherName,
+    className: activeStudent.className,
+    month: 'October 2026',
+    tuitionFee: activeStudent.monthlyFee,
+    absentDays: report.absentDays,
+    fineAmount: report.totalFineAmount,
+    totalPayable: activeStudent.monthlyFee + report.totalFineAmount,
+    paidAmount: report.paidAmount,
+    balanceRemaining: report.balanceRemaining,
+    status: report.balanceRemaining === 0 ? 'Paid' : 'Unpaid',
+    receiptNo: `REC-BSS-${activeStudent.id.slice(-4)}`
+  } as FeeRecord) : null;
+
+  const studentResults = activeStudent ? testResults.filter(r => r.studentId === activeStudent.id) : [];
+  const studentReports = activeStudent ? dailyReports.filter(d => d.studentId === activeStudent.id) : [];
 
   const handleApplyLeave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -155,49 +182,42 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
     alert('رخصت کی درخواست اسکول انتظامیہ کو بھیج دی گئی ہے!');
   };
 
+  const handlePrintReceipt = () => {
+    window.print();
+  };
+
   const handleWhatsAppPaymentProof = () => {
-    if (!activeStudent || !report) return;
+    if (!activeStudent || !report || !studentFeeRecord) return;
+    const finePerDay = settings.finePerAbsentDay || 50;
     const text = `*BRIGHT SCHOLAR SCHOOL - CHAK 47 GB SAMUNDRI*\n` +
-      `السلام علیکم! میں نے اپنے بچے کی فیس کے حوالے سے رابطہ کیا ہے۔\n` +
-      `طالب علم: *${activeStudent.name}*\n` +
+      `*OFFICIAL FEE RECEIPT / فیس رسید*\n\n` +
+      `طالب علم کا نام: *${activeStudent.name}*\n` +
       `ولدیت: *${activeStudent.fatherName}*\n` +
       `کلاس: *${activeStudent.className}* | رول نمبر: *${activeStudent.rollNo}*\n` +
       `داخلہ نمبر: *${activeStudent.admissionNo}*\n` +
-      `ماہانہ فیس: Rs. ${report.monthlyFee}\n` +
-      `واجب الادا بقیہ رقم: Rs. ${report.balanceRemaining}\n` +
-      `براہ کرم فیس کی تصدیق اور رسید جاری فرمائیں۔ شکریہ!`;
+      `مہینہ: *${studentFeeRecord.month}*\n` +
+      `رسید نمبر: *${studentFeeRecord.receiptNo || 'BSS-REC-01'}*\n` +
+      `--------------------------------\n` +
+      `ماہانہ ٹیوشن فیس: Rs. ${report.monthlyFee}\n` +
+      `غیر حاضری فائن (${report.absentDays} دن @ Rs. ${finePerDay}): Rs. ${report.totalFineAmount}\n` +
+      `کل واجب الادا فیس: *Rs. ${report.monthlyFee + report.totalFineAmount}*\n` +
+      `ادا شدہ رقم: *Rs. ${report.paidAmount}*\n` +
+      `بقیہ واجبات: *Rs. ${report.balanceRemaining}*\n` +
+      `اسٹیٹس: *${report.balanceRemaining === 0 ? 'ادا شدہ (Paid)' : 'واجب الادا (Unpaid)'}*\n` +
+      `--------------------------------\n` +
+      `پہلے تربیت، پھر تعلیم • برائٹ اسکالر اسکول چک 47 گ ب سمندری`;
 
     openWhatsApp(settings.schoolWhatsApp, text);
   };
 
-  const studentFeeRecord = activeStudent && report ? (feeRecords.find(f => f.studentId === activeStudent.id) || {
-    id: `fee-${activeStudent.id}`,
-    studentId: activeStudent.id,
-    studentName: activeStudent.name,
-    fatherName: activeStudent.fatherName,
-    className: activeStudent.className,
-    month: 'October 2026',
-    tuitionFee: activeStudent.monthlyFee,
-    absentDays: report.absentDays,
-    fineAmount: report.totalFineAmount,
-    totalPayable: activeStudent.monthlyFee + report.totalFineAmount,
-    paidAmount: report.paidAmount,
-    balanceRemaining: report.balanceRemaining,
-    status: report.balanceRemaining === 0 ? 'Paid' : 'Unpaid',
-    receiptNo: `REC-BSS-${activeStudent.id.slice(-4)}`
-  } as FeeRecord) : null;
-
-  const studentResults = activeStudent ? testResults.filter(r => r.studentId === activeStudent.id) : [];
-  const studentReports = activeStudent ? dailyReports.filter(d => d.studentId === activeStudent.id) : [];
-
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 sm:py-8 space-y-6">
-      {/* 1. Official School Header */}
-      <div className="bg-[#0D285F] text-white rounded-2xl p-5 sm:p-7 shadow-md border-b-4 border-amber-400 text-center space-y-2.5">
-        <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-full bg-white p-1 border-2 border-amber-400 overflow-hidden shadow">
+    <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 space-y-6">
+      {/* 1. Official School Brand Header */}
+      <div className="bg-[#0D285F] text-white rounded-2xl p-5 sm:p-7 shadow-md border-b-4 border-amber-400 text-center space-y-2.5 print:hidden">
+        <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto rounded-full bg-white p-1 border-2 border-amber-400 overflow-hidden shadow-lg flex items-center justify-center">
           <img
             src="/school_logo.jpg"
-            alt="Bright Scholar School"
+            alt="Bright Scholar School Logo"
             className="w-full h-full object-cover rounded-full"
             onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
           />
@@ -206,145 +226,286 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
           Parent & Student Portal (پیرنٹ پورٹل)
         </h1>
         <div className="inline-block bg-amber-400 text-[#07193B] text-xs sm:text-sm font-extrabold px-4 py-1 rounded-full shadow-sm">
-          “Pehle Tarbiyat, Phir Taleem” • Chak 47 GB Samundri • Est. 2017
+          “Pehle Tarbiyat, Phir Taleem” • Chak 47 GB Samundri • Since 2017 (سنس 2017)
         </div>
-        <p className="text-xs sm:text-sm text-slate-200 max-w-xl mx-auto font-medium">
-          نیچے اپنی کلاس اور بچے کا رول نمبر منتخب کریں، طالب علم کا مکمل تعلیمی ریکارڈ، فیس رسید، حاضری اور رزلٹ سامنے آ جائے گا۔
+        <p className="text-xs sm:text-sm text-slate-200 max-w-lg mx-auto font-medium">
+          اپنے بچے کی فیس رسید، امتحانی نتائج اور حاضری دیکھنے کے لیے نیچے کلاس اور رول نمبر درج کریں۔
         </p>
       </div>
 
-      {/* 2. SIMPLE, DIRECT CLASS & ROLL NUMBER SELECTOR */}
-      <div className="bg-white rounded-2xl p-5 sm:p-6 border-2 border-[#0D285F]/20 shadow-md space-y-4">
-        {/* Step 1: Select Class */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs sm:text-sm font-extrabold text-[#0D285F] flex items-center gap-1.5">
-              <span className="w-6 h-6 rounded-full bg-[#0D285F] text-amber-300 text-xs flex items-center justify-center font-black">1</span>
-              <span>کلاس منتخب کریں (Select Class):</span>
-            </label>
-            <span className="text-[11px] text-slate-500 font-bold">
-              اس کلاس میں {classStudents.length} طلباء موجود ہیں
-            </span>
+      {/* 2. STRICT CLASS & ROLL NUMBER SEARCH BOX (NO OTHER STUDENT LIST SHOWN) */}
+      <div className="bg-white rounded-2xl p-5 sm:p-6 border-2 border-[#0D285F] shadow-lg space-y-4 print:hidden">
+        <form onSubmit={handleSearch} className="space-y-4">
+          <div className="flex items-center justify-between border-b pb-3 text-slate-900 font-extrabold text-sm sm:text-base flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <Search className="w-5 h-5 text-[#0D285F]" />
+              <span>طالب علم کا رول نمبر اور کلاس درج کریں:</span>
+            </div>
+            {activeStudent && (
+              <button
+                type="button"
+                onClick={handleResetSearch}
+                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1 rounded-lg border transition"
+              >
+                نیا رول نمبر درج کریں (Clear)
+              </button>
+            )}
           </div>
 
-          {/* Class Buttons Bar */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-thin">
-            {SCHOOL_CLASSES.map(cls => {
-              const isSelected = selectedClass === cls;
-              const count = students.filter(s => s.className === cls).length;
-
-              return (
-                <button
-                  key={cls}
-                  onClick={() => handleClassChange(cls)}
-                  className={`px-3 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition border ${
-                    isSelected
-                      ? 'bg-[#0D285F] text-amber-300 border-[#0D285F] shadow-md scale-105'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
-                >
-                  <span>{cls}</span>
-                  <span className={`ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] ${
-                    isSelected ? 'bg-amber-400 text-[#07193B]' : 'bg-slate-200 text-slate-700'
-                  }`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Step 2: Select Student by Roll Number or Name */}
-        <div className="pt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-          <div className="sm:col-span-8 space-y-1">
-            <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded-full bg-[#0D285F] text-amber-300 text-[11px] flex items-center justify-center font-bold">2</span>
-              <span>طالب علم کا نام منتخب کریں (Select Child):</span>
-            </label>
-            <select
-              value={activeStudent ? activeStudent.id : ''}
-              onChange={(e) => handleStudentSelect(e.target.value)}
-              className="w-full bg-slate-50 border-2 border-slate-300 hover:border-[#0D285F] focus:border-[#0D285F] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-extrabold text-[#0D285F] outline-none shadow-sm transition"
-            >
-              {classStudents.length === 0 ? (
-                <option value="">اس کلاس میں کوئی طالب علم نہیں ہے</option>
-              ) : (
-                classStudents.map(s => (
-                  <option key={s.id} value={s.id}>
-                    رول نمبر #{s.rollNo}: {s.name} (ولدیت: {s.fatherName})
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
-
-          <div className="sm:col-span-4 space-y-1">
-            <label className="text-xs font-bold text-slate-700">
-              یا رول نمبر لکھیں (Or Type Roll #):
-            </label>
-            <input
-              type="text"
-              value={rollSearchInput}
-              onChange={(e) => handleRollSearch(e.target.value)}
-              placeholder="e.g. 01 یا نام لکھیں..."
-              className="w-full bg-slate-50 border-2 border-slate-300 focus:border-[#0D285F] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-bold text-slate-800 outline-none shadow-sm transition"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* 3. DIRECT AND FULL DETAILS OF THE SELECTED CHILD */}
-      {!activeStudent || !report ? (
-        <div className="bg-amber-50 border-2 border-dashed border-amber-300 rounded-2xl p-8 text-center space-y-3">
-          <AlertCircle className="w-10 h-10 text-amber-500 mx-auto" />
-          <h3 className="text-base font-extrabold text-slate-800">
-            اس کلاس میں ابھی کوئی طالب علم رجسٹرڈ نہیں ہے
-          </h3>
-          <p className="text-xs text-slate-600 max-w-md mx-auto">
-            براہ کرم اوپر دی گئی کلاسز میں سے دوسری کلاس منتخب کریں، یا اسکول آفس کے آفیشل واٹس ایپ پر رابطہ فرمائیں۔
-          </p>
-          <button
-            onClick={() => handleClassChange('Class 5')}
-            className="bg-[#0D285F] text-amber-300 font-bold text-xs px-4 py-2 rounded-xl shadow"
-          >
-            Class 5 کے طلباء دیکھیں
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-6 animate-in fade-in duration-200">
-          {/* Main Student Header Banner */}
-          <div className="bg-[#0D285F] text-white rounded-2xl p-5 sm:p-6 shadow-md border-b-4 border-amber-400 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-amber-400 text-[#07193B] font-black text-2xl flex items-center justify-center flex-shrink-0 shadow-lg border-2 border-white">
-                {activeStudent.name.charAt(0)}
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-2xl sm:text-3xl font-black">{activeStudent.name}</h2>
-                  <span className="bg-amber-400 text-[#07193B] text-xs font-black px-3 py-0.5 rounded-full">
-                    {activeStudent.className}
-                  </span>
-                </div>
-                <p className="text-xs sm:text-sm text-slate-300 mt-1">
-                  ولدیت: <strong>{activeStudent.fatherName}</strong> • رول نمبر: <strong>{activeStudent.rollNo}</strong> • داخلہ نمبر: <strong>{activeStudent.admissionNo}</strong>
-                </p>
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
+            {/* Step 1: Select Class */}
+            <div className="sm:col-span-5 space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700">
+                1. کلاس منتخب کریں (Select Class):
+              </label>
+              <select
+                value={inputClass}
+                onChange={(e) => setInputClass(e.target.value as ClassLevel)}
+                className="w-full bg-slate-50 border-2 border-slate-300 focus:border-[#0D285F] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-extrabold text-[#0D285F] outline-none shadow-sm"
+              >
+                {SCHOOL_CLASSES.map(cls => (
+                  <option key={cls} value={cls}>{cls}</option>
+                ))}
+              </select>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
+            {/* Step 2: Enter Roll Number */}
+            <div className="sm:col-span-4 space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700">
+                2. رول نمبر لکھیں (Enter Roll Number):
+              </label>
+              <input
+                type="text"
+                required
+                value={inputRollNo}
+                onChange={(e) => setInputRollNo(e.target.value)}
+                placeholder="مثلاً: 01 یا 1 یا 02..."
+                className="w-full bg-slate-50 border-2 border-slate-300 focus:border-[#0D285F] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-extrabold text-slate-900 outline-none shadow-sm"
+              />
+            </div>
+
+            {/* Submit Button */}
+            <div className="sm:col-span-3 flex items-end">
               <button
-                onClick={() => onSelectStudent(activeStudent)}
-                className="bg-amber-400 hover:bg-amber-300 text-[#07193B] font-extrabold text-xs px-4 py-2.5 rounded-xl transition shadow flex items-center gap-1.5"
+                type="submit"
+                className="w-full bg-[#0D285F] hover:bg-[#07193B] text-amber-300 font-black text-xs sm:text-sm py-3 rounded-xl transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <Printer className="w-4 h-4" />
-                <span>پرنٹ ایبل رپورٹ کارڈ (Dossier)</span>
+                <Search className="w-4 h-4" />
+                <span>رسید دیکھیں</span>
               </button>
             </div>
           </div>
 
-          {/* 4 Summary KPI Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {errorMessage && (
+            <div className="p-3 bg-red-50 border-2 border-red-200 text-red-700 rounded-xl text-xs font-bold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+        </form>
+      </div>
+
+      {/* 3. PROMPT IF NOT SEARCHED YET */}
+      {!hasSearched && !activeStudent && (
+        <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center space-y-2.5 print:hidden">
+          <GraduationCap className="w-12 h-12 text-[#0D285F] mx-auto opacity-70" />
+          <h3 className="text-base font-extrabold text-slate-800">
+            محترم والدین! بچے کا تعلیمی ریکارڈ اور فیس رسید محفوظ ہے
+          </h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            اوپر کلاس اور رول نمبر درج کر کے "رسید دیکھیں" پر کلک کریں تاکہ صرف آپ کے بچے کا فیس واؤچر اور ریکارڈ کھل سکے۔
+          </p>
+        </div>
+      )}
+
+      {/* 4. ONLY THAT CHILD'S COMPLETE DETAILS & COMPLETE FEE RECEIPT (رسید کی رسید) */}
+      {activeStudent && report && studentFeeRecord && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Quick Active Student Bar */}
+          <div className="flex items-center justify-between bg-amber-50 border-2 border-amber-300 rounded-2xl p-3.5 text-xs print:hidden shadow-sm flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+              <span className="font-extrabold text-slate-800 text-sm">
+                طالب علم: <strong className="text-[#0D285F]">{activeStudent.name}</strong> ولد <strong className="text-slate-700">{activeStudent.fatherName}</strong> • کلاس: <strong className="text-emerald-700">{activeStudent.className}</strong> • رول نمبر: <strong className="text-[#0D285F]">#{activeStudent.rollNo}</strong>
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleResetSearch}
+              className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 font-extrabold px-3.5 py-1.5 rounded-xl transition shadow flex items-center gap-1 cursor-pointer"
+            >
+              <span>دوسرا رول نمبر چیک کریں</span>
+              <span>←</span>
+            </button>
+          </div>
+
+          {/* THE OFFICIAL FEE RECEIPT VOUCHER (رسید کی رسید براہ راست سامنے) */}
+          <div className="bg-white rounded-3xl border-2 border-amber-400 shadow-xl overflow-hidden print:m-0 print:border-none print:shadow-none">
+            {/* Receipt Header Banner */}
+            <div className="bg-[#0D285F] text-white p-5 sm:p-6 border-b-4 border-amber-400">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-14 h-14 rounded-full bg-white p-0.5 border-2 border-amber-400 overflow-hidden flex-shrink-0 shadow">
+                    <img
+                      src="/school_logo.jpg"
+                      alt="Bright Scholar School Logo"
+                      className="w-full h-full object-cover rounded-full"
+                      onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-lg sm:text-2xl font-black font-serif-crest uppercase tracking-tight text-white">
+                        Bright Scholar School
+                      </h2>
+                      <span className="bg-amber-400 text-[#07193B] text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                        Since 2017 (سنس 2017)
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-amber-300 font-bold">
+                      “پہلے تربیت، پھر تعلیم” • Chak 47 GB Samundri
+                    </p>
+                    <p className="text-[11px] text-slate-300">
+                      فون و واٹس ایپ: 0302-5053993 • رجسٹرڈ پرائمری و مڈل ایجوکیشن
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-left sm:text-right">
+                  <span className="inline-block bg-amber-400 text-[#07193B] font-black text-xs px-3 py-1 rounded-full uppercase tracking-wider mb-1">
+                    آفیشل فیس واؤچر رسید
+                  </span>
+                  <div className="text-xs text-slate-300">
+                    رسید نمبر: <strong className="text-amber-300 font-mono">{studentFeeRecord.receiptNo || 'BSS-REC-01'}</strong>
+                  </div>
+                  <div className="text-xs text-slate-300">
+                    مہینہ: <strong className="text-white">{studentFeeRecord.month}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Receipt Body & Student Particulars */}
+            <div className="p-5 sm:p-7 space-y-5 bg-gradient-to-b from-white to-slate-50/50">
+              {/* Student Details Grid */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <span className="text-slate-500 block text-[11px]">طالب علم کا نام (Student Name):</span>
+                  <strong className="text-sm text-slate-900 font-extrabold">{activeStudent.name}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[11px]">ولدیت (Father Name):</span>
+                  <strong className="text-sm text-slate-900 font-extrabold">{activeStudent.fatherName}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[11px]">کلاس (Class):</span>
+                  <strong className="text-sm text-[#0D285F] font-black">{activeStudent.className}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[11px]">رول نمبر / داخلہ نمبر:</span>
+                  <strong className="text-sm text-[#0D285F] font-black">Roll #{activeStudent.rollNo} • Adm: {activeStudent.admissionNo}</strong>
+                </div>
+              </div>
+
+              {/* Itemized Fee Breakdown Table */}
+              <div className="border-2 border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                <table className="w-full text-left text-xs sm:text-sm">
+                  <thead className="bg-[#07193B] text-white">
+                    <tr>
+                      <th className="p-3.5">تفصیلات (Fee Description)</th>
+                      <th className="p-3.5 text-center">شرح / حساب (Details)</th>
+                      <th className="p-3.5 text-right">رقم (Amount PKR)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    <tr>
+                      <td className="p-3.5 font-bold text-slate-800">ماہانہ ٹیوشن فیس (Monthly Tuition Fee)</td>
+                      <td className="p-3.5 text-center text-slate-500 font-medium">ماہ {studentFeeRecord.month}</td>
+                      <td className="p-3.5 text-right font-black text-slate-900">
+                        Rs. {report.monthlyFee.toLocaleString()}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-3.5 font-bold text-slate-800">
+                        غیر حاضری جرمانہ (Unapproved Absence Fine)
+                      </td>
+                      <td className="p-3.5 text-center text-slate-500 font-medium">
+                        {report.absentDays} دن غیر حاضر (@ Rs. {settings.finePerAbsentDay || 50}/day)
+                      </td>
+                      <td className="p-3.5 text-right font-black text-red-600">
+                        Rs. {report.totalFineAmount.toLocaleString()}
+                      </td>
+                    </tr>
+                    <tr className="bg-slate-50/80 font-black">
+                      <td colSpan={2} className="p-3.5 text-slate-900 text-sm">
+                        کل واجب الادا رقم (Total Payable Fee):
+                      </td>
+                      <td className="p-3.5 text-right text-base text-[#0D285F]">
+                        Rs. {(report.monthlyFee + report.totalFineAmount).toLocaleString()}
+                      </td>
+                    </tr>
+                    <tr className="bg-emerald-50/50">
+                      <td colSpan={2} className="p-3.5 font-bold text-emerald-800">
+                        ادا شدہ رقم (Paid Amount):
+                      </td>
+                      <td className="p-3.5 text-right font-black text-emerald-700 text-sm">
+                        Rs. {report.paidAmount.toLocaleString()}
+                      </td>
+                    </tr>
+                    <tr className="bg-amber-50/70 border-t-2 border-slate-300">
+                      <td colSpan={2} className="p-4 font-black text-slate-900 text-sm sm:text-base">
+                        بقایا واجبات (Remaining Balance Due):
+                      </td>
+                      <td className={`p-4 text-right font-black text-base sm:text-lg ${
+                        report.balanceRemaining === 0 ? 'text-emerald-700' : 'text-red-700'
+                      }`}>
+                        Rs. {report.balanceRemaining.toLocaleString()}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Status Stamp & Note */}
+              <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+                <div className="space-y-1">
+                  <div className="text-xs text-slate-600 font-medium">
+                    اسٹیٹس: <strong className={`px-3 py-1 rounded-full text-xs font-black ${
+                      report.balanceRemaining === 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {report.balanceRemaining === 0 ? '✓ ادا شدہ (PAID IN FULL)' : 'واجب الادا (UNPAID / PENDING)'}
+                    </strong>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    یہ برائٹ اسکالر اسکول کی مصدقہ کمپیوٹرائزڈ فیس رسید ہے۔
+                  </p>
+                </div>
+
+                {/* Print and WhatsApp Buttons */}
+                <div className="flex items-center gap-2 print:hidden">
+                  <button
+                    type="button"
+                    onClick={handlePrintReceipt}
+                    className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 font-extrabold text-xs px-4 py-2.5 rounded-xl transition shadow flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>پرنٹ فیس رسید (Print)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleWhatsAppPaymentProof}
+                    className="bg-[#25D366] hover:bg-[#20b858] text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition shadow flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <MessageCircle className="w-4 h-4 fill-current" />
+                    <span>واٹس ایپ رسید شیئر کریں</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 4 SUMMARY STAT CARDS OF THIS STUDENT */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 print:hidden">
             {/* Attendance */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
               <span className="text-[11px] font-bold text-slate-500 block uppercase">حاضری کا تناسب</span>
@@ -358,18 +519,18 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
 
             {/* Absent Fine */}
             <div className="bg-white p-4 rounded-2xl border border-red-200 bg-red-50/20 shadow-sm text-center">
-              <span className="text-[11px] font-bold text-red-800 block uppercase">غیر حاضری جرمانہ</span>
+              <span className="text-[11px] font-bold text-red-800 block uppercase">غیر حاضری فائن</span>
               <span className="text-2xl sm:text-3xl font-black text-red-600 mt-1 block">
                 Rs. {report.totalFineAmount}
               </span>
               <span className="text-[11px] text-slate-500 font-semibold">
-                {report.absentDays} چھٹیاں (@ Rs. {settings.finePerAbsentDay})
+                {report.absentDays} دن غیر حاضر (@ Rs. {settings.finePerAbsentDay || 50})
               </span>
             </div>
 
-            {/* Fee Status */}
+            {/* Fee */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
-              <span className="text-[11px] font-bold text-slate-500 block uppercase">ماہانہ فیس اسٹیٹس</span>
+              <span className="text-[11px] font-bold text-slate-500 block uppercase">فیس اسٹیٹس</span>
               <span className={`text-xl sm:text-2xl font-black mt-1 block ${
                 report.balanceRemaining === 0 ? 'text-emerald-600' : 'text-amber-600'
               }`}>
@@ -392,54 +553,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
             </div>
           </div>
 
-          {/* SECTION 1: FEE VOUCHER & PRINTABLE RECEIPT */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
-              <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
-                <DollarSign className="w-5 h-5 text-emerald-600" />
-                <span>ماہانہ اسکول فیس اور واؤچر رسید (Fee Voucher & Official Receipt)</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {studentFeeRecord && (
-                  <button
-                    onClick={() => setViewingReceipt(studentFeeRecord)}
-                    className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 font-bold text-xs px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>فیس رسید دیکھیں / پرنٹ کریں (Receipt)</span>
-                  </button>
-                )}
-                <button
-                  onClick={handleWhatsAppPaymentProof}
-                  className="bg-[#25D366] hover:bg-[#20b858] text-white font-bold text-xs px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow"
-                >
-                  <MessageCircle className="w-3.5 h-3.5 fill-current" />
-                  <span>واٹس ایپ فیس رابطہ</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                <span className="text-slate-500 block text-[11px]">ماہانہ ٹیوشن فیس:</span>
-                <span className="text-base font-black text-slate-900">Rs. {report.monthlyFee.toLocaleString()}</span>
-              </div>
-              <div className="p-3.5 rounded-xl bg-red-50/50 border border-red-200">
-                <span className="text-red-700 block text-[11px]">غیر حاضری جرمانہ ({report.absentDays} دن @ Rs. {settings.finePerAbsentDay}):</span>
-                <span className="text-base font-black text-red-600">Rs. {report.totalFineAmount.toLocaleString()}</span>
-              </div>
-              <div className="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-200">
-                <span className="text-emerald-800 block text-[11px]">کل واجب الادا رقم:</span>
-                <span className="text-base font-black text-emerald-800">
-                  Rs. {(report.monthlyFee + report.totalFineAmount).toLocaleString()}
-                </span>
-              </div>
-            </div>
-          </div>
-
           {/* SECTION 2: EXAM RESULTS & TEST MARKS */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-4 print:hidden">
             <div className="flex items-center gap-2 text-slate-900 font-bold text-sm border-b pb-3">
               <Award className="w-5 h-5 text-amber-500" />
               <span>امتحانی نمبرات و ٹیسٹ جائزہ (Examination & Monthly Tests)</span>
@@ -490,7 +605,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
           </div>
 
           {/* SECTION 3: DAILY TARBIYAT & CONDUCT OBSERVATIONS */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-4 print:hidden">
             <div className="flex items-center gap-2 text-slate-900 font-bold text-sm border-b pb-3">
               <BookOpen className="w-5 h-5 text-blue-600" />
               <span>“پہلے تربیت، پھر تعلیم” روزمرہ اخلاقیات و ہوم ورک ڈائری</span>
@@ -524,14 +639,14 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
           </div>
 
           {/* SECTION 4: ONLINE LEAVE APPLICATION */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-4 print:hidden">
             <div className="flex items-center gap-2 text-slate-900 font-bold text-sm border-b pb-3">
               <Calendar className="w-5 h-5 text-amber-500" />
               <span>آن لائن رخصت کی درخواست (Apply Online Leave)</span>
             </div>
 
             <p className="text-xs text-slate-500">
-              بغیر پیشگی اطلاع چھٹی کرنے پر اسکول قوانین کے مطابق یومیہ Rs. {settings.finePerAbsentDay} جرمانہ لاگو ہوتا ہے۔ چھٹی کی پیشگی درخواست یہاں جمع کروائیں۔
+              بغیر پیشگی اطلاع چھٹی کرنے پر اسکول قوانین کے مطابق یومیہ Rs. {settings.finePerAbsentDay || 50} جرمانہ لاگو ہوتا ہے۔ چھٹی کی پیشگی درخواست یہاں جمع کروائیں۔
             </p>
 
             {leaveSubmitted && (
@@ -581,7 +696,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
 
               <button
                 type="submit"
-                className="bg-[#0D285F] hover:bg-[#07193B] text-white px-6 py-2.5 rounded-xl font-bold transition shadow"
+                className="bg-[#0D285F] hover:bg-[#07193B] text-white px-6 py-2.5 rounded-xl font-bold transition shadow cursor-pointer"
               >
                 درخواست بھیجیں (Submit Leave)
               </button>
@@ -589,12 +704,6 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
           </div>
         </div>
       )}
-
-      {/* RENDER FEE RECEIPT MODAL */}
-      <FeeReceiptModal
-        feeRecord={viewingReceipt}
-        onClose={() => setViewingReceipt(null)}
-      />
     </div>
   );
 };

@@ -125,29 +125,30 @@ export const Header: React.FC<HeaderProps> = ({
             }}
             className="flex items-center gap-3.5 cursor-pointer group"
           >
-            <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-white p-0.5 shadow-lg border-2 border-amber-400 flex items-center justify-center overflow-hidden flex-shrink-0">
-              <img
-                src="/school_logo.jpg"
-                alt="Bright Scholar School Logo"
-                className="w-full h-full object-cover rounded-full"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = 'none';
-                }}
-              />
-              <GraduationCap className="w-7 h-7 text-[#0D285F] hidden group-hover:block" />
+            <div className="relative flex-shrink-0">
+              <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-white p-0.5 shadow-lg border-2 border-amber-400 flex items-center justify-center overflow-hidden">
+                <img
+                  src="/school_logo.jpg"
+                  alt="Bright Scholar School Logo"
+                  className="w-full h-full object-cover rounded-full"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+              </div>
             </div>
 
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold tracking-tight text-white font-serif-crest uppercase">
                   Bright Scholar School
                 </h1>
-                <span className="hidden lg:inline-block bg-amber-400 text-[#07193B] text-[10px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider">
-                  Est. 2017 • Chak 47 GB
+                <span className="inline-block bg-amber-400 text-[#07193B] text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                  Since 2017 (سنس 2017)
                 </span>
               </div>
-              <p className="text-xs sm:text-sm text-amber-300 font-medium">
-                “Pehle Tarbiyat, Phir Taleem”
+              <p className="text-xs sm:text-sm text-amber-300 font-bold">
+                “Pehle Tarbiyat, Phir Taleem” • Chak 47 GB
               </p>
               <p className="text-[11px] text-slate-300 hidden md:block">
                 Registered Primary & Middle Education • Character Building & High Ethics
