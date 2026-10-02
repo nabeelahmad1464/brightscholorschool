@@ -130,6 +130,12 @@ interface SchoolContextType {
   exportAllSchoolData: () => string;
   importSchoolData: (jsonString: string) => { success: boolean; studentCount: number; message: string };
 
+  // Real-Time Cloud Database Status
+  isCloudConnected: boolean;
+  isCloudSyncing: boolean;
+  lastCloudSyncTime: string | null;
+  syncNowWithCloud: () => Promise<void>;
+
   // Reporting
   getStudentFullReport: (studentId: string) => StudentFullReport | null;
   openWhatsApp: (phone?: string, message?: string) => void;
@@ -195,6 +201,188 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => saveToStorage('isAdminLoggedIn', isAdminLoggedIn), [isAdminLoggedIn]);
   useEffect(() => saveToStorage('currentTeacherId', currentTeacherId), [currentTeacherId]);
   useEffect(() => saveToStorage('currentParentStudentId', currentParentStudentId), [currentParentStudentId]);
+
+  // Real-Time Cloud Database Synchronization
+  const [isCloudConnected, setIsCloudConnected] = useState<boolean>(true);
+  const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
+  const [lastCloudSyncTime, setLastCloudSyncTime] = useState<string | null>(null);
+
+  const isApplyingRemoteUpdate = React.useRef(false);
+  const lastKnownServerUpdatedAt = React.useRef<string | null>(null);
+  const hasInitializedFromCloud = React.useRef(false);
+
+  // Pull data from Cloud Server
+  const pullFromCloudDatabase = async () => {
+    try {
+      const res = await fetch('/api/school-data');
+      if (!res.ok) {
+        setIsCloudConnected(false);
+        return;
+      }
+      const data = await res.json();
+      if (!data) return;
+
+      setIsCloudConnected(true);
+
+      // Check if server data matches what we already have
+      if (data.updatedAt && data.updatedAt === lastKnownServerUpdatedAt.current) {
+        return;
+      }
+
+      // If local storage has students but server has 0 students on very first load:
+      if (!hasInitializedFromCloud.current && students.length > 0 && (!data.students || data.students.length === 0)) {
+        hasInitializedFromCloud.current = true;
+        pushCurrentDataToCloud();
+        return;
+      }
+      hasInitializedFromCloud.current = true;
+
+      // Apply server data to state
+      isApplyingRemoteUpdate.current = true;
+      lastKnownServerUpdatedAt.current = data.updatedAt || new Date().toISOString();
+      setLastCloudSyncTime(new Date().toLocaleTimeString('ur-PK'));
+
+      if (Array.isArray(data.students)) {
+        setStudents(data.students);
+        saveToStorage('students', data.students);
+      }
+      if (Array.isArray(data.teachers)) {
+        setTeachers(data.teachers);
+        saveToStorage('teachers', data.teachers);
+      }
+      if (Array.isArray(data.attendance)) {
+        setAttendance(data.attendance);
+        saveToStorage('attendance', data.attendance);
+      }
+      if (Array.isArray(data.teacherAttendance)) {
+        setTeacherAttendance(data.teacherAttendance);
+        saveToStorage('teacherAttendance', data.teacherAttendance);
+      }
+      if (Array.isArray(data.leaves)) {
+        setLeaves(data.leaves);
+        saveToStorage('leaves', data.leaves);
+      }
+      if (Array.isArray(data.feeRecords)) {
+        setFeeRecords(data.feeRecords);
+        saveToStorage('feeRecords', data.feeRecords);
+      }
+      if (Array.isArray(data.dailyReports)) {
+        setDailyReports(data.dailyReports);
+        saveToStorage('dailyReports', data.dailyReports);
+      }
+      if (Array.isArray(data.tests)) {
+        setTests(data.tests);
+        saveToStorage('tests', data.tests);
+      }
+      if (Array.isArray(data.testResults)) {
+        setTestResults(data.testResults);
+        saveToStorage('testResults', data.testResults);
+      }
+      if (Array.isArray(data.notices)) {
+        setNotices(data.notices);
+        saveToStorage('notices', data.notices);
+      }
+      if (Array.isArray(data.onlineAdmissions)) {
+        setOnlineAdmissions(data.onlineAdmissions);
+        saveToStorage('admissions', data.onlineAdmissions);
+      }
+      if (Array.isArray(data.salaryTransactions)) {
+        setSalaryTransactions(data.salaryTransactions);
+        saveToStorage('salaryTransactions', data.salaryTransactions);
+      }
+      if (data.settings && typeof data.settings === 'object') {
+        setSettings(data.settings);
+        saveToStorage('settings', data.settings);
+      }
+
+      setTimeout(() => {
+        isApplyingRemoteUpdate.current = false;
+      }, 300);
+    } catch (e) {
+      console.warn('Could not sync with cloud server:', e);
+      setIsCloudConnected(false);
+    }
+  };
+
+  const pushCurrentDataToCloud = async () => {
+    try {
+      setIsCloudSyncing(true);
+      const payload = {
+        students,
+        teachers,
+        attendance,
+        teacherAttendance,
+        leaves,
+        feeRecords,
+        dailyReports,
+        tests,
+        testResults,
+        notices,
+        onlineAdmissions,
+        settings,
+        salaryTransactions
+      };
+      const res = await fetch('/api/school-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        setIsCloudConnected(true);
+        const now = new Date().toISOString();
+        lastKnownServerUpdatedAt.current = now;
+        setLastCloudSyncTime(new Date().toLocaleTimeString('ur-PK'));
+      }
+    } catch (e) {
+      console.warn('Failed to push update to cloud server:', e);
+      setIsCloudConnected(false);
+    } finally {
+      setIsCloudSyncing(false);
+    }
+  };
+
+  // Sync to Cloud Server when local data changes (debounced)
+  useEffect(() => {
+    if (isApplyingRemoteUpdate.current) return;
+    if (!hasInitializedFromCloud.current) return;
+
+    const timer = setTimeout(() => {
+      pushCurrentDataToCloud();
+    }, 700);
+
+    return () => clearTimeout(timer);
+  }, [
+    students,
+    teachers,
+    attendance,
+    teacherAttendance,
+    leaves,
+    feeRecords,
+    dailyReports,
+    tests,
+    testResults,
+    notices,
+    onlineAdmissions,
+    settings,
+    salaryTransactions
+  ]);
+
+  // Periodic polling & window focus pull
+  useEffect(() => {
+    pullFromCloudDatabase();
+
+    const interval = setInterval(() => {
+      pullFromCloudDatabase();
+    }, 4000);
+
+    const onFocus = () => pullFromCloudDatabase();
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, []);
 
   // If students list is empty, ensure fee records, attendance, and reports are also 0
   useEffect(() => {
@@ -859,6 +1047,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         resetAllDataToZero,
         exportAllSchoolData,
         importSchoolData,
+        isCloudConnected,
+        isCloudSyncing,
+        lastCloudSyncTime,
+        syncNowWithCloud: pullFromCloudDatabase,
         getStudentFullReport,
         openWhatsApp
       }}

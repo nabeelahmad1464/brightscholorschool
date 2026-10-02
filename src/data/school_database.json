@@ -1,0 +1,85 @@
+{
+  "students": [],
+  "teachers": [
+    {
+      "id": "t-1",
+      "name": "Principal Sir Tasawar",
+      "qualification": "M.Sc. / B.Ed",
+      "subject": "School Administration & Science/Math",
+      "assignedClasses": "All Classes",
+      "contactNo": "0302-5053993",
+      "whatsappNo": "0302-5053993",
+      "joiningDate": "2022-01-01",
+      "salary": 35000,
+      "allowances": 0,
+      "deductions": 0,
+      "personalPassword": "teacher123"
+    },
+    {
+      "id": "t-2",
+      "name": "Mam Maham",
+      "qualification": "M.A. English / B.Ed",
+      "subject": "English & Urdu Language",
+      "assignedClasses": "Class 3, Class 4, Class 5, Class 6",
+      "contactNo": "0302-5053993",
+      "whatsappNo": "0302-5053993",
+      "joiningDate": "2023-01-01",
+      "salary": 25000,
+      "allowances": 0,
+      "deductions": 0,
+      "personalPassword": "teacher123"
+    },
+    {
+      "id": "t-3",
+      "name": "Mam Shahista",
+      "qualification": "Montessori / B.A.",
+      "subject": "Primary & Early Childhood Tarbiyat",
+      "assignedClasses": "Play Group, Nursery, Prep, Class 1, Class 2",
+      "contactNo": "0302-5053993",
+      "whatsappNo": "0302-5053993",
+      "joiningDate": "2023-03-01",
+      "salary": 25000,
+      "allowances": 0,
+      "deductions": 0,
+      "personalPassword": "teacher123"
+    }
+  ],
+  "attendance": [],
+  "teacherAttendance": [],
+  "leaves": [],
+  "feeRecords": [],
+  "dailyReports": [],
+  "tests": [],
+  "testResults": [],
+  "notices": [
+    {
+      "id": "not-1",
+      "title": "Admissions Open Session 2026-2027",
+      "category": "Announcement",
+      "date": "2026-09-28",
+      "content": "Admissions are open from Play Group to Class 8 / Middle. Parents can fill the Online Admission Form on our website or visit school office in Chak 47 GB, Samundri.",
+      "targetAudience": "All"
+    },
+    {
+      "id": "not-2",
+      "title": "Absence Fine Policy & Punctuality",
+      "category": "Fee Notice",
+      "date": "2026-09-20",
+      "content": "As per school discipline rules, unapproved absence will incur a fine of Rs. 30 per day. Please submit leave requests in advance through the Parent Portal.",
+      "targetAudience": "Parents"
+    }
+  ],
+  "onlineAdmissions": [],
+  "salaryTransactions": [],
+  "settings": {
+    "adminPassword": "Nabeel#0",
+    "teacherPassword": "teacher123",
+    "finePerAbsentDay": 30,
+    "schoolName": "Bright Scholar School",
+    "schoolSlogan": "Pehle Tarbiyat, Phir Taleem",
+    "schoolAddress": "Chak No. 47 GB, Samundri, Faisalabad, Punjab, Pakistan",
+    "schoolPhone": "0302-5053993",
+    "schoolWhatsApp": "0302-5053993"
+  },
+  "updatedAt": "2026-10-01T11:20:00.000Z"
+}

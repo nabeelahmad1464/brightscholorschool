@@ -12,8 +12,7 @@ import {
   Menu,
   X,
   FileText,
-  Download,
-  RefreshCw
+  Download
 } from 'lucide-react';
 import { useSchool } from '../context/SchoolContext';
 import { WebsiteTab, PortalType } from '../types';
@@ -40,7 +39,9 @@ export const Header: React.FC<HeaderProps> = ({
     teachers,
     students,
     logout,
-    openWhatsApp
+    openWhatsApp,
+    isCloudConnected,
+    isCloudSyncing
   } = useSchool();
 
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -85,6 +86,15 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           <div className="flex items-center gap-3 ml-auto text-xs">
+            {/* Live Cloud Database Badge */}
+            <div
+              className="flex items-center gap-1.5 bg-white/10 px-2.5 py-0.5 rounded-full text-[10px] text-emerald-300 font-medium"
+              title="Real-Time Cloud Connected: تمام موبائلز پر ڈیٹا لائیو ہم آہنگ ہوتا ہے"
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${isCloudConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+              <span>{isCloudSyncing ? 'Syncing...' : isCloudConnected ? 'Live Cloud' : 'Offline'}</span>
+            </div>
+
             <button
               onClick={() => openWhatsApp()}
               className="flex items-center gap-1.5 bg-[#25D366] hover:bg-[#20b858] text-white px-2.5 py-0.5 rounded-full font-medium transition"
@@ -183,17 +193,6 @@ export const Header: React.FC<HeaderProps> = ({
                 <span>Portal Login</span>
               </button>
             )}
-
-            {/* Sync Data Button */}
-            <button
-              onClick={() => window.dispatchEvent(new CustomEvent('open-sync-modal'))}
-              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm px-2.5 sm:px-3 py-2 rounded-lg shadow transition active:scale-95"
-              title="دوسرے موبائل سے ڈیٹا شامل کریں (Sync Data)"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-emerald-200" />
-              <span className="hidden md:inline">Sync Data</span>
-              <span className="md:hidden">Sync</span>
-            </button>
 
             {/* 1-Click Install App button */}
             <button

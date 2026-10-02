@@ -7,7 +7,6 @@ import { InstallAppBanner } from './components/InstallAppBanner';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { OnlineAdmissionModal } from './components/OnlineAdmissionModal';
 import { StudentProfileModal } from './components/StudentProfileModal';
-import { DataSyncModal } from './components/DataSyncModal';
 import { LoginModal } from './pages/LoginModal';
 import { WebsiteHome } from './pages/WebsiteHome';
 import { StudentSearchPage } from './pages/StudentSearchPage';
@@ -22,13 +21,6 @@ const MainApp: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<WebsiteTab>('HOME');
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAdmissionModal, setShowAdmissionModal] = useState(false);
-  const [showSyncModal, setShowSyncModal] = useState(false);
-
-  React.useEffect(() => {
-    const handleOpenSync = () => setShowSyncModal(true);
-    window.addEventListener('open-sync-modal', handleOpenSync);
-    return () => window.removeEventListener('open-sync-modal', handleOpenSync);
-  }, []);
 
   const handleTabChange = (tab: WebsiteTab) => {
     setCurrentTab(tab);
@@ -132,11 +124,6 @@ const MainApp: React.FC = () => {
       <StudentProfileModal
         student={selectedStudentForModal}
         onClose={() => setSelectedStudentForModal(null)}
-      />
-
-      <DataSyncModal
-        isOpen={showSyncModal}
-        onClose={() => setShowSyncModal(false)}
       />
     </div>
   );

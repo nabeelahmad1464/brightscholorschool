@@ -418,14 +418,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => window.dispatchEvent(new CustomEvent('open-sync-modal'))}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow transition transform hover:-translate-y-0.5"
-            title="دوسرے موبائل سے ڈیٹا شامل کریں"
-          >
-            <RefreshCw className="w-4 h-4 text-emerald-200" />
-            <span>Sync / ڈیٹا لائیں</span>
-          </button>
-          <button
             onClick={() => openAddStudentModal()}
             className="bg-amber-400 hover:bg-amber-300 text-[#07193B] font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow transition transform hover:-translate-y-0.5"
           >
@@ -484,30 +476,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          {/* Cross-Device Student Sync Notice Banner */}
-          <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-[#0D285F] text-white p-4 rounded-2xl shadow-md border border-amber-300/40 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                <RefreshCw className="w-5 h-5 text-amber-200" />
-              </div>
-              <div>
-                <h4 className="font-extrabold text-sm sm:text-base text-amber-100">
-                  دوسرے موبائل سے ایڈ کیے گئے طلباء یہاں لائیں (Cross-Device Sync)
-                </h4>
-                <p className="text-xs text-blue-100">
-                  اگر کسی ٹیچر یا دوسرے موبائل سے تمام کلاسوں میں طلباء ایڈ کیے گئے ہیں تو وہ یہاں 1 کلک میں حاصل کریں۔
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => window.dispatchEvent(new CustomEvent('open-sync-modal'))}
-              className="bg-amber-400 hover:bg-amber-300 text-[#07193B] font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition active:scale-95 flex items-center gap-1.5"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>ڈیٹا حاصل کریں اور طلباء شو کریں</span>
-            </button>
-          </div>
-
           {/* Quick KPI Stat Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
@@ -1795,27 +1763,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
             >
               Save Security & Fine Settings
             </button>
-
-            {/* Cross-Device Data Sync & Backup Tool */}
-            <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl space-y-3 mt-4">
-              <div className="flex items-center gap-2">
-                <RefreshCw className="w-5 h-5 text-emerald-700" />
-                <h4 className="text-xs font-bold text-emerald-950">
-                  Data Backup & Cross-Device Sync (ڈیٹا بیک اپ اور موبائل ٹرانسفر)
-                </h4>
-              </div>
-              <p className="text-[11px] text-emerald-800 leading-relaxed">
-                اگر آپ کسی دوسرے موبائل یا ٹیچر کے فون سے طلباء کا ڈیٹا اپنے موبائل یا کمپیوٹر پر لانا چاہتے ہیں، یا اسکول کے تمام ڈیٹا کا محفوظ بیک اپ واٹس ایپ پر رکھنا چاہتے ہیں، تو نیچے والا بٹن استعمال کریں:
-              </p>
-              <button
-                type="button"
-                onClick={() => window.dispatchEvent(new CustomEvent('open-sync-modal'))}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                <span>Sync / ٹرانسفر ڈیٹا ونڈو کھولیں</span>
-              </button>
-            </div>
 
             {/* Danger Zone: Reset All Student & Fee Data to Zero */}
             <div className="bg-red-50/60 border border-red-200 p-4 rounded-xl space-y-2 mt-4">
