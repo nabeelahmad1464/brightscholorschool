@@ -46,7 +46,7 @@ function schoolDatabasePlugin(): Plugin {
         req.on('end', () => {
           try {
             const parsed = JSON.parse(body);
-            if (parsed && Array.isArray(parsed.students) && parsed.students.length > 0) {
+            if (parsed && Array.isArray(parsed.students)) {
               parsed.updatedAt = new Date().toISOString();
               fs.writeFileSync(dbFile, JSON.stringify(parsed, null, 2), 'utf-8');
               try {

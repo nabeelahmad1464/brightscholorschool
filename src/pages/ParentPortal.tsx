@@ -42,8 +42,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
     ? students.find(s => s.id === currentParentStudentId)
     : null;
 
-  const [inputClass, setInputClass] = useState<ClassLevel>(
-    loggedInStudent ? loggedInStudent.className : 'Class 5'
+  const [inputClass, setInputClass] = useState<string>(
+    loggedInStudent ? loggedInStudent.className : (students[0]?.className || 'All')
   );
   const [inputRollNo, setInputRollNo] = useState<string>(
     loggedInStudent ? loggedInStudent.rollNo : ''
@@ -77,11 +77,14 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
         setInputRollNo(match.rollNo);
         setHasSearched(true);
         setErrorMessage('');
+      } else {
+        setSearchedStudent(null);
+        setHasSearched(false);
       }
     }
   }, [currentParentStudentId, students]);
 
-  // Handle Search: Searches in selected class first, and if found in another class, auto-switches and opens receipt!
+  // Handle Search: Searches in selected class first, and across all classes
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setErrorMessage('');
@@ -100,22 +103,25 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
 
     const cleanNum = cleanRoll.replace(/^0+/, '');
 
-    // 1. Search strictly within the selected class first
-    let match = students.find(s => {
-      if (s.className !== inputClass) return false;
-      const rollClean = s.rollNo.trim().toLowerCase();
-      const rollNum = rollClean.replace(/^0+/, '');
-      return (
-        rollClean === cleanRoll ||
-        (cleanNum !== '' && rollNum === cleanNum) ||
-        s.admissionNo.toLowerCase() === cleanRoll ||
-        s.admissionNo.toLowerCase().includes(cleanRoll) ||
-        s.name.toLowerCase().includes(cleanRoll) ||
-        (s.contactNo && s.contactNo.replace(/\D/g, '').includes(cleanRoll.replace(/\D/g, '')))
-      );
-    });
+    // 1. Search strictly within selected class if specific class chosen
+    let match = null;
+    if (inputClass && inputClass !== 'All') {
+      match = students.find(s => {
+        if (s.className !== inputClass) return false;
+        const rollClean = s.rollNo.trim().toLowerCase();
+        const rollNum = rollClean.replace(/^0+/, '');
+        return (
+          rollClean === cleanRoll ||
+          (cleanNum !== '' && rollNum === cleanNum) ||
+          s.admissionNo.toLowerCase() === cleanRoll ||
+          s.admissionNo.toLowerCase().includes(cleanRoll) ||
+          s.name.toLowerCase().includes(cleanRoll) ||
+          (s.contactNo && s.contactNo.replace(/\D/g, '').includes(cleanRoll.replace(/\D/g, '')))
+        );
+      });
+    }
 
-    // 2. If not found in selected class, search across ALL classes automatically!
+    // 2. If not found in selected class or All selected, search across ALL classes
     if (!match) {
       match = students.find(s => {
         const rollClean = s.rollNo.trim().toLowerCase();
@@ -131,8 +137,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
       });
 
       if (match) {
-        // Automatically switch class to the child's class so everything aligns
-        setInputClass(match.className as ClassLevel);
+        setInputClass(match.className);
       }
     }
 
@@ -273,9 +278,10 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
               </label>
               <select
                 value={inputClass}
-                onChange={(e) => setInputClass(e.target.value as ClassLevel)}
+                onChange={(e) => setInputClass(e.target.value)}
                 className="w-full bg-slate-50 border-2 border-slate-300 focus:border-[#0D285F] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-extrabold text-[#0D285F] outline-none shadow-sm"
               >
+                <option value="All">تمام کلاسز (خودکار تلاش / All Classes)</option>
                 {SCHOOL_CLASSES.map(cls => {
                   const count = students.filter(s => s.className === cls).length;
                   return (

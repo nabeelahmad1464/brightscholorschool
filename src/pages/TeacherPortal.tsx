@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   GraduationCap,
   Calendar,
@@ -7,6 +7,7 @@ import {
   CheckCircle,
   FileText,
   User,
+  Users,
   Plus,
   KeyRound,
   Bell,
@@ -43,10 +44,22 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
 
   const teacher = teachers.find(t => t.id === currentTeacherId) || teachers[0];
 
-  const [activeTab, setActiveTab] = useState<'attendance' | 'tarbiyat' | 'tests' | 'leave' | 'notices'>('attendance');
-  const [selectedClass, setSelectedClass] = useState<ClassLevel>('Class 5');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'students_list' | 'tarbiyat' | 'tests' | 'leave' | 'notices'>('attendance');
+  const [selectedClass, setSelectedClass] = useState<ClassLevel>(
+    (students[0]?.className as ClassLevel) || 'Class 5'
+  );
   const [attDate, setAttDate] = useState(new Date().toISOString().split('T')[0]);
   const [statusMap, setStatusMap] = useState<Record<string, 'Present' | 'Absent' | 'Leave' | 'Late'>>({});
+
+  // Auto-switch class to one that actually has students if current class is empty
+  useEffect(() => {
+    if (students.length > 0 && !students.some(s => s.className === selectedClass)) {
+      const firstWithStudents = SCHOOL_CLASSES.find(c => students.some(s => s.className === c));
+      if (firstWithStudents) {
+        setSelectedClass(firstWithStudents);
+      }
+    }
+  }, [students, selectedClass]);
 
   // Password change modal
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -270,6 +283,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
       <div className="bg-white rounded-xl p-1 border border-slate-200 flex flex-wrap gap-2 text-xs font-semibold">
         {[
           { id: 'attendance', label: 'Mark Class Attendance', icon: <Calendar className="w-4 h-4" /> },
+          { id: 'students_list', label: `رجسٹرڈ بچے (${students.length})`, icon: <Users className="w-4 h-4" /> },
           { id: 'tarbiyat', label: 'Tarbiyat & Homework Report', icon: <BookOpen className="w-4 h-4" /> },
           { id: 'tests', label: 'Enter Test Marks', icon: <Award className="w-4 h-4" /> },
           { id: 'leave', label: 'Submit Leave', icon: <FileText className="w-4 h-4" /> },
@@ -453,6 +467,90 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
               Save Attendance (حاضری محفوظ کریں)
             </button>
           </div>
+        </div>
+      )}
+
+      {/* REGISTERED STUDENTS LIST */}
+      {activeTab === 'students_list' && (
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">
+                تمام رجسٹرڈ طلباء کی لسٹ (Registered Students: {students.length})
+              </h2>
+              <p className="text-xs text-slate-500">
+                ایڈمن کی جانب سے شامل کیے گئے تمام طلباء یہاں لائیو ظاہر ہوتے ہیں۔
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => syncNowWithCloud()}
+              disabled={isCloudSyncing}
+              className="bg-[#0D285F] text-amber-300 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-spin' : ''}`} />
+              <span>{isCloudSyncing ? 'سنک ہو رہا ہے...' : 'نیا ڈیٹا ریفریش کریں (Refresh)'}</span>
+            </button>
+          </div>
+
+          {students.length === 0 ? (
+            <div className="text-center py-12 px-4 bg-slate-50 rounded-xl border-2 border-dashed border-slate-300 space-y-3">
+              <Users className="w-10 h-10 text-slate-400 mx-auto" />
+              <p className="text-sm font-bold text-slate-700">
+                اس وقت کوئی طالب علم رجسٹرڈ نہیں ہے۔
+              </p>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                جیسے ہی ایڈمن اپنے موبائل سے نیا طالب علم شامل کریں گے، وہ یہاں فوری ظاہر ہوگا۔
+              </p>
+            </div>
+          ) : (
+            <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-sm">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#07193B] text-white">
+                  <tr>
+                    <th className="p-3">Roll No</th>
+                    <th className="p-3">Class</th>
+                    <th className="p-3">Student Name</th>
+                    <th className="p-3">Father Name</th>
+                    <th className="p-3">Admission #</th>
+                    <th className="p-3">Contact</th>
+                    <th className="p-3">Monthly Fee</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {students.map(st => (
+                    <tr key={st.id} className="hover:bg-slate-50 transition">
+                      <td className="p-3 font-bold text-slate-900">
+                        <span className="w-7 h-7 rounded-full bg-slate-100 border border-slate-300 inline-flex items-center justify-center font-mono">
+                          {st.rollNo}
+                        </span>
+                      </td>
+                      <td className="p-3 font-semibold text-[#0D285F]">
+                        <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] font-bold">
+                          {st.className}
+                        </span>
+                      </td>
+                      <td className="p-3 font-bold text-slate-900 text-sm">
+                        {st.name}
+                      </td>
+                      <td className="p-3 text-slate-600">
+                        {st.fatherName}
+                      </td>
+                      <td className="p-3 text-slate-500 font-mono">
+                        {st.admissionNo}
+                      </td>
+                      <td className="p-3 text-slate-600 font-mono">
+                        {st.contactNo || st.whatsappNo || '-'}
+                      </td>
+                      <td className="p-3 font-bold text-slate-800">
+                        Rs. {st.monthlyFee}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

@@ -147,6 +147,27 @@ interface SchoolContextType {
 
 const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
 
+// Filter out any unwanted automatic/dummy demo students and keep only real additions
+const DUMMY_STUDENT_IDS = new Set([
+  's-101', 's-102', 's-103', 's-104', 's-105', 's-106', 's-107',
+  's-108', 's-109', 's-110', 's-111', 's-112', 's-113'
+]);
+
+const DUMMY_STUDENT_NAMES = new Set([
+  'muhammad abdullah', 'fatima noor', 'zainab bibi', 'muhammad ahmed',
+  'ayesha tariq', 'muhammad usman', 'maryam bibi', 'muhammad bilal',
+  'dua fatima', 'hassan raza', 'muhammad hamza', 'noor ul huda'
+]);
+
+function isDummyStudent(item: any): boolean {
+  if (!item) return false;
+  if (item.id && DUMMY_STUDENT_IDS.has(item.id)) return true;
+  if (item.studentId && DUMMY_STUDENT_IDS.has(item.studentId)) return true;
+  if (item.name && DUMMY_STUDENT_NAMES.has(item.name.trim().toLowerCase())) return true;
+  if (item.studentName && DUMMY_STUDENT_NAMES.has(item.studentName.trim().toLowerCase())) return true;
+  return false;
+}
+
 function loadFromStorage<T>(key: string, defaultValue: T): T {
   try {
     const item = localStorage.getItem(`bss_v7_${key}`);
@@ -165,15 +186,30 @@ function saveToStorage<T>(key: string, value: T) {
 }
 
 export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [students, setStudents] = useState<Student[]>(() => loadFromStorage('students', initialStudents));
+  const [students, setStudents] = useState<Student[]>(() => {
+    const raw = loadFromStorage<Student[]>('students', initialStudents);
+    return Array.isArray(raw) ? raw.filter(s => !isDummyStudent(s)) : [];
+  });
   const [teachers, setTeachers] = useState<Teacher[]>(() => loadFromStorage('teachers', initialTeachers));
-  const [attendance, setAttendance] = useState<StudentAttendance[]>(() => loadFromStorage('attendance', initialAttendance));
+  const [attendance, setAttendance] = useState<StudentAttendance[]>(() => {
+    const raw = loadFromStorage<StudentAttendance[]>('attendance', initialAttendance);
+    return Array.isArray(raw) ? raw.filter(a => !isDummyStudent(a)) : [];
+  });
   const [teacherAttendance, setTeacherAttendance] = useState<TeacherAttendance[]>(() => loadFromStorage('teacherAttendance', initialTeacherAttendance));
   const [leaves, setLeaves] = useState<LeaveRequest[]>(() => loadFromStorage('leaves', initialLeaves));
-  const [feeRecords, setFeeRecords] = useState<FeeRecord[]>(() => loadFromStorage('feeRecords', initialFeeRecords));
-  const [dailyReports, setDailyReports] = useState<DailyReport[]>(() => loadFromStorage('dailyReports', initialDailyReports));
+  const [feeRecords, setFeeRecords] = useState<FeeRecord[]>(() => {
+    const raw = loadFromStorage<FeeRecord[]>('feeRecords', initialFeeRecords);
+    return Array.isArray(raw) ? raw.filter(f => !isDummyStudent(f)) : [];
+  });
+  const [dailyReports, setDailyReports] = useState<DailyReport[]>(() => {
+    const raw = loadFromStorage<DailyReport[]>('dailyReports', initialDailyReports);
+    return Array.isArray(raw) ? raw.filter(r => !isDummyStudent(r)) : [];
+  });
   const [tests, setTests] = useState<Test[]>(() => loadFromStorage('tests', initialTests));
-  const [testResults, setTestResults] = useState<TestResult[]>(() => loadFromStorage('testResults', initialTestResults));
+  const [testResults, setTestResults] = useState<TestResult[]>(() => {
+    const raw = loadFromStorage<TestResult[]>('testResults', initialTestResults);
+    return Array.isArray(raw) ? raw.filter(tr => !isDummyStudent(tr)) : [];
+  });
   const [notices, setNotices] = useState<Notice[]>(() => loadFromStorage('notices', initialNotices));
   const [onlineAdmissions, setOnlineAdmissions] = useState<OnlineAdmission[]>(() => loadFromStorage('admissions', initialAdmissions));
   const [settings, setSettings] = useState<SystemSettings>(() => loadFromStorage('settings', initialSettings));
@@ -188,7 +224,11 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [currentPortal, setCurrentPortal] = useState<PortalType>('PUBLIC_WEBSITE');
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => loadFromStorage('isAdminLoggedIn', false));
   const [currentTeacherId, setCurrentTeacherId] = useState<string | null>(() => loadFromStorage('currentTeacherId', null));
-  const [currentParentStudentId, setCurrentParentStudentId] = useState<string | null>(() => loadFromStorage('currentParentStudentId', null));
+  const [currentParentStudentId, setCurrentParentStudentId] = useState<string | null>(() => {
+    const raw = loadFromStorage<string | null>('currentParentStudentId', null);
+    if (raw && DUMMY_STUDENT_IDS.has(raw)) return null;
+    return raw;
+  });
   const [selectedStudentForModal, setSelectedStudentForModal] = useState<Student | null>(null);
 
   // Sync to localStorage
@@ -328,7 +368,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         });
         if (cloudRes.ok) {
           const parsed = await cloudRes.json();
-          if (parsed && Array.isArray(parsed.students) && parsed.students.length > 0) {
+          if (parsed && Array.isArray(parsed.students)) {
             data = parsed;
           }
         }
@@ -365,16 +405,19 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       const currentLocal = stateRef.current;
 
-      // Two-Way Merge: Never drop local additions that aren't on server yet!
+      // Two-Way Merge: Never drop local additions that aren't on server yet, and ALWAYS strip any dummy students!
       const mergeEntities = <T extends { id: string }>(serverItems?: T[], localItems?: T[]): T[] => {
-        if (!Array.isArray(serverItems) || serverItems.length === 0) return localItems || [];
-        if (!Array.isArray(localItems) || localItems.length === 0) return serverItems;
+        const cleanServer = Array.isArray(serverItems) ? serverItems.filter(item => !isDummyStudent(item)) : [];
+        const cleanLocal = Array.isArray(localItems) ? localItems.filter(item => !isDummyStudent(item)) : [];
+
+        if (cleanServer.length === 0) return cleanLocal;
+        if (cleanLocal.length === 0) return cleanServer;
 
         const map = new Map<string, T>();
-        // Add server items first
-        serverItems.forEach(item => map.set(item.id, item));
-        // Preserve any locally added items
-        localItems.forEach(item => {
+        // Add clean server items first
+        cleanServer.forEach(item => map.set(item.id, item));
+        // Preserve any locally added real items
+        cleanLocal.forEach(item => {
           if (!map.has(item.id)) {
             map.set(item.id, item);
           }
@@ -600,6 +643,14 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch (e) {
       console.error(e);
     }
+    pushCurrentDataToCloud({
+      students: [],
+      attendance: [],
+      feeRecords: [],
+      dailyReports: [],
+      tests: [],
+      testResults: []
+    });
   };
 
   // Auth
