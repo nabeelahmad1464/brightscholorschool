@@ -33,7 +33,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
     settings,
     feeRecords,
     testResults,
-    dailyReports
+    dailyReports,
+    syncNowWithCloud
   } = useSchool();
 
   // Find initial student if parent was already logged in
@@ -80,15 +81,18 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
     }
   }, [currentParentStudentId, students]);
 
-  // Handle Search strictly by Class and Roll Number
-  const handleSearch = (e?: React.FormEvent) => {
+  // Handle Search: Searches in selected class first, and if found in another class, auto-switches and opens receipt!
+  const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setErrorMessage('');
     setLeaveSubmitted(false);
 
+    // Ensure freshest cloud data is pulled
+    syncNowWithCloud();
+
     const cleanRoll = inputRollNo.trim().toLowerCase();
     if (!cleanRoll) {
-      setErrorMessage('براہ کرم طالب علم کا رول نمبر درج کریں۔');
+      setErrorMessage('براہ کرم طالب علم کا رول نمبر یا نام درج کریں۔');
       setSearchedStudent(null);
       setHasSearched(true);
       return;
@@ -96,8 +100,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
 
     const cleanNum = cleanRoll.replace(/^0+/, '');
 
-    // Search strictly within the selected class
-    const match = students.find(s => {
+    // 1. Search strictly within the selected class first
+    let match = students.find(s => {
       if (s.className !== inputClass) return false;
       const rollClean = s.rollNo.trim().toLowerCase();
       const rollNum = rollClean.replace(/^0+/, '');
@@ -106,9 +110,31 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
         (cleanNum !== '' && rollNum === cleanNum) ||
         s.admissionNo.toLowerCase() === cleanRoll ||
         s.admissionNo.toLowerCase().includes(cleanRoll) ||
-        s.name.toLowerCase().includes(cleanRoll)
+        s.name.toLowerCase().includes(cleanRoll) ||
+        (s.contactNo && s.contactNo.replace(/\D/g, '').includes(cleanRoll.replace(/\D/g, '')))
       );
     });
+
+    // 2. If not found in selected class, search across ALL classes automatically!
+    if (!match) {
+      match = students.find(s => {
+        const rollClean = s.rollNo.trim().toLowerCase();
+        const rollNum = rollClean.replace(/^0+/, '');
+        return (
+          rollClean === cleanRoll ||
+          (cleanNum !== '' && rollNum === cleanNum) ||
+          s.admissionNo.toLowerCase() === cleanRoll ||
+          s.admissionNo.toLowerCase().includes(cleanRoll) ||
+          s.name.toLowerCase().includes(cleanRoll) ||
+          (s.contactNo && s.contactNo.replace(/\D/g, '').includes(cleanRoll.replace(/\D/g, '')))
+        );
+      });
+
+      if (match) {
+        // Automatically switch class to the child's class so everything aligns
+        setInputClass(match.className as ClassLevel);
+      }
+    }
 
     if (match) {
       setSearchedStudent(match);
@@ -116,22 +142,9 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
       setHasSearched(true);
       setErrorMessage('');
     } else {
-      // If not in this class, check if student exists in another class to guide the parent
-      const anywhere = students.find(s => {
-        const rollClean = s.rollNo.trim().toLowerCase();
-        const rollNum = rollClean.replace(/^0+/, '');
-        return rollClean === cleanRoll || (cleanNum !== '' && rollNum === cleanNum);
-      });
-
-      if (anywhere) {
-        setErrorMessage(
-          `طالب علم رول نمبر "${inputRollNo}" کلاس "${inputClass}" میں نہیں ہے، بلکہ "${anywhere.className}" میں پایا گیا ہے۔`
-        );
-      } else {
-        setErrorMessage(
-          `رول نمبر "${inputRollNo}" کلاس "${inputClass}" میں نہیں ملا۔ براہ کرم رول نمبر درست درج کریں یا اسکول واٹس ایپ پر رابطہ فرمائیں۔`
-        );
-      }
+      setErrorMessage(
+        `رول نمبر / نام "${inputRollNo}" کا کوئی طالب علم نہیں ملا۔ براہ کرم رول نمبر یا نام درست درج فرمائیں یا اسکول واٹس ایپ پر رابطہ کریں۔`
+      );
       setSearchedStudent(null);
       setHasSearched(true);
     }
@@ -263,9 +276,14 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                 onChange={(e) => setInputClass(e.target.value as ClassLevel)}
                 className="w-full bg-slate-50 border-2 border-slate-300 focus:border-[#0D285F] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-extrabold text-[#0D285F] outline-none shadow-sm"
               >
-                {SCHOOL_CLASSES.map(cls => (
-                  <option key={cls} value={cls}>{cls}</option>
-                ))}
+                {SCHOOL_CLASSES.map(cls => {
+                  const count = students.filter(s => s.className === cls).length;
+                  return (
+                    <option key={cls} value={cls}>
+                      {cls} ({count} طلباء)
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -279,7 +297,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                 required
                 value={inputRollNo}
                 onChange={(e) => setInputRollNo(e.target.value)}
-                placeholder="مثلاً: 01 یا 1 یا 02..."
+                placeholder="رول نمبر (01, 1) یا نام درج کریں..."
                 className="w-full bg-slate-50 border-2 border-slate-300 focus:border-[#0D285F] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-extrabold text-slate-900 outline-none shadow-sm"
               />
             </div>

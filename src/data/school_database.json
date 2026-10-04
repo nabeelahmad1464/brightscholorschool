@@ -491,20 +491,25 @@
       "date": "2026-09-20",
       "content": "As per school discipline rules, unapproved absence will incur a fine of Rs. 50 per day. Please submit leave requests in advance through the Parent Portal.",
       "targetAudience": "Parents"
+    },
+    {
+      "id": "not-3",
+      "title": "Parent-Teacher Meeting (PTM) Scheduled",
+      "category": "Parent Meeting",
+      "date": "2026-09-15",
+      "content": "PTM for September progress reviews and moral tarbiyat discussion will be held on the first Saturday of next month from 9:00 AM to 1:00 PM.",
+      "targetAudience": "Parents"
+    },
+    {
+      "id": "not-4",
+      "title": "Weekly Nazra Quran & Hadith Competition",
+      "category": "Announcement",
+      "date": "2026-09-10",
+      "content": "Under the motto \"Pehle Tarbiyat, Phir Taleem\", all students will participate in Friday recitation & ethical character building sessions.",
+      "targetAudience": "All"
     }
   ],
   "onlineAdmissions": [],
-  "salaryTransactions": [],
-  "teacherSalaryPayments": [
-    {
-      "id": "tsp-1",
-      "teacherId": "t-1",
-      "month": "September 2026",
-      "isPaid": true,
-      "paidDate": "2026-10-01",
-      "amount": 35000
-    }
-  ],
   "settings": {
     "adminPassword": "Nabeel#0",
     "teacherPassword": "teacher123",
@@ -515,5 +520,7 @@
     "schoolPhone": "0302-5053993",
     "schoolWhatsApp": "0302-5053993"
   },
-  "updatedAt": "2026-10-02T10:00:00.000Z"
+  "salaryTransactions": [],
+  "teacherSalaryPayments": [],
+  "updatedAt": "2026-10-04T10:51:26.095Z"
 }

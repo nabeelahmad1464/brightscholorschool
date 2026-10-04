@@ -11,7 +11,8 @@ import {
   KeyRound,
   Bell,
   Check,
-  X
+  X,
+  RefreshCw
 } from 'lucide-react';
 import { useSchool } from '../context/SchoolContext';
 import { Student, ClassLevel, SCHOOL_CLASSES, SCHOOL_SUBJECTS } from '../types';
@@ -35,7 +36,9 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
     submitLeave,
     settings,
     setTeacherPassword,
-    notices
+    notices,
+    syncNowWithCloud,
+    isCloudSyncing
   } = useSchool();
 
   const teacher = teachers.find(t => t.id === currentTeacherId) || teachers[0];
@@ -244,6 +247,25 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
         </button>
       </div>
 
+      {/* Live Cloud Status Banner */}
+      <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span className="font-extrabold text-emerald-900">
+            کلاؤڈ لائیو منسلک ہے: اسکول میں کل <strong>{students.length}</strong> طلباء درج ہیں۔ تمام ڈیٹا خودکار سنک ہو رہا ہے۔
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => syncNowWithCloud()}
+          disabled={isCloudSyncing}
+          className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 font-bold px-3 py-1.5 rounded-lg text-xs transition flex items-center gap-1.5 shadow cursor-pointer active:scale-95 disabled:opacity-70"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-spin' : ''}`} />
+          <span>{isCloudSyncing ? 'ریفریش ہو رہا ہے...' : 'نیا ڈیٹا ریفریش کریں (Refresh)'}</span>
+        </button>
+      </div>
+
       {/* Tabs */}
       <div className="bg-white rounded-xl p-1 border border-slate-200 flex flex-wrap gap-2 text-xs font-semibold">
         {[
@@ -279,9 +301,14 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
                 onChange={(e) => setSelectedClass(e.target.value as ClassLevel)}
                 className="w-full px-3 py-2 text-sm border rounded-lg bg-white font-medium"
               >
-                {SCHOOL_CLASSES.map(cls => (
-                  <option key={cls} value={cls}>{cls}</option>
-                ))}
+                {SCHOOL_CLASSES.map(cls => {
+                  const count = students.filter(s => s.className === cls).length;
+                  return (
+                    <option key={cls} value={cls}>
+                      {cls} ({count} طلباء)
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -329,8 +356,26 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
           </div>
 
           {classStudents.length === 0 ? (
-            <div className="text-center py-12 text-slate-500 text-xs italic bg-slate-50 rounded-xl border border-dashed border-slate-300">
-              اس کلاس ({selectedClass}) میں ابھی کوئی بچہ داخل نہیں ہے۔ ایڈمن پورٹل سے بچوں کو ایڈ کیا جا سکتا ہے۔
+            <div className="text-center py-10 px-4 bg-slate-50 rounded-xl border border-dashed border-slate-300 space-y-3">
+              <p className="text-slate-700 text-xs font-bold">
+                اس کلاس ({selectedClass}) میں فی الحال کوئی بچہ داخل نہیں ہے۔
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                <span className="text-xs text-slate-500 font-semibold">طلباء والی کلاسز پر فوری سوئچ کریں:</span>
+                {SCHOOL_CLASSES.filter(c => students.some(s => s.className === c)).map(c => {
+                  const cCount = students.filter(s => s.className === c).length;
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setSelectedClass(c)}
+                      className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 text-xs font-extrabold px-3 py-1 rounded-lg transition shadow-sm"
+                    >
+                      {c} ({cCount} طلباء)
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ) : (
             <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">

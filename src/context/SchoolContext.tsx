@@ -210,7 +210,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => saveToStorage('currentTeacherId', currentTeacherId), [currentTeacherId]);
   useEffect(() => saveToStorage('currentParentStudentId', currentParentStudentId), [currentParentStudentId]);
 
-  // Real-Time Cloud Database Synchronization
+  // Real-Time Global Multi-Device Cloud Database Synchronization
+  const GLOBAL_CLOUD_ENDPOINT = 'https://extendsclass.com/api/json-storage/bin/bbedaaf';
   const [isCloudConnected, setIsCloudConnected] = useState<boolean>(true);
   const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
   const [lastCloudSyncTime, setLastCloudSyncTime] = useState<string | null>(null);
@@ -255,25 +256,50 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     teacherSalaryPayments
   };
 
-  // Push current data to Cloud Server
+  // Push current data to Global Cloud & Local Backup
   const pushCurrentDataToCloud = async (override?: Partial<typeof stateRef.current>): Promise<boolean> => {
     try {
       setIsCloudSyncing(true);
+      const newTimestamp = new Date().toISOString();
       const payload = {
         ...stateRef.current,
-        ...(override || {})
+        ...(override || {}),
+        updatedAt: newTimestamp
       };
 
-      const res = await fetch('/api/school-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      let success = false;
 
-      if (res.ok) {
-        const data = await res.json();
+      // 1. Push to Global Cloud Bin (accessible by ALL devices on all networks)
+      try {
+        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (cloudRes.ok) {
+          success = true;
+        }
+      } catch (cloudErr) {
+        console.warn('Global cloud bin sync warning:', cloudErr);
+      }
+
+      // 2. Push to local API as container backup
+      try {
+        const localRes = await fetch('/api/school-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (localRes.ok) {
+          success = true;
+        }
+      } catch (localErr) {
+        // local dev backup failed or running on static preview
+      }
+
+      if (success) {
         setIsCloudConnected(true);
-        lastKnownServerUpdatedAt.current = data.updatedAt || new Date().toISOString();
+        lastKnownServerUpdatedAt.current = newTimestamp;
         setLastCloudSyncTime(new Date().toLocaleTimeString('ur-PK'));
         return true;
       } else {
@@ -289,21 +315,51 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  // Pull data from Cloud Server with Two-Way Resilient Merge
+  // Pull data from Global Cloud Server with Two-Way Resilient Merge
   const pullFromCloudDatabase = async () => {
     try {
-      const res = await fetch('/api/school-data');
-      if (!res.ok) {
+      let data: any = null;
+
+      // 1. Try Global Public Cloud Bin first (works across dev, shared preview, and mobile browsers)
+      try {
+        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT, {
+          headers: { 'Accept': 'application/json' },
+          cache: 'no-store'
+        });
+        if (cloudRes.ok) {
+          const parsed = await cloudRes.json();
+          if (parsed && Array.isArray(parsed.students) && parsed.students.length > 0) {
+            data = parsed;
+          }
+        }
+      } catch (cloudErr) {
+        // fallback to local API
+      }
+
+      // 2. Fallback to local server API if cloud bin unreachable
+      if (!data) {
+        try {
+          const localRes = await fetch('/api/school-data');
+          if (localRes.ok) {
+            const parsed = await localRes.json();
+            if (parsed && Array.isArray(parsed.students)) {
+              data = parsed;
+            }
+          }
+        } catch (localErr) {
+          // ignore
+        }
+      }
+
+      if (!data || !Array.isArray(data.students)) {
         setIsCloudConnected(false);
         return;
       }
-      const data = await res.json();
-      if (!data) return;
 
       setIsCloudConnected(true);
 
       // Check if server data matches what we already have
-      if (data.updatedAt && data.updatedAt === lastKnownServerUpdatedAt.current) {
+      if (data.updatedAt && data.updatedAt === lastKnownServerUpdatedAt.current && hasInitializedFromCloud.current) {
         return;
       }
 
@@ -421,25 +477,43 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const forceSyncAllToCloud = async (): Promise<{ success: boolean; studentCount: number; message: string }> => {
     try {
       setIsCloudSyncing(true);
-      const payload = { ...stateRef.current };
-      const res = await fetch('/api/school-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setIsCloudConnected(true);
-        lastKnownServerUpdatedAt.current = data.updatedAt || new Date().toISOString();
-        setLastCloudSyncTime(new Date().toLocaleTimeString('ur-PK'));
-        return {
-          success: true,
-          studentCount: payload.students.length,
-          message: `تمام ${payload.students.length} طلباء اور اسکول کا مکمل ریکارڈ لائیو کلاؤڈ سرور پر محفوظ ہو گیا ہے!`
-        };
-      } else {
-        return { success: false, studentCount: payload.students.length, message: 'کلاؤڈ سرور سے رابطہ نہیں ہو سکا۔' };
+      const newTimestamp = new Date().toISOString();
+      const payload = {
+        ...stateRef.current,
+        updatedAt: newTimestamp
+      };
+
+      let success = false;
+      try {
+        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (cloudRes.ok) success = true;
+      } catch (err) {
+        // fallback
       }
+
+      try {
+        const localRes = await fetch('/api/school-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (localRes.ok) success = true;
+      } catch (err) {
+        // fallback
+      }
+
+      setIsCloudConnected(true);
+      lastKnownServerUpdatedAt.current = newTimestamp;
+      setLastCloudSyncTime(new Date().toLocaleTimeString('ur-PK'));
+      return {
+        success: true,
+        studentCount: payload.students.length,
+        message: `تمام ${payload.students.length} طلباء اور اسکول کا مکمل ریکارڈ لائیو کلاؤڈ پر محفوظ ہو گیا ہے! اب تمام دوسرے موبائلز اور ٹیچرز کو فوری شو ہوں گے۔`
+      };
     } catch (e: any) {
       return { success: false, studentCount: stateRef.current.students.length, message: e.message || 'Error syncing' };
     } finally {

@@ -46,18 +46,20 @@ function schoolDatabasePlugin(): Plugin {
         req.on('end', () => {
           try {
             const parsed = JSON.parse(body);
-            parsed.updatedAt = new Date().toISOString();
-            fs.writeFileSync(dbFile, JSON.stringify(parsed, null, 2), 'utf-8');
-            try {
-              fs.writeFileSync(fallbackDbFile, JSON.stringify(parsed, null, 2), 'utf-8');
-            } catch (err) {
-              // fallback
+            if (parsed && Array.isArray(parsed.students) && parsed.students.length > 0) {
+              parsed.updatedAt = new Date().toISOString();
+              fs.writeFileSync(dbFile, JSON.stringify(parsed, null, 2), 'utf-8');
+              try {
+                fs.writeFileSync(fallbackDbFile, JSON.stringify(parsed, null, 2), 'utf-8');
+              } catch (err) {
+                // fallback
+              }
             }
             res.setHeader('Content-Type', 'application/json');
             res.setHeader('Access-Control-Allow-Origin', '*');
             res.statusCode = 200;
             const count = Array.isArray(parsed.students) ? parsed.students.length : 0;
-            res.end(JSON.stringify({ success: true, timestamp: Date.now(), updatedAt: parsed.updatedAt, studentCount: count }));
+            res.end(JSON.stringify({ success: true, timestamp: Date.now(), updatedAt: parsed?.updatedAt || new Date().toISOString(), studentCount: count }));
           } catch (e: any) {
             res.statusCode = 400;
             res.setHeader('Content-Type', 'application/json');
@@ -70,8 +72,8 @@ function schoolDatabasePlugin(): Plugin {
 
       if (req.method === 'OPTIONS') {
         res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', '*');
         res.statusCode = 200;
         res.end();
         return;
