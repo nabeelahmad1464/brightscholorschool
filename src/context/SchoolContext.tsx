@@ -147,24 +147,22 @@ interface SchoolContextType {
 
 const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
 
-// Filter out any unwanted automatic/dummy demo students and keep only real additions
+// Filter ONLY the exact initial sample/dummy seed IDs (s-101 to s-113)
+// NEVER filter by real Pakistani names (Muhammad Abdullah, Ahmed, Bilal, Fatima etc. are real student names)
 const DUMMY_STUDENT_IDS = new Set([
   's-101', 's-102', 's-103', 's-104', 's-105', 's-106', 's-107',
   's-108', 's-109', 's-110', 's-111', 's-112', 's-113'
 ]);
 
-const DUMMY_STUDENT_NAMES = new Set([
-  'muhammad abdullah', 'fatima noor', 'zainab bibi', 'muhammad ahmed',
-  'ayesha tariq', 'muhammad usman', 'maryam bibi', 'muhammad bilal',
-  'dua fatima', 'hassan raza', 'muhammad hamza', 'noor ul huda'
-]);
-
 function isDummyStudent(item: any): boolean {
   if (!item) return false;
-  if (item.id && DUMMY_STUDENT_IDS.has(item.id)) return true;
+  if (item.id && DUMMY_STUDENT_IDS.has(item.id)) {
+    // Check if it's the old seed record with BSS-101..113
+    if (!item.admissionNo || item.admissionNo.startsWith('BSS-10') || item.admissionNo.startsWith('BSS-11')) {
+      return true;
+    }
+  }
   if (item.studentId && DUMMY_STUDENT_IDS.has(item.studentId)) return true;
-  if (item.name && DUMMY_STUDENT_NAMES.has(item.name.trim().toLowerCase())) return true;
-  if (item.studentName && DUMMY_STUDENT_NAMES.has(item.studentName.trim().toLowerCase())) return true;
   return false;
 }
 
@@ -185,8 +183,72 @@ function saveToStorage<T>(key: string, value: T) {
   }
 }
 
+// Deep recovery function to restore any student previously added in any storage version or session
+function recoverAllLocalStudents(): Student[] {
+  const recoveredMap = new Map<string, Student>();
+  const priorityKeys = [
+    'bss_v7_students',
+    'bss_v6_students',
+    'bss_v5_students',
+    'bss_v4_students',
+    'bss_v3_students',
+    'bss_students',
+    'school_students',
+    'students'
+  ];
+
+  try {
+    priorityKeys.forEach(k => {
+      try {
+        const item = localStorage.getItem(k);
+        if (item) {
+          const parsed = JSON.parse(item);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((st: any) => {
+              if (st && st.name && !isDummyStudent(st)) {
+                const id = st.id || `s-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+                if (!recoveredMap.has(id)) {
+                  recoveredMap.set(id, { ...st, id });
+                }
+              }
+            });
+          }
+        }
+      } catch (e) {}
+    });
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.includes('student') || k.includes('bss') || k.includes('school'))) {
+        try {
+          const val = localStorage.getItem(k);
+          if (val && val.startsWith('[')) {
+            const arr = JSON.parse(val);
+            if (Array.isArray(arr)) {
+              arr.forEach((item: any) => {
+                if (item && item.name && (item.rollNo || item.className || item.fatherName) && !isDummyStudent(item)) {
+                  const id = item.id || `s-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+                  if (!recoveredMap.has(id)) {
+                    recoveredMap.set(id, { ...item, id });
+                  }
+                }
+              });
+            }
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (err) {
+    console.warn('Error recovering local students:', err);
+  }
+
+  return Array.from(recoveredMap.values());
+}
+
 export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [students, setStudents] = useState<Student[]>(() => {
+    const recovered = recoverAllLocalStudents();
+    if (recovered.length > 0) return recovered;
     const raw = loadFromStorage<Student[]>('students', initialStudents);
     return Array.isArray(raw) ? raw.filter(s => !isDummyStudent(s)) : [];
   });
@@ -251,7 +313,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => saveToStorage('currentParentStudentId', currentParentStudentId), [currentParentStudentId]);
 
   // Real-Time Global Multi-Device Cloud Database Synchronization
-  const GLOBAL_CLOUD_ENDPOINT = 'https://extendsclass.com/api/json-storage/bin/bbedaaf';
+  const GLOBAL_CLOUD_ENDPOINT_1 = 'https://api.restful-api.dev/objects/ff808181a09d98f701a10b8b7b9a7c36';
+  const GLOBAL_CLOUD_ENDPOINT_2 = 'https://extendsclass.com/api/json-storage/bin/bbedaaf';
   const [isCloudConnected, setIsCloudConnected] = useState<boolean>(true);
   const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
   const [lastCloudSyncTime, setLastCloudSyncTime] = useState<string | null>(null);
@@ -309,32 +372,43 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       let success = false;
 
-      // 1. Push to Global Cloud Bin (accessible by ALL devices on all networks)
+      // 1. Push to Primary Global Cloud Bin (api.restful-api.dev)
       try {
-        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT, {
+        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: 'BSS_DATA',
+            data: payload
+          })
+        });
+        if (cloudRes.ok) success = true;
+      } catch (cloudErr) {
+        console.warn('Primary cloud sync warning:', cloudErr);
+      }
+
+      // 2. Mirror to Secondary Global Cloud Bin (extendsclass.com)
+      try {
+        const extRes = await fetch(GLOBAL_CLOUD_ENDPOINT_2, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        if (cloudRes.ok) {
-          success = true;
-        }
-      } catch (cloudErr) {
-        console.warn('Global cloud bin sync warning:', cloudErr);
+        if (extRes.ok) success = true;
+      } catch (extErr) {
+        // secondary mirror
       }
 
-      // 2. Push to local API as container backup
+      // 3. Push to local API as container backup
       try {
         const localRes = await fetch('/api/school-data', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        if (localRes.ok) {
-          success = true;
-        }
+        if (localRes.ok) success = true;
       } catch (localErr) {
-        // local dev backup failed or running on static preview
+        // local dev backup
       }
 
       if (success) {
@@ -360,30 +434,51 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       let data: any = null;
 
-      // 1. Try Global Public Cloud Bin first (works across dev, shared preview, and mobile browsers)
+      // 1. Try Primary Cloud Bin (api.restful-api.dev)
       try {
-        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT, {
+        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
           headers: { 'Accept': 'application/json' },
           cache: 'no-store'
         });
         if (cloudRes.ok) {
           const parsed = await cloudRes.json();
-          if (parsed && Array.isArray(parsed.students)) {
-            data = parsed;
+          const cloudData = parsed?.data || parsed;
+          if (cloudData && Array.isArray(cloudData.students)) {
+            data = cloudData;
           }
         }
       } catch (cloudErr) {
-        // fallback to local API
+        // fallback
       }
 
-      // 2. Fallback to local server API if cloud bin unreachable
+      // 2. Try Secondary Cloud Bin if primary didn't provide students
+      if (!data || !Array.isArray(data.students) || data.students.length === 0) {
+        try {
+          const extRes = await fetch(GLOBAL_CLOUD_ENDPOINT_2, {
+            headers: { 'Accept': 'application/json' },
+            cache: 'no-store'
+          });
+          if (extRes.ok) {
+            const parsed = await extRes.json();
+            const extData = parsed?.data || parsed;
+            if (extData && Array.isArray(extData.students) && extData.students.length > 0) {
+              data = extData;
+            }
+          }
+        } catch (extErr) {
+          // fallback
+        }
+      }
+
+      // 3. Fallback to local server API if cloud bin unreachable
       if (!data) {
         try {
           const localRes = await fetch('/api/school-data');
           if (localRes.ok) {
             const parsed = await localRes.json();
-            if (parsed && Array.isArray(parsed.students)) {
-              data = parsed;
+            const localData = parsed?.data || parsed;
+            if (localData && Array.isArray(localData.students)) {
+              data = localData;
             }
           }
         } catch (localErr) {
@@ -528,12 +623,26 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       let success = false;
       try {
-        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT, {
+        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: 'BSS_DATA',
+            data: payload
+          })
+        });
+        if (cloudRes.ok) success = true;
+      } catch (err) {
+        // fallback
+      }
+
+      try {
+        const extRes = await fetch(GLOBAL_CLOUD_ENDPOINT_2, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        if (cloudRes.ok) success = true;
+        if (extRes.ok) success = true;
       } catch (err) {
         // fallback
       }
@@ -612,16 +721,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, []);
 
-  // If students list is empty, ensure fee records, attendance, and reports are also 0
-  useEffect(() => {
-    if (students.length === 0) {
-      if (feeRecords.length > 0) setFeeRecords([]);
-      if (attendance.length > 0) setAttendance([]);
-      if (dailyReports.length > 0) setDailyReports([]);
-      if (testResults.length > 0) setTestResults([]);
-    }
-  }, [students.length, feeRecords.length, attendance.length, dailyReports.length, testResults.length]);
-
+  // Manual hard reset only when administrator clicks 'resetAllDataToZero' in Settings
   const resetAllDataToZero = () => {
     setStudents([]);
     setAttendance([]);

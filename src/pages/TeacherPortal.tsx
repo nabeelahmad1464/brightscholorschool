@@ -45,19 +45,20 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
   const teacher = teachers.find(t => t.id === currentTeacherId) || teachers[0];
 
   const [activeTab, setActiveTab] = useState<'attendance' | 'students_list' | 'tarbiyat' | 'tests' | 'leave' | 'notices'>('attendance');
-  const [selectedClass, setSelectedClass] = useState<ClassLevel>(
-    (students[0]?.className as ClassLevel) || 'Class 5'
-  );
+  const [selectedClass, setSelectedClass] = useState<ClassLevel | 'ALL'>('ALL');
   const [attDate, setAttDate] = useState(new Date().toISOString().split('T')[0]);
   const [statusMap, setStatusMap] = useState<Record<string, 'Present' | 'Absent' | 'Leave' | 'Late'>>({});
+  const [studentFilterQuery, setStudentFilterQuery] = useState('');
 
-  // Auto-switch class to one that actually has students if current class is empty
+  // Auto-sync freshest cloud data when teacher opens the portal
   useEffect(() => {
-    if (students.length > 0 && !students.some(s => s.className === selectedClass)) {
-      const firstWithStudents = SCHOOL_CLASSES.find(c => students.some(s => s.className === c));
-      if (firstWithStudents) {
-        setSelectedClass(firstWithStudents);
-      }
+    syncNowWithCloud();
+  }, []);
+
+  // Auto-switch class to ALL or first class with students
+  useEffect(() => {
+    if (students.length > 0 && selectedClass !== 'ALL' && !students.some(s => s.className === selectedClass)) {
+      setSelectedClass('ALL');
     }
   }, [students, selectedClass]);
 
@@ -77,7 +78,9 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
   const [testStudentId, setTestStudentId] = useState(students[0]?.id || '');
   const [marksObtained, setMarksObtained] = useState<number>(45);
   const [testSubTab, setTestSubTab] = useState<'enter_marks' | 'create_test'>('enter_marks');
-  const [newTestClass, setNewTestClass] = useState<ClassLevel>(selectedClass);
+  const [newTestClass, setNewTestClass] = useState<ClassLevel>(
+    selectedClass === 'ALL' ? (students[0]?.className as ClassLevel || 'Class 5') : selectedClass
+  );
   const [newTestSubject, setNewTestSubject] = useState('Mathematics (ریاضی)');
   const [customSubjectInput, setCustomSubjectInput] = useState('');
   const [newTestTotalMarks, setNewTestTotalMarks] = useState<number>(50);
@@ -91,16 +94,32 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
   const [leaveFrom, setLeaveFrom] = useState(new Date().toISOString().split('T')[0]);
   const [leaveTo, setLeaveTo] = useState(new Date().toISOString().split('T')[0]);
 
-  const classStudents = students.filter(s => s.className === selectedClass);
+  const classStudents = selectedClass === 'ALL'
+    ? students
+    : students.filter(s => s.className === selectedClass);
 
   const handleSaveAttendance = () => {
-    const list = classStudents.map(s => ({
-      studentId: s.id,
-      status: statusMap[s.id] || 'Present'
-    }));
-
-    markClassAttendance(selectedClass, attDate, list);
-    alert(`Attendance for ${selectedClass} recorded successfully!`);
+    if (selectedClass === 'ALL') {
+      const byClass: Record<string, { studentId: string; status: 'Present' | 'Absent' | 'Leave' | 'Late' }[]> = {};
+      classStudents.forEach(s => {
+        if (!byClass[s.className]) byClass[s.className] = [];
+        byClass[s.className].push({
+          studentId: s.id,
+          status: statusMap[s.id] || 'Present'
+        });
+      });
+      Object.entries(byClass).forEach(([cls, list]) => {
+        markClassAttendance(cls, attDate, list);
+      });
+      alert(`تمام کلاسز کے کل ${classStudents.length} طلباء کی حاضری کامیابی سے محفوظ ہو گئی!`);
+    } else {
+      const list = classStudents.map(s => ({
+        studentId: s.id,
+        status: statusMap[s.id] || 'Present'
+      }));
+      markClassAttendance(selectedClass, attDate, list);
+      alert(`حاضری برائے ${selectedClass} کامیابی سے محفوظ ہو گئی!`);
+    }
   };
 
   const handleSaveDailyReport = (e: React.FormEvent) => {
@@ -312,9 +331,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
               <label className="block text-xs font-semibold text-slate-700 mb-1">Select Class (کلاس منتخب کریں)</label>
               <select
                 value={selectedClass}
-                onChange={(e) => setSelectedClass(e.target.value as ClassLevel)}
+                onChange={(e) => setSelectedClass(e.target.value as any)}
                 className="w-full px-3 py-2 text-sm border rounded-lg bg-white font-medium"
               >
+                <option value="ALL">تمام کلاسز (تمام بچے - کل {students.length} طلباء)</option>
                 {SCHOOL_CLASSES.map(cls => {
                   const count = students.filter(s => s.className === cls).length;
                   return (
@@ -397,6 +417,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
                 <thead className="bg-[#07193B] text-white">
                   <tr>
                     <th className="p-3">Roll No</th>
+                    {selectedClass === 'ALL' && <th className="p-3">Class</th>}
                     <th className="p-3">Student & Father Name</th>
                     <th className="p-3 text-center">Mark Attendance (حاضری لگائیں)</th>
                   </tr>
@@ -414,6 +435,13 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
                             {st.rollNo}
                           </span>
                         </td>
+                        {selectedClass === 'ALL' && (
+                          <td className="p-3 font-semibold text-[#0D285F]">
+                            <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] font-bold">
+                              {st.className}
+                            </span>
+                          </td>
+                        )}
                         <td className="p-3">
                           <div className="font-bold text-slate-900 text-sm">{st.name}</div>
                           <div className="text-[11px] text-slate-500">

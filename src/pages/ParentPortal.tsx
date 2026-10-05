@@ -43,7 +43,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
     : null;
 
   const [inputClass, setInputClass] = useState<string>(
-    loggedInStudent ? loggedInStudent.className : (students[0]?.className || 'All')
+    loggedInStudent ? loggedInStudent.className : 'All'
   );
   const [inputRollNo, setInputRollNo] = useState<string>(
     loggedInStudent ? loggedInStudent.rollNo : ''
@@ -51,6 +51,11 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
   const [searchedStudent, setSearchedStudent] = useState<Student | null>(loggedInStudent || null);
   const [hasSearched, setHasSearched] = useState<boolean>(!!loggedInStudent);
   const [errorMessage, setErrorMessage] = useState<string>('');
+
+  // Auto-sync freshest cloud data when Parent opens portal
+  useEffect(() => {
+    syncNowWithCloud();
+  }, []);
 
   const handleResetSearch = () => {
     setSearchedStudent(null);
@@ -329,16 +334,56 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
         </form>
       </div>
 
-      {/* 3. PROMPT IF NOT SEARCHED YET */}
-      {!hasSearched && !activeStudent && (
-        <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center space-y-2.5 print:hidden">
-          <GraduationCap className="w-12 h-12 text-[#0D285F] mx-auto opacity-70" />
-          <h3 className="text-base font-extrabold text-slate-800">
-            محترم والدین! بچے کا تعلیمی ریکارڈ اور فیس رسید محفوظ ہے
-          </h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto">
-            اوپر کلاس اور رول نمبر درج کر کے "رسید دیکھیں" پر کلک کریں تاکہ صرف آپ کے بچے کا فیس واؤچر اور ریکارڈ کھل سکے۔
-          </p>
+      {/* 3. PROMPT & QUICK STUDENT SELECTOR */}
+      {!activeStudent && (
+        <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-6 sm:p-8 text-center space-y-4 print:hidden">
+          <GraduationCap className="w-12 h-12 text-[#0D285F] mx-auto opacity-75" />
+          <div>
+            <h3 className="text-base font-extrabold text-slate-800">
+              محترم والدین! بچے کا تعلیمی ریکارڈ اور فیس رسید
+            </h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+              اوپر رول نمبر یا نام لکھ کر تلاش کریں، یا نیچے فہرست میں سے اپنے بچے کا نام منتخب کریں:
+            </p>
+          </div>
+
+          {students.length > 0 ? (
+            <div className="pt-2">
+              <div className="text-xs font-bold text-[#0D285F] mb-3 flex items-center justify-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>اسکول کے رجسٹرڈ بچے (فوری رزلٹ اور رسید دیکھنے کے لیے نام پر کلک کریں):</span>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2.5 max-w-2xl mx-auto">
+                {students.map(st => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => {
+                      setSearchedStudent(st);
+                      setCurrentParentStudentId(st.id);
+                      setInputClass(st.className);
+                      setInputRollNo(st.rollNo);
+                      setHasSearched(true);
+                      setErrorMessage('');
+                    }}
+                    className="bg-white hover:bg-amber-50 border-2 border-slate-200 hover:border-amber-400 text-slate-800 hover:text-[#0D285F] px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2 cursor-pointer active:scale-95 group"
+                  >
+                    <span className="w-6 h-6 rounded-full bg-[#0D285F] group-hover:bg-amber-400 group-hover:text-[#0D285F] text-amber-300 inline-flex items-center justify-center text-[10px] font-mono transition">
+                      {st.rollNo}
+                    </span>
+                    <span className="text-sm font-extrabold">{st.name}</span>
+                    <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-medium">
+                      {st.className}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-slate-500 max-w-sm mx-auto bg-amber-50 border border-amber-200 p-3 rounded-xl">
+              اگر آپ نے ایڈمن پورٹل سے نیا بچہ داخل کیا ہے تو اوپر دیئے گئے باکس میں رول نمبر یا نام لکھ کر سرچ کریں۔
+            </div>
+          )}
         </div>
       )}
 

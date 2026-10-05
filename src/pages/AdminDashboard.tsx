@@ -282,7 +282,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
         monthlyFee: Number(stFormFee),
         isActive: true,
       });
-      alert(`Student ${stFormName} enrolled in ${stFormClass} with Roll No: ${rollNo}!`);
+      alert(`طالب علم ${stFormName} کلاس ${stFormClass} رول نمبر ${rollNo} میں کامیابی سے شامل ہو گیا اور کلاؤڈ سرور پر محفوظ ہو گیا!\nاب یہ بچہ ٹیچرز پورٹل اور پیرنٹس پورٹل دونوں پر فوری لائیو نظر آئے گا۔`);
     }
 
     setShowAddStudentModal(false);

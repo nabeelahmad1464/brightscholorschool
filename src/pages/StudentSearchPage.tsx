@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, User, Filter, Award, DollarSign, Calendar, ArrowRight } from 'lucide-react';
 import { useSchool } from '../context/SchoolContext';
 import { SCHOOL_CLASSES, Student } from '../types';
@@ -8,9 +8,13 @@ interface StudentSearchPageProps {
 }
 
 export const StudentSearchPage: React.FC<StudentSearchPageProps> = ({ onSelectStudent }) => {
-  const { students, getStudentFullReport } = useSchool();
+  const { students, getStudentFullReport, syncNowWithCloud } = useSchool();
   const [query, setQuery] = useState('');
   const [selectedClass, setSelectedClass] = useState<string>('All');
+
+  useEffect(() => {
+    syncNowWithCloud();
+  }, []);
 
   const filtered = students.filter(s => {
     const matchClass = selectedClass === 'All' || s.className === selectedClass;
