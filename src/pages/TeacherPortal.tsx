@@ -13,7 +13,10 @@ import {
   Bell,
   Check,
   X,
-  RefreshCw
+  RefreshCw,
+  Search,
+  Eye,
+  Camera
 } from 'lucide-react';
 import { useSchool } from '../context/SchoolContext';
 import { Student, ClassLevel, SCHOOL_CLASSES, SCHOOL_SUBJECTS } from '../types';
@@ -97,6 +100,22 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
   const classStudents = selectedClass === 'ALL'
     ? students
     : students.filter(s => s.className === selectedClass);
+
+  const filteredClassStudents = classStudents.filter(s => {
+    if (!studentFilterQuery.trim()) return true;
+    const q = studentFilterQuery.toLowerCase().trim();
+    const cleanNum = q.replace(/^0+/, '');
+    const rollClean = s.rollNo.trim().toLowerCase();
+    const rollNum = rollClean.replace(/^0+/, '');
+    return (
+      s.name.toLowerCase().includes(q) ||
+      s.fatherName.toLowerCase().includes(q) ||
+      rollClean === q ||
+      (cleanNum !== '' && rollNum === cleanNum) ||
+      s.admissionNo.toLowerCase().includes(q) ||
+      s.className.toLowerCase().includes(q)
+    );
+  });
 
   const handleSaveAttendance = () => {
     if (selectedClass === 'ALL') {
@@ -357,52 +376,83 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
             </div>
           </div>
 
-          {/* Class Summary Bar */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="bg-[#0D285F] text-amber-300 font-bold px-2.5 py-0.5 rounded text-xs">
-                  {selectedClass}
-                </span>
-                <span className="text-xs font-bold text-slate-800">
-                  کل طلباء: {classStudents.length} بچے (Total: {classStudents.length} Students)
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                غیر حاضری پر روزانہ {settings.finePerAbsentDay} روپے جرمانہ خود بخود فیس میں شامل ہوتا ہے۔
-              </p>
+          {/* Search & Class Summary Bar */}
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+              <input
+                type="text"
+                value={studentFilterQuery}
+                onChange={(e) => setStudentFilterQuery(e.target.value)}
+                placeholder="طالب علم کا نام یا رول نمبر تلاش کریں (مثلاً Maryam, مریم، 02)..."
+                className="w-full bg-slate-50 border border-slate-300 focus:border-[#0D285F] rounded-xl pl-9 pr-4 py-2.5 text-xs font-semibold outline-none transition"
+              />
+              {studentFilterQuery && (
+                <button
+                  type="button"
+                  onClick={() => setStudentFilterQuery('')}
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                >
+                  ✕ صاف کریں
+                </button>
+              )}
             </div>
 
-            {/* Quick Bulk Actions */}
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const map: Record<string, 'Present' | 'Absent' | 'Leave' | 'Late'> = {};
-                  classStudents.forEach(s => { map[s.id] = 'Present'; });
-                  setStatusMap(map);
-                }}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition shadow-sm"
-              >
-                ✓ Mark All Present (سب کو حاضر کریں)
-              </button>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-[#0D285F] text-amber-300 font-bold px-2.5 py-0.5 rounded text-xs">
+                    {selectedClass}
+                  </span>
+                  <span className="text-xs font-bold text-slate-800">
+                    کل طلباء: {filteredClassStudents.length} بچے {studentFilterQuery ? `(سرچ رزلٹ)` : ''}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  غیر حاضری پر روزانہ {settings.finePerAbsentDay} روپے جرمانہ خود بخود فیس میں شامل ہوتا ہے۔
+                </p>
+              </div>
+
+              {/* Quick Bulk Actions */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const map: Record<string, 'Present' | 'Absent' | 'Leave' | 'Late'> = {};
+                    filteredClassStudents.forEach(s => { map[s.id] = 'Present'; });
+                    setStatusMap(map);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition shadow-sm"
+                >
+                  ✓ Mark All Present (سب کو حاضر کریں)
+                </button>
+              </div>
             </div>
           </div>
 
-          {classStudents.length === 0 ? (
+          {filteredClassStudents.length === 0 ? (
             <div className="text-center py-10 px-4 bg-slate-50 rounded-xl border border-dashed border-slate-300 space-y-3">
               <p className="text-slate-700 text-xs font-bold">
-                اس کلاس ({selectedClass}) میں فی الحال کوئی بچہ داخل نہیں ہے۔
+                {studentFilterQuery
+                  ? `تلاش کردہ نام یا رول نمبر "${studentFilterQuery}" کا کوئی بچہ نہیں ملا۔`
+                  : `اس کلاس (${selectedClass}) میں فی الحال کوئی بچہ داخل نہیں ہے۔`}
               </p>
               <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                <span className="text-xs text-slate-500 font-semibold">طلباء والی کلاسز پر فوری سوئچ کریں:</span>
+                <span className="text-xs text-slate-500 font-semibold">کلاس سوئچ کریں:</span>
+                <button
+                  type="button"
+                  onClick={() => { setSelectedClass('ALL'); setStudentFilterQuery(''); }}
+                  className="bg-amber-400 hover:bg-amber-500 text-[#07193B] text-xs font-black px-3 py-1 rounded-lg transition shadow-sm"
+                >
+                  تمام کلاسز دکھائیں (All Classes)
+                </button>
                 {SCHOOL_CLASSES.filter(c => students.some(s => s.className === c)).map(c => {
                   const cCount = students.filter(s => s.className === c).length;
                   return (
                     <button
                       key={c}
                       type="button"
-                      onClick={() => setSelectedClass(c)}
+                      onClick={() => { setSelectedClass(c); setStudentFilterQuery(''); }}
                       className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 text-xs font-extrabold px-3 py-1 rounded-lg transition shadow-sm"
                     >
                       {c} ({cCount} طلباء)
@@ -419,11 +469,12 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
                     <th className="p-3">Roll No</th>
                     {selectedClass === 'ALL' && <th className="p-3">Class</th>}
                     <th className="p-3">Student & Father Name</th>
+                    <th className="p-3 text-center">Card / Photo</th>
                     <th className="p-3 text-center">Mark Attendance (حاضری لگائیں)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
-                  {classStudents.map(st => {
+                  {filteredClassStudents.map(st => {
                     const currentStatus = statusMap[st.id] ||
                       attendance.find(a => a.studentId === st.id && a.date === attDate)?.status ||
                       'Present';
@@ -443,10 +494,36 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
                           </td>
                         )}
                         <td className="p-3">
-                          <div className="font-bold text-slate-900 text-sm">{st.name}</div>
-                          <div className="text-[11px] text-slate-500">
-                            ولدیت: {st.fatherName} • Adm #{st.admissionNo}
+                          <div className="flex items-center gap-2.5">
+                            {st.photo ? (
+                              <img
+                                src={st.photo}
+                                alt={st.name}
+                                className="w-8 h-8 rounded-full object-cover border border-amber-400 flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-[#0D285F] text-amber-300 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                                {st.name.charAt(0)}
+                              </div>
+                            )}
+                            <div>
+                              <div className="font-bold text-slate-900 text-sm">{st.name}</div>
+                              <div className="text-[11px] text-slate-500">
+                                ولدیت: {st.fatherName} • Adm #{st.admissionNo}
+                              </div>
+                            </div>
                           </div>
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => onSelectStudent(st)}
+                            className="bg-slate-100 hover:bg-amber-100 text-[#0D285F] border border-slate-300 hover:border-amber-400 px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 mx-auto"
+                            title="طالب علم کا کارڈ، تصویر اور مکمل رپورٹ دیکھیں"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-amber-600" />
+                            <span>کارڈ و تصویر</span>
+                          </button>
                         </td>
                         <td className="p-3">
                           <div className="flex justify-center items-center gap-1.5 flex-wrap">
@@ -521,6 +598,26 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
             </button>
           </div>
 
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+            <input
+              type="text"
+              value={studentFilterQuery}
+              onChange={(e) => setStudentFilterQuery(e.target.value)}
+              placeholder="تمام طلباء میں تلاش کریں (نام، رول نمبر، کلاس)..."
+              className="w-full bg-slate-50 border border-slate-300 focus:border-[#0D285F] rounded-xl pl-9 pr-4 py-2.5 text-xs font-semibold outline-none transition"
+            />
+            {studentFilterQuery && (
+              <button
+                type="button"
+                onClick={() => setStudentFilterQuery('')}
+                className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs font-bold"
+              >
+                ✕ صاف کریں
+              </button>
+            )}
+          </div>
+
           {students.length === 0 ? (
             <div className="text-center py-12 px-4 bg-slate-50 rounded-xl border-2 border-dashed border-slate-300 space-y-3">
               <Users className="w-10 h-10 text-slate-400 mx-auto" />
@@ -538,15 +635,32 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
                   <tr>
                     <th className="p-3">Roll No</th>
                     <th className="p-3">Class</th>
-                    <th className="p-3">Student Name</th>
+                    <th className="p-3">Student & Photo</th>
                     <th className="p-3">Father Name</th>
                     <th className="p-3">Admission #</th>
                     <th className="p-3">Contact</th>
                     <th className="p-3">Monthly Fee</th>
+                    <th className="p-3 text-center">Profile & Card</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
-                  {students.map(st => (
+                  {students
+                    .filter(s => {
+                      if (!studentFilterQuery.trim()) return true;
+                      const q = studentFilterQuery.toLowerCase().trim();
+                      const cleanNum = q.replace(/^0+/, '');
+                      const rollClean = s.rollNo.trim().toLowerCase();
+                      const rollNum = rollClean.replace(/^0+/, '');
+                      return (
+                        s.name.toLowerCase().includes(q) ||
+                        s.fatherName.toLowerCase().includes(q) ||
+                        rollClean === q ||
+                        (cleanNum !== '' && rollNum === cleanNum) ||
+                        s.admissionNo.toLowerCase().includes(q) ||
+                        s.className.toLowerCase().includes(q)
+                      );
+                    })
+                    .map(st => (
                     <tr key={st.id} className="hover:bg-slate-50 transition">
                       <td className="p-3 font-bold text-slate-900">
                         <span className="w-7 h-7 rounded-full bg-slate-100 border border-slate-300 inline-flex items-center justify-center font-mono">
@@ -558,8 +672,23 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
                           {st.className}
                         </span>
                       </td>
-                      <td className="p-3 font-bold text-slate-900 text-sm">
-                        {st.name}
+                      <td className="p-3">
+                        <div className="flex items-center gap-2.5">
+                          {st.photo ? (
+                            <img
+                              src={st.photo}
+                              alt={st.name}
+                              className="w-8 h-8 rounded-full object-cover border border-amber-400 flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-[#0D285F] text-amber-300 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                              {st.name.charAt(0)}
+                            </div>
+                          )}
+                          <div className="font-bold text-slate-900 text-sm">
+                            {st.name}
+                          </div>
+                        </div>
                       </td>
                       <td className="p-3 text-slate-600">
                         {st.fatherName}
@@ -572,6 +701,16 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
                       </td>
                       <td className="p-3 font-bold text-slate-800">
                         Rs. {st.monthlyFee}
+                      </td>
+                      <td className="p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => onSelectStudent(st)}
+                          className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 mx-auto shadow-sm"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>کارڈ و تصویر</span>
+                        </button>
                       </td>
                     </tr>
                   ))}

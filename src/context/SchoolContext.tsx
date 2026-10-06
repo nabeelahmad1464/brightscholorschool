@@ -147,22 +147,8 @@ interface SchoolContextType {
 
 const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
 
-// Filter ONLY the exact initial sample/dummy seed IDs (s-101 to s-113)
-// NEVER filter by real Pakistani names (Muhammad Abdullah, Ahmed, Bilal, Fatima etc. are real student names)
-const DUMMY_STUDENT_IDS = new Set([
-  's-101', 's-102', 's-103', 's-104', 's-105', 's-106', 's-107',
-  's-108', 's-109', 's-110', 's-111', 's-112', 's-113'
-]);
-
-function isDummyStudent(item: any): boolean {
-  if (!item) return false;
-  if (item.id && DUMMY_STUDENT_IDS.has(item.id)) {
-    // Check if it's the old seed record with BSS-101..113
-    if (!item.admissionNo || item.admissionNo.startsWith('BSS-10') || item.admissionNo.startsWith('BSS-11')) {
-      return true;
-    }
-  }
-  if (item.studentId && DUMMY_STUDENT_IDS.has(item.studentId)) return true;
+// Keep all registered students active and preserved across all portals
+function isDummyStudent(_item: any): boolean {
   return false;
 }
 
@@ -247,30 +233,39 @@ function recoverAllLocalStudents(): Student[] {
 
 export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [students, setStudents] = useState<Student[]>(() => {
+    const raw = loadFromStorage<Student[]>('students', initialStudents);
+    if (Array.isArray(raw) && raw.length > 0) return raw;
     const recovered = recoverAllLocalStudents();
     if (recovered.length > 0) return recovered;
-    const raw = loadFromStorage<Student[]>('students', initialStudents);
-    return Array.isArray(raw) ? raw.filter(s => !isDummyStudent(s)) : [];
+    return initialStudents;
   });
   const [teachers, setTeachers] = useState<Teacher[]>(() => loadFromStorage('teachers', initialTeachers));
   const [attendance, setAttendance] = useState<StudentAttendance[]>(() => {
     const raw = loadFromStorage<StudentAttendance[]>('attendance', initialAttendance);
-    return Array.isArray(raw) ? raw.filter(a => !isDummyStudent(a)) : [];
+    if (Array.isArray(raw) && raw.length > 0) return raw;
+    return initialAttendance;
   });
   const [teacherAttendance, setTeacherAttendance] = useState<TeacherAttendance[]>(() => loadFromStorage('teacherAttendance', initialTeacherAttendance));
   const [leaves, setLeaves] = useState<LeaveRequest[]>(() => loadFromStorage('leaves', initialLeaves));
   const [feeRecords, setFeeRecords] = useState<FeeRecord[]>(() => {
     const raw = loadFromStorage<FeeRecord[]>('feeRecords', initialFeeRecords);
-    return Array.isArray(raw) ? raw.filter(f => !isDummyStudent(f)) : [];
+    if (Array.isArray(raw) && raw.length > 0) return raw;
+    return initialFeeRecords;
   });
   const [dailyReports, setDailyReports] = useState<DailyReport[]>(() => {
     const raw = loadFromStorage<DailyReport[]>('dailyReports', initialDailyReports);
-    return Array.isArray(raw) ? raw.filter(r => !isDummyStudent(r)) : [];
+    if (Array.isArray(raw) && raw.length > 0) return raw;
+    return initialDailyReports;
   });
-  const [tests, setTests] = useState<Test[]>(() => loadFromStorage('tests', initialTests));
+  const [tests, setTests] = useState<Test[]>(() => {
+    const raw = loadFromStorage<Test[]>('tests', initialTests);
+    if (Array.isArray(raw) && raw.length > 0) return raw;
+    return initialTests;
+  });
   const [testResults, setTestResults] = useState<TestResult[]>(() => {
     const raw = loadFromStorage<TestResult[]>('testResults', initialTestResults);
-    return Array.isArray(raw) ? raw.filter(tr => !isDummyStudent(tr)) : [];
+    if (Array.isArray(raw) && raw.length > 0) return raw;
+    return initialTestResults;
   });
   const [notices, setNotices] = useState<Notice[]>(() => loadFromStorage('notices', initialNotices));
   const [onlineAdmissions, setOnlineAdmissions] = useState<OnlineAdmission[]>(() => loadFromStorage('admissions', initialAdmissions));
@@ -287,9 +282,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => loadFromStorage('isAdminLoggedIn', false));
   const [currentTeacherId, setCurrentTeacherId] = useState<string | null>(() => loadFromStorage('currentTeacherId', null));
   const [currentParentStudentId, setCurrentParentStudentId] = useState<string | null>(() => {
-    const raw = loadFromStorage<string | null>('currentParentStudentId', null);
-    if (raw && DUMMY_STUDENT_IDS.has(raw)) return null;
-    return raw;
+    return loadFromStorage<string | null>('currentParentStudentId', null);
   });
   const [selectedStudentForModal, setSelectedStudentForModal] = useState<Student | null>(null);
 
@@ -434,55 +427,55 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       let data: any = null;
 
-      // 1. Try Primary Cloud Bin (api.restful-api.dev)
+      // 1. Try Global Public Cloud Bin (extendsclass.com)
       try {
-        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
+        const extRes = await fetch(GLOBAL_CLOUD_ENDPOINT_2, {
           headers: { 'Accept': 'application/json' },
           cache: 'no-store'
         });
-        if (cloudRes.ok) {
-          const parsed = await cloudRes.json();
-          const cloudData = parsed?.data || parsed;
-          if (cloudData && Array.isArray(cloudData.students)) {
-            data = cloudData;
+        if (extRes.ok) {
+          const parsed = await extRes.json();
+          const extData = parsed?.data || parsed;
+          if (extData && Array.isArray(extData.students) && extData.students.length > 0) {
+            data = extData;
           }
         }
-      } catch (cloudErr) {
+      } catch (extErr) {
         // fallback
       }
 
-      // 2. Try Secondary Cloud Bin if primary didn't provide students
+      // 2. Try local container API /api/school-data
       if (!data || !Array.isArray(data.students) || data.students.length === 0) {
-        try {
-          const extRes = await fetch(GLOBAL_CLOUD_ENDPOINT_2, {
-            headers: { 'Accept': 'application/json' },
-            cache: 'no-store'
-          });
-          if (extRes.ok) {
-            const parsed = await extRes.json();
-            const extData = parsed?.data || parsed;
-            if (extData && Array.isArray(extData.students) && extData.students.length > 0) {
-              data = extData;
-            }
-          }
-        } catch (extErr) {
-          // fallback
-        }
-      }
-
-      // 3. Fallback to local server API if cloud bin unreachable
-      if (!data) {
         try {
           const localRes = await fetch('/api/school-data');
           if (localRes.ok) {
             const parsed = await localRes.json();
             const localData = parsed?.data || parsed;
-            if (localData && Array.isArray(localData.students)) {
+            if (localData && Array.isArray(localData.students) && localData.students.length > 0) {
               data = localData;
             }
           }
         } catch (localErr) {
           // ignore
+        }
+      }
+
+      // 3. Fallback to secondary endpoint if needed
+      if (!data || !Array.isArray(data.students) || data.students.length === 0) {
+        try {
+          const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
+            headers: { 'Accept': 'application/json' },
+            cache: 'no-store'
+          });
+          if (cloudRes.ok) {
+            const parsed = await cloudRes.json();
+            const cloudData = parsed?.data || parsed;
+            if (cloudData && Array.isArray(cloudData.students)) {
+              data = cloudData;
+            }
+          }
+        } catch (cloudErr) {
+          // fallback
         }
       }
 

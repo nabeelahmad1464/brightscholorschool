@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   X,
   User,
@@ -11,10 +11,14 @@ import {
   Printer,
   Share2,
   MessageCircle,
-  Clock
+  Clock,
+  Camera,
+  Download,
+  Image as ImageIcon
 } from 'lucide-react';
 import { useSchool } from '../context/SchoolContext';
 import { Student } from '../types';
+import { downloadStudentPhotoDirectly, downloadReceiptElementAsImage } from '../utils/downloadReceiptImage';
 
 interface StudentProfileModalProps {
   student: Student | null;
@@ -22,7 +26,8 @@ interface StudentProfileModalProps {
 }
 
 export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({ student, onClose }) => {
-  const { getStudentFullReport, openWhatsApp } = useSchool();
+  const { getStudentFullReport, openWhatsApp, updateStudent } = useSchool();
+  const [isDownloadingCard, setIsDownloadingCard] = useState(false);
 
   if (!student) return null;
 
@@ -31,6 +36,38 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({ studen
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadPhoto = () => {
+    const ok = downloadStudentPhotoDirectly(student);
+    if (ok) {
+      alert(`طالب علم ${student.name} کی تصویر (Photo) کامیابی سے ڈاؤن لوڈ ہو گئی!`);
+    }
+  };
+
+  const handleDownloadCard = async () => {
+    setIsDownloadingCard(true);
+    const fileName = `Student_Card_${student.name.replace(/\s+/g, '_')}_${student.className}`;
+    const ok = await downloadReceiptElementAsImage('printable-student-card', fileName);
+    setIsDownloadingCard(false);
+    if (ok) {
+      alert(`طالب علم ${student.name} کا مکمل تعلیمی کارڈ (ID Card Image) کامیابی سے ڈاؤن لوڈ ہو گیا!`);
+    }
+  };
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      updateStudent({
+        ...student,
+        photo: base64
+      });
+      alert(`طالب علم ${student.name} کی نئی تصویر محفوظ ہو گئی!`);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleWhatsAppShare = () => {
@@ -66,10 +103,34 @@ Chak No. 47 GB, Samundri | Ph: 0302-5053993`;
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 print:p-0 print:bg-white">
       <div className="relative bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 print:border-none print:shadow-none print:max-h-none print:w-full">
         {/* Modal Top Bar */}
-        <div className="bg-[#0D285F] text-white p-5 flex items-center justify-between border-b-2 border-amber-400 print:bg-transparent print:text-slate-900 print:border-b-2 print:border-slate-800">
+        <div className="bg-[#0D285F] text-white p-5 flex items-center justify-between border-b-2 border-amber-400 print:bg-transparent print:text-slate-900 print:border-b-2 print:border-slate-800 flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-amber-400 text-[#07193B] flex items-center justify-center font-bold font-serif-crest text-lg flex-shrink-0">
-              {student.name.charAt(0)}
+            <div className="relative group">
+              {student.photo ? (
+                <img
+                  src={student.photo}
+                  alt={student.name}
+                  className="w-14 h-14 rounded-2xl object-cover border-2 border-amber-400 shadow-md bg-white flex-shrink-0"
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-2xl bg-amber-400 text-[#07193B] flex items-center justify-center font-bold font-serif-crest text-xl flex-shrink-0 shadow-md border-2 border-amber-300">
+                  {student.name.charAt(0)}
+                </div>
+              )}
+              <label
+                htmlFor="profile-photo-upload"
+                className="absolute -bottom-1 -right-1 bg-[#0D285F] hover:bg-[#07193B] text-amber-300 p-1 rounded-full border border-amber-400 cursor-pointer shadow print:hidden"
+                title="طالب علم کی تصویر اپلوڈ یا تبدیل کریں"
+              >
+                <Camera className="w-3 h-3" />
+              </label>
+              <input
+                id="profile-photo-upload"
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoUpload}
+                className="hidden"
+              />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -84,7 +145,28 @@ Chak No. 47 GB, Samundri | Ph: 0302-5053993`;
             </div>
           </div>
 
-          <div className="flex items-center gap-2 print:hidden">
+          <div className="flex items-center gap-2 print:hidden flex-wrap">
+            {/* Download Student Photo */}
+            <button
+              onClick={handleDownloadPhoto}
+              className="flex items-center gap-1.5 bg-amber-400 hover:bg-amber-500 text-[#07193B] px-3 py-1.5 rounded-lg text-xs font-black transition shadow-sm active:scale-95"
+              title="طالب علم کی تصویر ڈاؤن لوڈ کریں (Download Photo)"
+            >
+              <Camera className="w-4 h-4 text-[#07193B]" />
+              <span>تصویر ڈاؤن لوڈ</span>
+            </button>
+
+            {/* Download Official ID Card Image */}
+            <button
+              onClick={handleDownloadCard}
+              disabled={isDownloadingCard}
+              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm active:scale-95 disabled:opacity-75"
+              title="مکمل اسٹوڈنٹ کارڈ بطور تصویر ڈاؤن لوڈ کریں"
+            >
+              <Download className="w-4 h-4" />
+              <span>{isDownloadingCard ? 'ڈاؤن لوڈ...' : 'کارڈ تصویر (ID Card)'}</span>
+            </button>
+
             <button
               onClick={handlePrint}
               className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition"
@@ -111,7 +193,7 @@ Chak No. 47 GB, Samundri | Ph: 0302-5053993`;
         </div>
 
         {/* Scrollable Body */}
-        <div className="p-6 overflow-y-auto space-y-6">
+        <div id="printable-student-card" className="p-6 overflow-y-auto space-y-6 bg-white">
           {/* Printable School Crest Title for official slips */}
           <div className="hidden print:block text-center border-b pb-4 mb-4">
             <h1 className="text-2xl font-bold tracking-wider font-serif-crest text-[#0D285F]">
@@ -179,34 +261,67 @@ Chak No. 47 GB, Samundri | Ph: 0302-5053993`;
 
           {/* Student Profile Details */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-              <User className="w-4 h-4 text-[#0D285F]" />
-              Bio & Contact Information
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div>
-                <span className="text-slate-500">Father's Name:</span>
-                <p className="font-semibold text-slate-800">{student.fatherName}</p>
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <User className="w-4 h-4 text-[#0D285F]" />
+                Bio & Contact Information (طالب علم کی تفصیلات و تصویر)
+              </h3>
+              <button
+                type="button"
+                onClick={handleDownloadPhoto}
+                className="bg-amber-400 hover:bg-amber-500 text-[#07193B] text-[11px] font-black px-3 py-1 rounded-lg flex items-center gap-1.5 shadow-sm print:hidden"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>تصویر ڈاؤن لوڈ کریں (Download Photo)</span>
+              </button>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 items-start">
+              {/* Photo Display */}
+              <div className="flex-shrink-0 text-center sm:text-left mx-auto sm:mx-0">
+                {student.photo ? (
+                  <img
+                    src={student.photo}
+                    alt={student.name}
+                    className="w-24 h-28 object-cover rounded-xl border-2 border-slate-300 shadow-sm bg-white"
+                  />
+                ) : (
+                  <div className="w-24 h-28 rounded-xl bg-slate-200 border-2 border-dashed border-slate-400 flex flex-col items-center justify-center text-slate-500 p-2 text-center">
+                    <User className="w-8 h-8 text-slate-400 mb-1" />
+                    <span className="text-[10px] font-bold">No Photo</span>
+                  </div>
+                )}
+                <div className="mt-1 text-[10px] font-bold text-slate-600">
+                  Roll #{student.rollNo}
+                </div>
               </div>
-              <div>
-                <span className="text-slate-500">Date of Birth:</span>
-                <p className="font-semibold text-slate-800">{student.dob} ({student.gender})</p>
-              </div>
-              <div>
-                <span className="text-slate-500">Admission Date:</span>
-                <p className="font-semibold text-slate-800">{student.admissionDate}</p>
-              </div>
-              <div>
-                <span className="text-slate-500">Contact Number:</span>
-                <p className="font-semibold text-slate-800">{student.contactNo}</p>
-              </div>
-              <div>
-                <span className="text-slate-500">WhatsApp Number:</span>
-                <p className="font-semibold text-slate-800">{student.whatsappNo || student.contactNo}</p>
-              </div>
-              <div>
-                <span className="text-slate-500">Home Address:</span>
-                <p className="font-semibold text-slate-800">{student.address}</p>
+
+              {/* Info Details Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs flex-1 w-full">
+                <div>
+                  <span className="text-slate-500">Father's Name:</span>
+                  <p className="font-semibold text-slate-800">{student.fatherName}</p>
+                </div>
+                <div>
+                  <span className="text-slate-500">Date of Birth:</span>
+                  <p className="font-semibold text-slate-800">{student.dob} ({student.gender})</p>
+                </div>
+                <div>
+                  <span className="text-slate-500">Admission Date:</span>
+                  <p className="font-semibold text-slate-800">{student.admissionDate}</p>
+                </div>
+                <div>
+                  <span className="text-slate-500">Contact Number:</span>
+                  <p className="font-semibold text-slate-800">{student.contactNo}</p>
+                </div>
+                <div>
+                  <span className="text-slate-500">WhatsApp Number:</span>
+                  <p className="font-semibold text-slate-800">{student.whatsappNo || student.contactNo}</p>
+                </div>
+                <div>
+                  <span className="text-slate-500">Home Address:</span>
+                  <p className="font-semibold text-slate-800">{student.address}</p>
+                </div>
               </div>
             </div>
           </div>

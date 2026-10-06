@@ -13,10 +13,13 @@ import {
   Phone,
   Search,
   ShieldCheck,
-  FileText
+  FileText,
+  Camera,
+  Download
 } from 'lucide-react';
 import { useSchool } from '../context/SchoolContext';
 import { Student, ClassLevel, SCHOOL_CLASSES, FeeRecord } from '../types';
+import { downloadReceiptElementAsImage, generateAndDownloadReceiptCanvas } from '../utils/downloadReceiptImage';
 
 interface ParentPortalProps {
   onSelectStudent: (student: Student) => void;
@@ -203,6 +206,35 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
     setLeaveSubmitted(true);
     setLeaveReason('');
     alert('رخصت کی درخواست اسکول انتظامیہ کو بھیج دی گئی ہے!');
+  };
+
+  const [isDownloadingImage, setIsDownloadingImage] = useState(false);
+
+  const handleDownloadReceiptPicture = async () => {
+    if (!activeStudent || !studentFeeRecord) return;
+    setIsDownloadingImage(true);
+    const fileName = `Fee_Receipt_${activeStudent.name.replace(/\s+/g, '_')}_Roll_${activeStudent.rollNo}`;
+
+    // First try capturing the exact styled receipt card element
+    let ok = await downloadReceiptElementAsImage('official-fee-receipt-card', fileName);
+
+    // Fallback to high-res direct canvas generator if html2canvas had any issue
+    if (!ok) {
+      ok = generateAndDownloadReceiptCanvas(
+        activeStudent,
+        studentFeeRecord,
+        settings.finePerAbsentDay || 50,
+        settings.schoolName,
+        settings.schoolAddress
+      );
+    }
+
+    setIsDownloadingImage(false);
+    if (ok) {
+      alert(`رسید کی تصویر (Picture) کامیابی سے ڈاؤن لوڈ ہو گئی ہے!\nآپ اپنے موبائل کی گیلری یا ڈاؤن لوڈز فولڈر میں دیکھ سکتے ہیں۔`);
+    } else {
+      alert('تصویر ڈاؤن لوڈ کرنے میں دقت آئی، براہ کرم دوبارہ کوشش فرمائیں۔');
+    }
   };
 
   const handlePrintReceipt = () => {
@@ -409,7 +441,10 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
           </div>
 
           {/* THE OFFICIAL FEE RECEIPT VOUCHER (رسید کی رسید براہ راست سامنے) */}
-          <div className="bg-white rounded-3xl border-2 border-amber-400 shadow-xl overflow-hidden print:m-0 print:border-none print:shadow-none">
+          <div
+            id="official-fee-receipt-card"
+            className="bg-white rounded-3xl border-2 border-amber-400 shadow-xl overflow-hidden print:m-0 print:border-none print:shadow-none"
+          >
             {/* Receipt Header Banner */}
             <div className="bg-[#0D285F] text-white p-5 sm:p-6 border-b-4 border-amber-400">
               <div className="flex flex-wrap items-center justify-between gap-4">
@@ -550,15 +585,25 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                   </p>
                 </div>
 
-                {/* Print and WhatsApp Buttons */}
-                <div className="flex items-center gap-2 print:hidden">
+                {/* Download Picture, Print, and WhatsApp Buttons */}
+                <div className="flex flex-wrap items-center gap-2 print:hidden">
+                  <button
+                    type="button"
+                    onClick={handleDownloadReceiptPicture}
+                    disabled={isDownloadingImage}
+                    className="bg-amber-400 hover:bg-amber-500 text-[#07193B] font-black text-xs px-4 py-2.5 rounded-xl transition shadow flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-70"
+                    title="رسید کی تصویر (Picture / Image) اپنے موبائل میں ڈاؤن لوڈ کریں"
+                  >
+                    <Camera className="w-4 h-4 text-[#07193B]" />
+                    <span>{isDownloadingImage ? 'تصویر بن رہی ہے...' : 'تصویر ڈاؤن لوڈ کریں (Download Picture)'}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={handlePrintReceipt}
                     className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 font-extrabold text-xs px-4 py-2.5 rounded-xl transition shadow flex items-center gap-1.5 cursor-pointer"
                   >
                     <Printer className="w-4 h-4" />
-                    <span>پرنٹ فیس رسید (Print)</span>
+                    <span>پرنٹ رسید (Print)</span>
                   </button>
                   <button
                     type="button"

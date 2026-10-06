@@ -1,7 +1,8 @@
-import React from 'react';
-import { X, Printer, MessageCircle, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Printer, MessageCircle, CheckCircle, Clock, AlertCircle, Camera } from 'lucide-react';
 import { FeeRecord, Student } from '../types';
 import { useSchool } from '../context/SchoolContext';
+import { downloadReceiptElementAsImage, generateAndDownloadReceiptCanvas } from '../utils/downloadReceiptImage';
 
 interface FeeReceiptModalProps {
   feeRecord: FeeRecord | null;
@@ -16,6 +17,28 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
   const student = students.find(s => s.id === feeRecord.studentId);
   const contactNo = student?.whatsappNo || student?.contactNo || '';
   const finePerDay = settings.finePerAbsentDay || 50;
+
+  const [isDownloadingImage, setIsDownloadingImage] = useState(false);
+
+  const handleDownloadPicture = async () => {
+    if (!feeRecord) return;
+    setIsDownloadingImage(true);
+    const fileName = `Fee_Receipt_${feeRecord.studentName.replace(/\s+/g, '_')}_${feeRecord.className}`;
+    let ok = await downloadReceiptElementAsImage('printable-receipt', fileName);
+    if (!ok && student) {
+      ok = generateAndDownloadReceiptCanvas(
+        student,
+        feeRecord,
+        finePerDay,
+        settings.schoolName,
+        settings.schoolAddress
+      );
+    }
+    setIsDownloadingImage(false);
+    if (ok) {
+      alert(`رسید کی تصویر (Picture) کامیابی سے ڈاؤن لوڈ ہو گئی ہے!`);
+    }
+  };
 
   const handlePrint = () => {
     window.print();
@@ -51,6 +74,15 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
             Fee Voucher & Payment Receipt
           </span>
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleDownloadPicture}
+              disabled={isDownloadingImage}
+              className="bg-amber-400 hover:bg-amber-500 text-[#07193B] px-2.5 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-70"
+              title="رسید کی تصویر (Picture / Image) ڈاؤن لوڈ کریں"
+            >
+              <Camera className="w-4 h-4 text-[#07193B]" />
+              <span>{isDownloadingImage ? 'تصویر...' : 'تصویر ڈاؤن لوڈ (Picture)'}</span>
+            </button>
             <button
               onClick={handlePrint}
               className="bg-slate-100 hover:bg-slate-200 text-slate-800 p-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5"
@@ -103,40 +135,56 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
           </div>
 
           {/* Receipt Meta & Student Details */}
-          <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-3 rounded-lg border border-slate-200">
-            <div>
-              <span className="text-slate-500 block text-[10px]">Receipt No / رسید نمبر:</span>
-              <span className="font-mono font-bold text-slate-900">
-                {feeRecord.receiptNo || `REC-BSS-${feeRecord.id.slice(-5)}`}
-              </span>
-            </div>
-            <div className="text-right">
-              <span className="text-slate-500 block text-[10px]">Billing Month / مہینہ:</span>
-              <span className="font-bold text-[#0D285F]">{feeRecord.month}</span>
-            </div>
-            <div>
-              <span className="text-slate-500 block text-[10px]">Student Name / طالب علم:</span>
-              <span className="font-extrabold text-slate-900 text-sm">{feeRecord.studentName}</span>
-            </div>
-            <div className="text-right">
-              <span className="text-slate-500 block text-[10px]">Father Name / ولدیت:</span>
-              <span className="font-semibold text-slate-800">{feeRecord.fatherName}</span>
-            </div>
-            <div>
-              <span className="text-slate-500 block text-[10px]">Class / کلاس:</span>
-              <span className="font-bold text-[#0D285F]">{feeRecord.className}</span>
-            </div>
-            <div className="text-right">
-              <span className="text-slate-500 block text-[10px]">Status / کیفیت:</span>
-              <span className={`inline-block px-2 py-0.5 rounded font-black text-[10px] ${
-                feeRecord.status === 'Paid'
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : feeRecord.status === 'Partial'
-                  ? 'bg-amber-100 text-amber-800'
-                  : 'bg-red-100 text-red-800'
-              }`}>
-                {feeRecord.status === 'Paid' ? '✓ PAID' : feeRecord.status === 'Partial' ? 'PARTIAL' : 'UNPAID'}
-              </span>
+          <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <div className="flex items-center gap-3">
+              {student?.photo ? (
+                <img
+                  src={student.photo}
+                  alt={feeRecord.studentName}
+                  className="w-14 h-16 object-cover rounded-lg border border-slate-300 shadow-sm bg-white flex-shrink-0"
+                />
+              ) : (
+                <div className="w-14 h-16 rounded-lg bg-amber-100 border border-amber-300 flex flex-col items-center justify-center text-[#0D285F] font-bold text-lg flex-shrink-0">
+                  {feeRecord.studentName.charAt(0)}
+                  <span className="text-[9px] font-mono text-slate-500">#{student?.rollNo || '01'}</span>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs flex-1">
+                <div>
+                  <span className="text-slate-500 block text-[10px]">Receipt No / رسید نمبر:</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {feeRecord.receiptNo || `REC-BSS-${feeRecord.id.slice(-5)}`}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-slate-500 block text-[10px]">Billing Month / مہینہ:</span>
+                  <span className="font-bold text-[#0D285F]">{feeRecord.month}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px]">Student Name / طالب علم:</span>
+                  <span className="font-extrabold text-slate-900 text-sm">{feeRecord.studentName}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-slate-500 block text-[10px]">Father Name / ولدیت:</span>
+                  <span className="font-semibold text-slate-800">{feeRecord.fatherName}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px]">Class / کلاس:</span>
+                  <span className="font-bold text-[#0D285F]">{feeRecord.className} {student?.rollNo ? `(Roll #${student.rollNo})` : ''}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-slate-500 block text-[10px]">Status / کیفیت:</span>
+                  <span className={`inline-block px-2 py-0.5 rounded font-black text-[10px] ${
+                    feeRecord.status === 'Paid'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : feeRecord.status === 'Partial'
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-red-100 text-red-800'
+                  }`}>
+                    {feeRecord.status === 'Paid' ? '✓ PAID' : feeRecord.status === 'Partial' ? 'PARTIAL' : 'UNPAID'}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 

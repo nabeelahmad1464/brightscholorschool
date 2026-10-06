@@ -69,6 +69,7 @@ export interface Student {
   gender: 'Male' | 'Female';
   monthlyFee: number;
   isActive: boolean;
+  photo?: string; // Base64 data URL or image link for student profile & picture download
 }
 
 export interface Teacher {
