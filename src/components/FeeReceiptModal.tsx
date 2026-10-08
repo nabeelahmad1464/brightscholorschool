@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Printer, MessageCircle, CheckCircle, Clock, AlertCircle, Camera } from 'lucide-react';
+import { X, Printer, MessageCircle, CheckCircle, Clock, AlertCircle, Camera, Edit3, Save, RotateCcw } from 'lucide-react';
 import { FeeRecord, Student } from '../types';
 import { useSchool } from '../context/SchoolContext';
 import { downloadReceiptElementAsImage, generateAndDownloadReceiptCanvas } from '../utils/downloadReceiptImage';
@@ -10,7 +10,7 @@ interface FeeReceiptModalProps {
 }
 
 export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onClose }) => {
-  const { settings, openWhatsApp, students } = useSchool();
+  const { settings, openWhatsApp, students, updateFeeRecord } = useSchool();
 
   if (!feeRecord) return null;
 
@@ -18,12 +18,42 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
   const contactNo = student?.whatsappNo || student?.contactNo || '';
   const finePerDay = settings.finePerAbsentDay || 50;
 
+  // Custom Fee Editing State (علیحدہ سے فیس درج کریں)
+  const [isEditingCustomFee, setIsEditingCustomFee] = useState(false);
+  const [customTuitionInput, setCustomTuitionInput] = useState<number>(feeRecord.tuitionFee);
+  const [customFineInput, setCustomFineInput] = useState<number>(feeRecord.fineAmount);
+  const [customPaidInput, setCustomPaidInput] = useState<number>(feeRecord.paidAmount);
   const [isDownloadingImage, setIsDownloadingImage] = useState(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState(false);
+
+  const handleSaveCustomFee = () => {
+    const tuition = Math.max(0, Number(customTuitionInput) || 0);
+    const fine = Math.max(0, Number(customFineInput) || 0);
+    const paid = Math.max(0, Number(customPaidInput) || 0);
+    const total = tuition + fine;
+    const balance = Math.max(0, total - paid);
+    const status: 'Paid' | 'Partial' | 'Unpaid' = balance === 0 ? 'Paid' : (paid > 0 ? 'Partial' : 'Unpaid');
+
+    const updated: FeeRecord = {
+      ...feeRecord,
+      tuitionFee: tuition,
+      fineAmount: fine,
+      totalPayable: total,
+      paidAmount: paid,
+      balanceRemaining: balance,
+      status
+    };
+
+    updateFeeRecord(updated);
+    setIsEditingCustomFee(false);
+    setSaveSuccessMsg(true);
+    setTimeout(() => setSaveSuccessMsg(false), 2500);
+  };
 
   const handleDownloadPicture = async () => {
     if (!feeRecord) return;
     setIsDownloadingImage(true);
-    const fileName = `Fee_Receipt_${feeRecord.studentName.replace(/\s+/g, '_')}_${feeRecord.className}`;
+    const fileName = `BSS_Fee_Receipt_${feeRecord.studentName.replace(/\s+/g, '_')}_${feeRecord.className}`;
     let ok = await downloadReceiptElementAsImage('printable-receipt', fileName);
     if (!ok && student) {
       ok = generateAndDownloadReceiptCanvas(
@@ -36,7 +66,7 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
     }
     setIsDownloadingImage(false);
     if (ok) {
-      alert(`رسید کی تصویر (Picture) کامیابی سے ڈاؤن لوڈ ہو گئی ہے!`);
+      alert(`رسید کی واضح تصویر (Picture) کامیابی سے گیلری / ڈاؤن لوڈز میں محفوظ ہو گئی ہے!`);
     }
   };
 
@@ -69,36 +99,61 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
     <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-8 print:m-0 print:p-4 print:shadow-none print:border-none print:w-full">
         {/* Modal Top Actions */}
-        <div className="flex justify-between items-center print:hidden border-b pb-3">
-          <span className="font-extrabold text-sm text-[#0D285F] uppercase tracking-wider">
-            Fee Voucher & Payment Receipt
-          </span>
-          <div className="flex items-center gap-2">
+        <div className="flex justify-between items-center print:hidden border-b pb-3 flex-wrap gap-2">
+          <div>
+            <span className="font-extrabold text-sm text-[#0D285F] uppercase tracking-wider block">
+              Fee Voucher & Official Receipt
+            </span>
+            <span className="text-[11px] text-slate-500">
+              رسید گیلری میں تصویر کی طرح ڈاؤن لوڈ کریں یا فیس ایڈٹ کریں
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Custom Fee Edit Button */}
+            <button
+              onClick={() => {
+                setCustomTuitionInput(feeRecord.tuitionFee);
+                setCustomFineInput(feeRecord.fineAmount);
+                setCustomPaidInput(feeRecord.paidAmount);
+                setIsEditingCustomFee(!isEditingCustomFee);
+              }}
+              className="bg-blue-50 hover:bg-blue-100 text-[#0D285F] border border-blue-300 px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1"
+              title="اس بچے کی فیس علیحدہ سے ایڈٹ کریں"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-blue-700" />
+              <span>{isEditingCustomFee ? 'کینسل' : 'فیس ایڈٹ (Custom)'}</span>
+            </button>
+
+            {/* Picture Download Button */}
             <button
               onClick={handleDownloadPicture}
               disabled={isDownloadingImage}
-              className="bg-amber-400 hover:bg-amber-500 text-[#07193B] px-2.5 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-70"
-              title="رسید کی تصویر (Picture / Image) ڈاؤن لوڈ کریں"
+              className="bg-amber-400 hover:bg-amber-500 text-[#07193B] px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-70 cursor-pointer"
+              title="رسید کی تصویر (Picture / Image) گیلری میں ڈاؤن لوڈ کریں"
             >
               <Camera className="w-4 h-4 text-[#07193B]" />
               <span>{isDownloadingImage ? 'تصویر...' : 'تصویر ڈاؤن لوڈ (Picture)'}</span>
             </button>
+
             <button
               onClick={handlePrint}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-800 p-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5"
+              className="bg-slate-100 hover:bg-slate-200 text-slate-800 p-2 rounded-lg text-xs font-bold transition flex items-center gap-1"
               title="Print Receipt"
             >
               <Printer className="w-4 h-4 text-slate-600" />
-              <span>Print</span>
+              <span className="hidden sm:inline">Print</span>
             </button>
+
             <button
               onClick={handleShareWhatsApp}
-              className="bg-[#25D366] hover:bg-[#20b858] text-white p-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5"
+              className="bg-[#25D366] hover:bg-[#20b858] text-white p-2 rounded-lg text-xs font-bold transition flex items-center gap-1"
               title="Share on WhatsApp"
             >
               <MessageCircle className="w-4 h-4 fill-current" />
-              <span>WhatsApp</span>
+              <span className="hidden sm:inline">WhatsApp</span>
             </button>
+
             <button
               onClick={onClose}
               className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition"
@@ -107,6 +162,83 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
             </button>
           </div>
         </div>
+
+        {/* Custom Fee Editor Card if Toggled */}
+        {isEditingCustomFee && (
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 text-xs space-y-3 print:hidden">
+            <div className="flex items-center justify-between">
+              <span className="font-extrabold text-[#0D285F] text-xs">
+                اس بچے کی فیس علیحدہ سے درج کریں (Set Custom Fee for Student):
+              </span>
+              <span className="text-[10px] text-amber-800 font-bold">
+                {feeRecord.className}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                  ماہانہ فیس (Rs.)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={customTuitionInput}
+                  onChange={(e) => setCustomTuitionInput(Number(e.target.value))}
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-900 outline-none focus:ring-2 focus:ring-[#0D285F]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                  غیر حاضری جرمانہ (Rs.)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={customFineInput}
+                  onChange={(e) => setCustomFineInput(Number(e.target.value))}
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-bold text-red-700 outline-none focus:ring-2 focus:ring-[#0D285F]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                  وصول شدہ رقم (Rs.)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={customPaidInput}
+                  onChange={(e) => setCustomPaidInput(Number(e.target.value))}
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-bold text-emerald-700 outline-none focus:ring-2 focus:ring-[#0D285F]"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[11px] text-slate-600">
+                کل رقم: <strong>Rs. {(customTuitionInput + customFineInput).toLocaleString()}</strong> | بقایا: <strong>Rs. {Math.max(0, (customTuitionInput + customFineInput) - customPaidInput).toLocaleString()}</strong>
+              </span>
+
+              <button
+                type="button"
+                onClick={handleSaveCustomFee}
+                className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 px-4 py-1.5 rounded-lg font-black text-xs flex items-center gap-1.5 shadow"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>رسید پر لاگو کریں (Save Fee)</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {saveSuccessMsg && (
+          <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs p-2.5 rounded-xl font-bold flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <span>اس بچے کی فیس رسید پر اپڈیٹ ہو گئی ہے اور کلاؤڈ سرور پر محفوظ ہو گئی!</span>
+          </div>
+        )}
 
         {/* PRINTABLE RECEIPT BODY */}
         <div id="printable-receipt" className="border-2 border-slate-800 rounded-xl p-5 space-y-4 bg-white">
@@ -268,18 +400,26 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
         {/* Modal Bottom Buttons */}
         <div className="flex gap-2 print:hidden pt-2">
           <button
+            onClick={handleDownloadPicture}
+            disabled={isDownloadingImage}
+            className="flex-1 bg-amber-400 hover:bg-amber-500 text-[#07193B] py-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-2 shadow active:scale-95 disabled:opacity-70 cursor-pointer"
+          >
+            <Camera className="w-4 h-4 text-[#07193B]" />
+            <span>{isDownloadingImage ? 'تصویر تیار ہو رہی ہے...' : 'تصویر ڈاؤن لوڈ کریں (Download Image)'}</span>
+          </button>
+          <button
             onClick={handlePrint}
             className="flex-1 bg-[#0D285F] hover:bg-[#07193B] text-white py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow"
           >
             <Printer className="w-4 h-4" />
-            <span>Print Receipt (پرنٹ رسید)</span>
+            <span>Print Receipt (پرنٹ)</span>
           </button>
           <button
             onClick={handleShareWhatsApp}
             className="flex-1 bg-[#25D366] hover:bg-[#20b858] text-white py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow"
           >
             <MessageCircle className="w-4 h-4 fill-current" />
-            <span>Send on WhatsApp</span>
+            <span>WhatsApp پر بھیجیں</span>
           </button>
         </div>
       </div>

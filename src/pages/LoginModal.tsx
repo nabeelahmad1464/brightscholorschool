@@ -23,11 +23,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
   const [activeRole, setActiveRole] = useState<'admin' | 'teacher' | 'parent'>('admin');
   const [adminPassword, setAdminPassword] = useState('');
   const [teacherId, setTeacherId] = useState(teachers[0]?.id || '');
-  const [teacherMode, setTeacherMode] = useState<'select' | 'custom'>('select');
-  const [customTeacherName, setCustomTeacherName] = useState('');
-  const [teacherPassword, setTeacherPassword] = useState('teacher123');
-  const [parentIdentifier, setParentIdentifier] = useState('01');
-  const [parentClass, setParentClass] = useState('Class 5');
+  const [teacherPassword, setTeacherPassword] = useState('');
+  const [parentIdentifier, setParentIdentifier] = useState('02');
+  const [parentClass, setParentClass] = useState('Class 4');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -45,7 +43,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     if (success) {
       onClose();
     } else {
-      setError('Incorrect admin password. Please enter your valid administrator password.');
+      setError('ایڈمن پاسورڈ غلط ہے۔ براہ کرم درست ایڈمن پاسورڈ درج کریں۔ (Incorrect admin password)');
     }
   };
 
@@ -53,29 +51,21 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     e.preventDefault();
     setError('');
 
-    if (teacherMode === 'custom') {
-      if (!customTeacherName.trim()) {
-        setError('Please enter your full name (استاد کا نام لکھیں).');
-        return;
-      }
-      const success = loginOrCreateTeacherByName(customTeacherName, teacherPassword);
-      if (success) {
-        onClose();
-      } else {
-        setError('Unable to log in. Please try again.');
-      }
+    const selectedId = teacherId || teachers[0]?.id;
+    if (!selectedId) {
+      setError('براہ کرم استاد کا نام منتخب کریں۔');
+      return;
+    }
+    if (!teacherPassword.trim()) {
+      setError('براہ کرم اپنا پاسورڈ درج کریں۔ (Please enter teacher password)');
+      return;
+    }
+
+    const success = loginTeacher(selectedId, teacherPassword);
+    if (success) {
+      onClose();
     } else {
-      const selectedId = teacherId || teachers[0]?.id;
-      if (!selectedId) {
-        setError('Please select a teacher or type your name.');
-        return;
-      }
-      const success = loginTeacher(selectedId, teacherPassword);
-      if (success) {
-        onClose();
-      } else {
-        setError('Unable to log in. Please try again.');
-      }
+      setError('پاسورڈ غلط ہے! صرف مجاز اساتذہ ہی لاگ ان ہو سکتے ہیں۔ اگر آپ پاسورڈ بھول گئے ہیں تو ایڈمن سے رابطہ کریں۔');
     }
   };
 
@@ -209,75 +199,30 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
                 <span className="font-bold">Faculty Portal:</span> Mark attendance, record daily homework & tarbiyat remarks, enter test marks.
                 <div className="mt-1 text-[11px] text-blue-800">
-                  اساتذہ اپنا نام منتخب کر کے کوئی بھی پاس ورڈ لگا کر لاگ ان کر سکتے ہیں۔
+                  اساتذہ اپنا نام منتخب کر کے اسکول کا مقرر کردہ پاسورڈ درج کر کے لاگ ان کریں۔
                 </div>
               </div>
-
-              {/* Mode Toggle: Select from List or Type Name */}
-              <div className="flex bg-slate-100 p-1 rounded-lg text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => setTeacherMode('select')}
-                  className={`flex-1 py-1.5 rounded-md text-center transition ${
-                    teacherMode === 'select'
-                      ? 'bg-white text-[#0D285F] shadow-sm font-bold'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Select from List (لسٹ سے منتخب کریں)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTeacherMode('custom')}
-                  className={`flex-1 py-1.5 rounded-md text-center transition ${
-                    teacherMode === 'custom'
-                      ? 'bg-white text-[#0D285F] shadow-sm font-bold'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Type Name (اپنا نام لکھیں)
-                </button>
-              </div>
-
-              {teacherMode === 'select' ? (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Select Faculty Member (استاد کا نام)
-                  </label>
-                  <select
-                    value={teacherId}
-                    onChange={(e) => setTeacherId(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0D285F] outline-none bg-white"
-                  >
-                    {teachers.map(t => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} ({t.subject})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Enter Faculty Full Name (استاد کا نام لکھیں)
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={customTeacherName}
-                    onChange={(e) => setCustomTeacherName(e.target.value)}
-                    placeholder="e.g. Madam Saba, Sir Usman, etc."
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0D285F] outline-none"
-                  />
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    اگر آپ کا نام لسٹ میں نہیں ہے تو اپنا نام لکھ کر داخل ہو سکتے ہیں۔
-                  </p>
-                </div>
-              )}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Teacher Password (پاس ورڈ)
+                  Select Faculty Member (استاد کا نام)
+                </label>
+                <select
+                  value={teacherId}
+                  onChange={(e) => setTeacherId(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0D285F] outline-none bg-white font-medium"
+                >
+                  {teachers.map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.subject})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Teacher Password (پاسورڈ)
                 </label>
                 <div className="relative">
                   <input
@@ -285,13 +230,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     required
                     value={teacherPassword}
                     onChange={(e) => setTeacherPassword(e.target.value)}
-                    placeholder="Enter any password (کوئی بھی پاس ورڈ لکھیں)"
+                    placeholder="اپنا پاسورڈ درج کریں"
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0D285F] outline-none"
                   />
                   <KeyRound className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  You can use <span className="font-mono font-bold text-slate-600">teacher123</span> or set any personal password.
+                <p className="text-[10px] text-slate-500 mt-1">
+                  صرف ایڈمن کی جانب سے جاری کردہ درست پاسورڈ سے پورٹل میں داخلہ ممکن ہے۔
                 </p>
               </div>
 

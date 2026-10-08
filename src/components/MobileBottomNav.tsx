@@ -72,7 +72,11 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         {/* 3: Parent Portal */}
         <button
           onClick={() => {
-            setPortal('PARENT_PORTAL');
+            if (currentParentStudentId) {
+              setPortal('PARENT_PORTAL');
+            } else {
+              onOpenLogin();
+            }
           }}
           className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg transition ${
             currentPortal === 'PARENT_PORTAL'

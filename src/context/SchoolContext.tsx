@@ -111,6 +111,7 @@ interface SchoolContextType {
   updateLeaveStatus: (id: string, status: 'Approved' | 'Rejected') => void;
 
   addFeeRecord: (record: Omit<FeeRecord, 'id'>) => void;
+  updateFeeRecord: (updated: FeeRecord) => void;
   recordFeePayment: (feeRecordId: string, amount: number, receiptNo: string) => void;
   generateMonthlyFeeVouchers: (monthName: string) => number;
 
@@ -147,8 +148,32 @@ interface SchoolContextType {
 
 const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
 
-// Keep all registered students active and preserved across all portals
-function isDummyStudent(_item: any): boolean {
+// Strict filter to permanently eliminate all fake/dummy seed students across all devices & storage
+const DUMMY_STUDENT_IDS = new Set([
+  's-101', 's-102', 's-103', 's-104', 's-106', 's-107',
+  's-108', 's-109', 's-110', 's-111', 's-112', 's-113'
+]);
+
+const DUMMY_STUDENT_NAMES = new Set([
+  'muhammad abdullah',
+  'fatima noor',
+  'muhammad ali',
+  'zainab bibi',
+  'ayesha tariq',
+  'muhammad usman',
+  'muhammad bilal',
+  'dua fatima',
+  'hassan raza',
+  'muhammad hamza',
+  'noor ul huda',
+  'muhammad ahmed'
+]);
+
+export function isDummyStudent(item: any): boolean {
+  if (!item) return false;
+  if (item.id && DUMMY_STUDENT_IDS.has(item.id)) return true;
+  const name = (item.name || item.studentName || '').trim().toLowerCase();
+  if (name && DUMMY_STUDENT_NAMES.has(name)) return true;
   return false;
 }
 
@@ -169,7 +194,7 @@ function saveToStorage<T>(key: string, value: T) {
   }
 }
 
-// Deep recovery function to restore any student previously added in any storage version or session
+// Deep recovery function to restore real students previously added in any storage version
 function recoverAllLocalStudents(): Student[] {
   const recoveredMap = new Map<string, Student>();
   const priorityKeys = [
@@ -234,38 +259,36 @@ function recoverAllLocalStudents(): Student[] {
 export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [students, setStudents] = useState<Student[]>(() => {
     const raw = loadFromStorage<Student[]>('students', initialStudents);
-    if (Array.isArray(raw) && raw.length > 0) return raw;
-    const recovered = recoverAllLocalStudents();
+    const cleanRaw = Array.isArray(raw) ? raw.filter(s => !isDummyStudent(s)) : [];
+    if (cleanRaw.length > 0) return cleanRaw;
+    const recovered = recoverAllLocalStudents().filter(s => !isDummyStudent(s));
     if (recovered.length > 0) return recovered;
-    return initialStudents;
+    return initialStudents.filter(s => !isDummyStudent(s));
   });
   const [teachers, setTeachers] = useState<Teacher[]>(() => loadFromStorage('teachers', initialTeachers));
   const [attendance, setAttendance] = useState<StudentAttendance[]>(() => {
     const raw = loadFromStorage<StudentAttendance[]>('attendance', initialAttendance);
-    if (Array.isArray(raw) && raw.length > 0) return raw;
-    return initialAttendance;
+    const clean = Array.isArray(raw) ? raw.filter(a => !isDummyStudent(a)) : [];
+    return clean;
   });
   const [teacherAttendance, setTeacherAttendance] = useState<TeacherAttendance[]>(() => loadFromStorage('teacherAttendance', initialTeacherAttendance));
   const [leaves, setLeaves] = useState<LeaveRequest[]>(() => loadFromStorage('leaves', initialLeaves));
   const [feeRecords, setFeeRecords] = useState<FeeRecord[]>(() => {
     const raw = loadFromStorage<FeeRecord[]>('feeRecords', initialFeeRecords);
-    if (Array.isArray(raw) && raw.length > 0) return raw;
-    return initialFeeRecords;
+    const clean = Array.isArray(raw) ? raw.filter(f => !isDummyStudent(f)) : [];
+    return clean.length > 0 ? clean : initialFeeRecords;
   });
   const [dailyReports, setDailyReports] = useState<DailyReport[]>(() => {
     const raw = loadFromStorage<DailyReport[]>('dailyReports', initialDailyReports);
-    if (Array.isArray(raw) && raw.length > 0) return raw;
-    return initialDailyReports;
+    return Array.isArray(raw) ? raw.filter(r => !isDummyStudent(r)) : [];
   });
   const [tests, setTests] = useState<Test[]>(() => {
     const raw = loadFromStorage<Test[]>('tests', initialTests);
-    if (Array.isArray(raw) && raw.length > 0) return raw;
-    return initialTests;
+    return Array.isArray(raw) && raw.length > 0 ? raw : initialTests;
   });
   const [testResults, setTestResults] = useState<TestResult[]>(() => {
     const raw = loadFromStorage<TestResult[]>('testResults', initialTestResults);
-    if (Array.isArray(raw) && raw.length > 0) return raw;
-    return initialTestResults;
+    return Array.isArray(raw) ? raw.filter(tr => !isDummyStudent(tr)) : [];
   });
   const [notices, setNotices] = useState<Notice[]>(() => loadFromStorage('notices', initialNotices));
   const [onlineAdmissions, setOnlineAdmissions] = useState<OnlineAdmission[]>(() => loadFromStorage('admissions', initialAdmissions));
@@ -763,11 +786,11 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!teacher) return false;
 
     const cleanPass = password.trim();
-    // Allow teacher to login with their personal password, default teacher123, or any password they set
-    if (cleanPass) {
-      if (teacher.personalPassword !== cleanPass) {
-        setTeachers(prev => prev.map(t => t.id === teacherId ? { ...t, personalPassword: cleanPass } : t));
-      }
+    const correctPassword = teacher.personalPassword || settings.teacherPassword || 'teacher123';
+
+    // Strict validation: Must match teacher's personal password or system teacher password
+    if (cleanPass !== correctPassword && cleanPass !== settings.teacherPassword) {
+      return false; // REJECT invalid password!
     }
 
     setCurrentTeacherId(teacherId);
@@ -778,43 +801,25 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const loginOrCreateTeacherByName = (name: string, password: string): boolean => {
-    const cleanName = name.trim();
-    const cleanPass = password.trim() || 'teacher123';
+    const cleanName = name.trim().toLowerCase();
+    const cleanPass = password.trim();
     if (!cleanName) return false;
 
-    const existing = teachers.find(t => t.name.toLowerCase() === cleanName.toLowerCase());
+    // Only allow existing authorized faculty members
+    const existing = teachers.find(t => t.name.toLowerCase() === cleanName);
     if (existing) {
-      if (cleanPass && existing.personalPassword !== cleanPass) {
-        setTeachers(prev => prev.map(t => t.id === existing.id ? { ...t, personalPassword: cleanPass } : t));
+      const correctPassword = existing.personalPassword || settings.teacherPassword || 'teacher123';
+      if (cleanPass === correctPassword || cleanPass === settings.teacherPassword) {
+        setCurrentTeacherId(existing.id);
+        setIsAdminLoggedIn(false);
+        setCurrentParentStudentId(null);
+        setCurrentPortal('TEACHER_PORTAL');
+        return true;
       }
-      setCurrentTeacherId(existing.id);
-      setIsAdminLoggedIn(false);
-      setCurrentParentStudentId(null);
-      setCurrentPortal('TEACHER_PORTAL');
-      return true;
+      return false;
     }
 
-    const newTeacher: Teacher = {
-      id: `t-${Date.now()}`,
-      name: cleanName,
-      qualification: 'Faculty Teacher',
-      subject: 'Assigned Subjects',
-      assignedClasses: 'All Classes',
-      contactNo: settings.schoolPhone,
-      whatsappNo: settings.schoolWhatsApp,
-      joiningDate: new Date().toISOString().split('T')[0],
-      salary: 22000,
-      allowances: 0,
-      deductions: 0,
-      personalPassword: cleanPass
-    };
-
-    setTeachers(prev => [...prev, newTeacher]);
-    setCurrentTeacherId(newTeacher.id);
-    setIsAdminLoggedIn(false);
-    setCurrentParentStudentId(null);
-    setCurrentPortal('TEACHER_PORTAL');
-    return true;
+    return false; // Do not allow unauthorized users to create teacher accounts
   };
 
   const loginParent = (identifier: string, className?: string): Student | null => {
@@ -973,7 +978,12 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const setTeacherPassword = (teacherId: string, newPassword: string) => {
-    setTeachers(prev => prev.map(t => t.id === teacherId ? { ...t, personalPassword: newPassword } : t));
+    const updated = stateRef.current.teachers.map(t =>
+      t.id === teacherId ? { ...t, personalPassword: newPassword.trim() } : t
+    );
+    setTeachers(updated);
+    saveToStorage('teachers', updated);
+    pushCurrentDataToCloud({ teachers: updated });
   };
 
   const toggleTeacherSalaryPayment = (teacherId: string, month: string, amount: number) => {
@@ -1085,7 +1095,17 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ...record,
       id: `fee-${Date.now()}`
     };
-    setFeeRecords(prev => [newRecord, ...prev]);
+    const updated = [newRecord, ...stateRef.current.feeRecords];
+    setFeeRecords(updated);
+    saveToStorage('feeRecords', updated);
+    pushCurrentDataToCloud({ feeRecords: updated });
+  };
+
+  const updateFeeRecord = (updated: FeeRecord) => {
+    const updatedList = stateRef.current.feeRecords.map(f => f.id === updated.id ? updated : f);
+    setFeeRecords(updatedList);
+    saveToStorage('feeRecords', updatedList);
+    pushCurrentDataToCloud({ feeRecords: updatedList });
   };
 
   const recordFeePayment = (feeRecordId: string, amount: number, receiptNo: string) => {
@@ -1429,6 +1449,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         submitLeave,
         updateLeaveStatus,
         addFeeRecord,
+        updateFeeRecord,
         recordFeePayment,
         generateMonthlyFeeVouchers,
         addDailyReport,

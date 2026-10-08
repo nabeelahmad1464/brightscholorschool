@@ -256,10 +256,10 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* Quick portal shortcut links if on website */}
+          {/* Portal navigation links if on website */}
           {currentPortal === 'PUBLIC_WEBSITE' && (
             <div className="flex items-center gap-2 py-1.5 text-xs text-slate-300">
-              <span className="text-slate-400">Direct Portals:</span>
+              <span className="text-slate-400">Portals:</span>
               <button
                 onClick={() => {
                   if (isAdminLoggedIn) setPortal('ADMIN_PORTAL');
@@ -280,7 +280,8 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
               <button
                 onClick={() => {
-                  setPortal('PARENT_PORTAL');
+                  if (currentParentStudentId) setPortal('PARENT_PORTAL');
+                  else onOpenLogin();
                 }}
                 className="hover:text-amber-300 text-slate-300 px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition"
               >

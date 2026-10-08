@@ -2336,17 +2336,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold mb-1 text-slate-700">Monthly Tuition Fee (Rs.)</label>
+                  <label className="block font-semibold mb-1 text-slate-700">
+                    Monthly Tuition Fee (ماہانہ فیس درج کریں)
+                  </label>
                   <input
                     type="number"
                     value={stFormFee}
                     onChange={(e) => setStFormFee(Number(e.target.value))}
-                    className="w-full px-3 py-2 text-xs border rounded-lg font-bold"
+                    className="w-full px-3 py-2 text-xs border rounded-lg font-bold text-[#0D285F]"
+                    placeholder="فیس درج کریں"
                   />
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    اسٹینڈرڈ فیس: PG تا 4 = Rs. 2,000 | کلاس 5 تا 8 = Rs. 3,000 (آپ مرضی سے تبدیل کر سکتے ہیں)
+                  </p>
                 </div>
 
                 <div>
-                  <label className="block font-semibold mb-1 text-slate-700">Contact Phone</label>
+                  <label className="block font-semibold mb-1 text-slate-700">Contact Phone (فون نمبر)</label>
                   <input
                     type="tel"
                     value={stFormPhone}
