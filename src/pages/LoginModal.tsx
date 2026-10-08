@@ -15,18 +15,30 @@ import { SCHOOL_CLASSES } from '../types';
 interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialRole?: 'admin' | 'teacher' | 'parent';
 }
 
-export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
+export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, initialRole = 'admin' }) => {
   const { loginAdmin, loginTeacher, loginOrCreateTeacherByName, loginParent, teachers, students, setPortal } = useSchool();
 
-  const [activeRole, setActiveRole] = useState<'admin' | 'teacher' | 'parent'>('admin');
+  const [activeRole, setActiveRole] = useState<'admin' | 'teacher' | 'parent'>(initialRole);
   const [adminPassword, setAdminPassword] = useState('');
   const [teacherId, setTeacherId] = useState(teachers[0]?.id || '');
   const [teacherPassword, setTeacherPassword] = useState('');
-  const [parentIdentifier, setParentIdentifier] = useState('02');
+  const [parentIdentifier, setParentIdentifier] = useState('');
   const [parentClass, setParentClass] = useState('Class 4');
   const [error, setError] = useState('');
+
+  // Reset fields when modal opens or initialRole changes
+  useEffect(() => {
+    if (isOpen) {
+      setActiveRole(initialRole);
+      setAdminPassword('');
+      setTeacherPassword('');
+      setParentIdentifier('');
+      setError('');
+    }
+  }, [isOpen, initialRole]);
 
   useEffect(() => {
     if (teachers.length > 0 && (!teacherId || !teachers.some(t => t.id === teacherId))) {
@@ -110,7 +122,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         <div className="grid grid-cols-3 bg-slate-100 p-1 border-b border-slate-200 text-xs font-semibold">
           <button
             type="button"
-            onClick={() => { setActiveRole('admin'); setError(''); }}
+            onClick={() => {
+              setActiveRole('admin');
+              setError('');
+              setAdminPassword('');
+              setTeacherPassword('');
+            }}
             className={`py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition ${
               activeRole === 'admin'
                 ? 'bg-white text-[#0D285F] shadow-sm font-bold'
@@ -123,7 +140,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
 
           <button
             type="button"
-            onClick={() => { setActiveRole('teacher'); setError(''); }}
+            onClick={() => {
+              setActiveRole('teacher');
+              setError('');
+              setAdminPassword('');
+              setTeacherPassword('');
+            }}
             className={`py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition ${
               activeRole === 'teacher'
                 ? 'bg-white text-[#0D285F] shadow-sm font-bold'
@@ -136,7 +158,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
 
           <button
             type="button"
-            onClick={() => { setActiveRole('parent'); setError(''); }}
+            onClick={() => {
+              setActiveRole('parent');
+              setError('');
+              setAdminPassword('');
+              setTeacherPassword('');
+            }}
             className={`py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition ${
               activeRole === 'parent'
                 ? 'bg-white text-[#0D285F] shadow-sm font-bold'
@@ -177,7 +204,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     required
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
-                    placeholder="Enter admin password"
+                    placeholder="پاسورڈ درج کریں (Enter password)"
+                    autoComplete="new-password"
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0D285F] outline-none"
                   />
                   <KeyRound className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
@@ -230,7 +258,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     required
                     value={teacherPassword}
                     onChange={(e) => setTeacherPassword(e.target.value)}
-                    placeholder="اپنا پاسورڈ درج کریں"
+                    placeholder="پاسورڈ درج کریں (Enter password)"
+                    autoComplete="new-password"
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#0D285F] outline-none"
                   />
                   <KeyRound className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />

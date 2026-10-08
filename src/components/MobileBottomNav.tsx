@@ -6,7 +6,7 @@ import { WebsiteTab } from '../types';
 interface MobileBottomNavProps {
   currentTab: WebsiteTab;
   onTabChange: (tab: WebsiteTab) => void;
-  onOpenLogin: () => void;
+  onOpenLogin: (role?: 'admin' | 'teacher' | 'parent') => void;
   onOpenAdmission: () => void;
 }
 
@@ -72,11 +72,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         {/* 3: Parent Portal */}
         <button
           onClick={() => {
-            if (currentParentStudentId) {
-              setPortal('PARENT_PORTAL');
-            } else {
-              onOpenLogin();
-            }
+            setPortal('PARENT_PORTAL');
           }}
           className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg transition ${
             currentPortal === 'PARENT_PORTAL'
@@ -94,7 +90,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             if (currentTeacherId) {
               setPortal('TEACHER_PORTAL');
             } else {
-              onOpenLogin();
+              onOpenLogin('teacher');
             }
           }}
           className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg transition ${
@@ -113,7 +109,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             if (isAdminLoggedIn) {
               setPortal('ADMIN_PORTAL');
             } else {
-              onOpenLogin();
+              onOpenLogin('admin');
             }
           }}
           className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg transition ${

@@ -20,7 +20,13 @@ const MainApp: React.FC = () => {
 
   const [currentTab, setCurrentTab] = useState<WebsiteTab>('HOME');
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginModalRole, setLoginModalRole] = useState<'admin' | 'teacher' | 'parent'>('admin');
   const [showAdmissionModal, setShowAdmissionModal] = useState(false);
+
+  const handleOpenLogin = (role?: 'admin' | 'teacher' | 'parent') => {
+    setLoginModalRole(role || 'admin');
+    setShowLoginModal(true);
+  };
 
   const handleTabChange = (tab: WebsiteTab) => {
     setCurrentTab(tab);
@@ -55,7 +61,7 @@ const MainApp: React.FC = () => {
       <Header
         currentTab={currentTab}
         onTabChange={handleTabChange}
-        onOpenLogin={() => setShowLoginModal(true)}
+        onOpenLogin={handleOpenLogin}
         onOpenAdmission={() => setShowAdmissionModal(true)}
       />
 
@@ -69,7 +75,7 @@ const MainApp: React.FC = () => {
           ) : (
             <WebsiteHome
               onOpenAdmission={() => setShowAdmissionModal(true)}
-              onOpenLogin={() => setShowLoginModal(true)}
+              onOpenLogin={handleOpenLogin}
               onSelectStudent={(student: Student) => setSelectedStudentForModal(student)}
               onTabChange={handleTabChange}
               currentTab={currentTab}
@@ -106,7 +112,7 @@ const MainApp: React.FC = () => {
       <MobileBottomNav
         currentTab={currentTab}
         onTabChange={handleTabChange}
-        onOpenLogin={() => setShowLoginModal(true)}
+        onOpenLogin={handleOpenLogin}
         onOpenAdmission={() => setShowAdmissionModal(true)}
       />
 
@@ -119,6 +125,7 @@ const MainApp: React.FC = () => {
       <LoginModal
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
+        initialRole={loginModalRole}
       />
 
       <StudentProfileModal

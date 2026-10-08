@@ -71,24 +71,7 @@ export const initialTeachers: Teacher[] = [
 
 export const initialSalaryTransactions: import('../types').SalaryTransaction[] = [];
 
-export const initialStudents: Student[] = [
-  {
-    id: "s-105",
-    admissionNo: "BSS-105",
-    rollNo: "02",
-    name: "Maryam (مریم)",
-    fatherName: "Shabbir Hussain",
-    className: "Class 4",
-    dob: "2016-06-18",
-    contactNo: "0302-5053993",
-    whatsappNo: "0302-5053993",
-    address: "Chak 47 GB, Samundri",
-    admissionDate: "2022-04-05",
-    gender: "Female",
-    monthlyFee: 2000,
-    isActive: true
-  }
-];
+export const initialStudents: Student[] = [];
 
 export const initialAttendance: StudentAttendance[] = [];
 
@@ -96,39 +79,11 @@ export const initialTeacherAttendance: TeacherAttendance[] = [];
 
 export const initialLeaves: LeaveRequest[] = [];
 
-export const initialFeeRecords: FeeRecord[] = [
-  {
-    id: "fee-105",
-    studentId: "s-105",
-    studentName: "Maryam (مریم)",
-    fatherName: "Shabbir Hussain",
-    className: "Class 4",
-    month: "October 2026",
-    tuitionFee: 2000,
-    absentDays: 0,
-    fineAmount: 0,
-    totalPayable: 2000,
-    paidAmount: 2000,
-    balanceRemaining: 0,
-    status: "Paid",
-    paymentDate: "2026-10-04",
-    receiptNo: "REC-BSS-1005"
-  }
-];
+export const initialFeeRecords: FeeRecord[] = [];
 
 export const initialDailyReports: DailyReport[] = [];
 
-export const initialTests: Test[] = [
-  {
-    id: "tst-1",
-    title: "Monthly Evaluation / جائزہ",
-    className: "Class 4",
-    subject: "Mathematics (ریاضی)",
-    totalMarks: 50,
-    testDate: "2026-10-01",
-    description: "Monthly assessment test."
-  }
-];
+export const initialTests: Test[] = [];
 
 export const initialTestResults: TestResult[] = [];
 

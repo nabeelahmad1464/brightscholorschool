@@ -384,7 +384,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
                 type="text"
                 value={studentFilterQuery}
                 onChange={(e) => setStudentFilterQuery(e.target.value)}
-                placeholder="طالب علم کا نام یا رول نمبر تلاش کریں (مثلاً Maryam, مریم، 02)..."
+                placeholder="طالب علم کا نام یا رول نمبر تلاش کریں (مثلاً 01, 02)..."
                 className="w-full bg-slate-50 border border-slate-300 focus:border-[#0D285F] rounded-xl pl-9 pr-4 py-2.5 text-xs font-semibold outline-none transition"
               />
               {studentFilterQuery && (

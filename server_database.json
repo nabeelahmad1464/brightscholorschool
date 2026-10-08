@@ -1,22 +1,5 @@
 {
-  "students": [
-    {
-      "id": "s-105",
-      "admissionNo": "BSS-105",
-      "rollNo": "02",
-      "name": "Maryam (مریم)",
-      "fatherName": "Shabbir Hussain",
-      "className": "Class 4",
-      "dob": "2016-06-18",
-      "contactNo": "0302-5053993",
-      "whatsappNo": "0302-5053993",
-      "address": "Chak 47 GB, Samundri",
-      "admissionDate": "2022-04-05",
-      "gender": "Female",
-      "monthlyFee": 2000,
-      "isActive": true
-    }
-  ],
+  "students": [],
   "teachers": [
     {
       "id": "t-1",
@@ -61,86 +44,12 @@
       "personalPassword": "teacher123"
     }
   ],
-  "attendance": [
-    {
-      "id": "att-5",
-      "studentId": "s-105",
-      "studentName": "Maryam (مریم)",
-      "className": "Class 4",
-      "date": "2026-10-05",
-      "month": "2026-10",
-      "status": "Present",
-      "fineAmount": 0
-    },
-    {
-      "id": "att-8",
-      "studentId": "s-108",
-      "studentName": "Maryam Bibi",
-      "className": "Class 2",
-      "date": "2026-10-05",
-      "month": "2026-10",
-      "status": "Present",
-      "fineAmount": 0
-    }
-  ],
+  "attendance": [],
   "teacherAttendance": [],
   "leaves": [],
-  "feeRecords": [
-    {
-      "id": "fee-105",
-      "studentId": "s-105",
-      "studentName": "Maryam (مریم)",
-      "fatherName": "Shabbir Hussain",
-      "className": "Class 4",
-      "month": "October 2026",
-      "tuitionFee": 1100,
-      "absentDays": 0,
-      "fineAmount": 0,
-      "totalPayable": 1100,
-      "paidAmount": 0,
-      "balanceRemaining": 1100,
-      "status": "Unpaid",
-      "receiptNo": "REC-BSS-1005"
-    },
-    {
-      "id": "fee-108",
-      "studentId": "s-108",
-      "studentName": "Maryam Bibi",
-      "fatherName": "Abdul Ghafoor",
-      "className": "Class 2",
-      "month": "October 2026",
-      "tuitionFee": 900,
-      "absentDays": 0,
-      "fineAmount": 0,
-      "totalPayable": 900,
-      "paidAmount": 900,
-      "balanceRemaining": 0,
-      "status": "Paid",
-      "paymentDate": "2026-10-02",
-      "receiptNo": "REC-BSS-1008"
-    }
-  ],
+  "feeRecords": [],
   "dailyReports": [],
-  "tests": [
-    {
-      "id": "tst-1",
-      "title": "Mathematics First Monthly Assessment",
-      "className": "Class 5",
-      "subject": "Mathematics (ریاضی)",
-      "totalMarks": 50,
-      "testDate": "2026-10-01",
-      "description": "Monthly evaluation on arithmetic and decimals."
-    },
-    {
-      "id": "tst-2",
-      "title": "Nazra Quran & Tajweed Evaluation",
-      "className": "Class 5",
-      "subject": "Islamic Studies & Nazra (اسلامیات و ناظرہ)",
-      "totalMarks": 50,
-      "testDate": "2026-10-03",
-      "description": "Makharij and recitation evaluation."
-    }
-  ],
+  "tests": [],
   "testResults": [],
   "notices": [
     {
@@ -189,5 +98,5 @@
   },
   "salaryTransactions": [],
   "teacherSalaryPayments": [],
-  "updatedAt": "2026-10-08T03:39:41.253Z"
+  "updatedAt": "2026-10-08T09:07:16.008Z"
 }

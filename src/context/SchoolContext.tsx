@@ -112,6 +112,7 @@ interface SchoolContextType {
 
   addFeeRecord: (record: Omit<FeeRecord, 'id'>) => void;
   updateFeeRecord: (updated: FeeRecord) => void;
+  deleteFeeRecord: (feeRecordId: string) => void;
   recordFeePayment: (feeRecordId: string, amount: number, receiptNo: string) => void;
   generateMonthlyFeeVouchers: (monthName: string) => number;
 
@@ -166,14 +167,31 @@ const DUMMY_STUDENT_NAMES = new Set([
   'hassan raza',
   'muhammad hamza',
   'noor ul huda',
-  'muhammad ahmed'
+  'muhammad ahmed',
+  'maryam',
+  'maryam bibi',
+  'mariam',
+  'mariam bibi',
+  'maryam fatima',
+  'مریم',
+  'مریم بی بی',
+  'مریم فاطمہ'
 ]);
 
 export function isDummyStudent(item: any): boolean {
   if (!item) return false;
   if (item.id && DUMMY_STUDENT_IDS.has(item.id)) return true;
   const name = (item.name || item.studentName || '').trim().toLowerCase();
-  if (name && DUMMY_STUDENT_NAMES.has(name)) return true;
+  if (!name) return false;
+  if (DUMMY_STUDENT_NAMES.has(name)) return true;
+  if (
+    name.includes('maryam') ||
+    name.includes('mariam') ||
+    name.includes('maryum') ||
+    name.includes('مریم')
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -274,9 +292,11 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [teacherAttendance, setTeacherAttendance] = useState<TeacherAttendance[]>(() => loadFromStorage('teacherAttendance', initialTeacherAttendance));
   const [leaves, setLeaves] = useState<LeaveRequest[]>(() => loadFromStorage('leaves', initialLeaves));
   const [feeRecords, setFeeRecords] = useState<FeeRecord[]>(() => {
-    const raw = loadFromStorage<FeeRecord[]>('feeRecords', initialFeeRecords);
+    const raw = loadFromStorage<FeeRecord[]>('feeRecords', []);
     const clean = Array.isArray(raw) ? raw.filter(f => !isDummyStudent(f)) : [];
-    return clean.length > 0 ? clean : initialFeeRecords;
+    // Ensure purged list is stored back to storage
+    saveToStorage('feeRecords', clean);
+    return clean;
   });
   const [dailyReports, setDailyReports] = useState<DailyReport[]>(() => {
     const raw = loadFromStorage<DailyReport[]>('dailyReports', initialDailyReports);
@@ -459,7 +479,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (extRes.ok) {
           const parsed = await extRes.json();
           const extData = parsed?.data || parsed;
-          if (extData && Array.isArray(extData.students) && extData.students.length > 0) {
+          if (extData && Array.isArray(extData.students)) {
             data = extData;
           }
         }
@@ -468,13 +488,13 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
 
       // 2. Try local container API /api/school-data
-      if (!data || !Array.isArray(data.students) || data.students.length === 0) {
+      if (!data || !Array.isArray(data.students)) {
         try {
           const localRes = await fetch('/api/school-data');
           if (localRes.ok) {
             const parsed = await localRes.json();
             const localData = parsed?.data || parsed;
-            if (localData && Array.isArray(localData.students) && localData.students.length > 0) {
+            if (localData && Array.isArray(localData.students)) {
               data = localData;
             }
           }
@@ -484,7 +504,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
 
       // 3. Fallback to secondary endpoint if needed
-      if (!data || !Array.isArray(data.students) || data.students.length === 0) {
+      if (!data || !Array.isArray(data.students)) {
         try {
           const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
             headers: { 'Accept': 'application/json' },
@@ -771,7 +791,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Auth
   const loginAdmin = (password: string): boolean => {
-    if (password === settings.adminPassword || password === 'admin123' || password === 'admin') {
+    const clean = (password || '').trim();
+    if (!clean) return false;
+    // Strictly verify against confidential admin password - NO 'admin' or 'admin123' shortcuts!
+    if (clean === settings.adminPassword.trim()) {
       setIsAdminLoggedIn(true);
       setCurrentTeacherId(null);
       setCurrentParentStudentId(null);
@@ -785,11 +808,16 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const teacher = teachers.find(t => t.id === teacherId);
     if (!teacher) return false;
 
-    const cleanPass = password.trim();
-    const correctPassword = teacher.personalPassword || settings.teacherPassword || 'teacher123';
+    const cleanPass = (password || '').trim();
+    if (!cleanPass) return false;
 
-    // Strict validation: Must match teacher's personal password or system teacher password
-    if (cleanPass !== correctPassword && cleanPass !== settings.teacherPassword) {
+    const personal = (teacher.personalPassword || '').trim();
+    const globalPass = (settings.teacherPassword || '').trim();
+
+    const matchesPersonal = personal ? cleanPass === personal : false;
+    const matchesGlobal = globalPass ? cleanPass === globalPass : false;
+
+    if (!matchesPersonal && !matchesGlobal) {
       return false; // REJECT invalid password!
     }
 
@@ -802,14 +830,18 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const loginOrCreateTeacherByName = (name: string, password: string): boolean => {
     const cleanName = name.trim().toLowerCase();
-    const cleanPass = password.trim();
-    if (!cleanName) return false;
+    const cleanPass = (password || '').trim();
+    if (!cleanName || !cleanPass) return false;
 
     // Only allow existing authorized faculty members
     const existing = teachers.find(t => t.name.toLowerCase() === cleanName);
     if (existing) {
-      const correctPassword = existing.personalPassword || settings.teacherPassword || 'teacher123';
-      if (cleanPass === correctPassword || cleanPass === settings.teacherPassword) {
+      const personal = (existing.personalPassword || '').trim();
+      const globalPass = (settings.teacherPassword || '').trim();
+      const matchesPersonal = personal ? cleanPass === personal : false;
+      const matchesGlobal = globalPass ? cleanPass === globalPass : false;
+
+      if (matchesPersonal || matchesGlobal) {
         setCurrentTeacherId(existing.id);
         setIsAdminLoggedIn(false);
         setCurrentParentStudentId(null);
@@ -1103,6 +1135,13 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const updateFeeRecord = (updated: FeeRecord) => {
     const updatedList = stateRef.current.feeRecords.map(f => f.id === updated.id ? updated : f);
+    setFeeRecords(updatedList);
+    saveToStorage('feeRecords', updatedList);
+    pushCurrentDataToCloud({ feeRecords: updatedList });
+  };
+
+  const deleteFeeRecord = (feeRecordId: string) => {
+    const updatedList = stateRef.current.feeRecords.filter(f => f.id !== feeRecordId);
     setFeeRecords(updatedList);
     saveToStorage('feeRecords', updatedList);
     pushCurrentDataToCloud({ feeRecords: updatedList });
@@ -1450,6 +1489,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         updateLeaveStatus,
         addFeeRecord,
         updateFeeRecord,
+        deleteFeeRecord,
         recordFeePayment,
         generateMonthlyFeeVouchers,
         addDailyReport,

@@ -20,7 +20,7 @@ import { WebsiteTab, PortalType } from '../types';
 interface HeaderProps {
   currentTab: WebsiteTab;
   onTabChange: (tab: WebsiteTab) => void;
-  onOpenLogin: () => void;
+  onOpenLogin: (role?: 'admin' | 'teacher' | 'parent') => void;
   onOpenAdmission: () => void;
 }
 
@@ -187,7 +187,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             ) : (
               <button
-                onClick={onOpenLogin}
+                onClick={() => onOpenLogin()}
                 className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/25 font-semibold text-xs sm:text-sm px-3.5 py-2 rounded-lg transition"
               >
                 <Lock className="w-3.5 h-3.5 text-amber-400" />
@@ -263,7 +263,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={() => {
                   if (isAdminLoggedIn) setPortal('ADMIN_PORTAL');
-                  else onOpenLogin();
+                  else onOpenLogin('admin');
                 }}
                 className="hover:text-amber-300 text-slate-300 px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition"
               >
@@ -272,7 +272,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={() => {
                   if (currentTeacherId) setPortal('TEACHER_PORTAL');
-                  else onOpenLogin();
+                  else onOpenLogin('teacher');
                 }}
                 className="hover:text-amber-300 text-slate-300 px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition"
               >
@@ -280,12 +280,11 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
               <button
                 onClick={() => {
-                  if (currentParentStudentId) setPortal('PARENT_PORTAL');
-                  else onOpenLogin();
+                  setPortal('PARENT_PORTAL');
                 }}
-                className="hover:text-amber-300 text-slate-300 px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition"
+                className="hover:text-amber-300 text-slate-300 px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition font-bold text-amber-300"
               >
-                Parents
+                Parents (پیرنٹس)
               </button>
             </div>
           )}

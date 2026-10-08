@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, User, Filter, Award, DollarSign, Calendar, ArrowRight } from 'lucide-react';
-import { useSchool } from '../context/SchoolContext';
+import { useSchool, isDummyStudent } from '../context/SchoolContext';
 import { SCHOOL_CLASSES, Student } from '../types';
 
 interface StudentSearchPageProps {
@@ -17,6 +17,7 @@ export const StudentSearchPage: React.FC<StudentSearchPageProps> = ({ onSelectSt
   }, []);
 
   const filtered = students.filter(s => {
+    if (isDummyStudent(s)) return false;
     const matchClass = selectedClass === 'All' || s.className === selectedClass;
     const q = query.trim().toLowerCase();
     if (!q) return matchClass;

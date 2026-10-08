@@ -33,7 +33,7 @@ import {
   Database,
   CheckCircle2
 } from 'lucide-react';
-import { useSchool } from '../context/SchoolContext';
+import { useSchool, isDummyStudent } from '../context/SchoolContext';
 import {
   SCHOOL_CLASSES,
   SCHOOL_SUBJECTS,
@@ -93,6 +93,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
     markClassAttendance,
     markTeacherAttendance,
     updateLeaveStatus,
+    deleteFeeRecord,
     recordFeePayment,
     generateMonthlyFeeVouchers,
     addTest,
@@ -1427,18 +1428,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
               </p>
             </div>
 
-            <button
-              onClick={() => {
-                const count = generateMonthlyFeeVouchers('September 2026');
-                alert(`Generated ${count} monthly vouchers for September 2026!`);
-              }}
-              className="bg-amber-400 hover:bg-amber-300 text-[#07193B] font-bold text-xs px-4 py-2 rounded-xl transition"
-            >
-              + Generate September Fee Vouchers
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => {
+                  const dummies = feeRecords.filter(f => isDummyStudent(f));
+                  if (dummies.length === 0) {
+                    alert('تمام ڈمی اور غیر متعلقہ فیس واؤچرز پہلے سے صاف ہیں۔');
+                  } else {
+                    dummies.forEach(d => deleteFeeRecord(d.id));
+                    alert(`کامیابی! ${dummies.length} ڈمی فیس واؤچرز مستقل ڈیلیٹ کر دیئے گئے۔`);
+                  }
+                }}
+                className="bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs px-3 py-2 rounded-xl border border-red-200 transition flex items-center gap-1.5"
+                title="تمام فرضی فیس واؤچرز ڈیلیٹ کریں"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>ڈمی واؤچرز صاف کریں</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  const count = generateMonthlyFeeVouchers('September 2026');
+                  alert(`Generated ${count} monthly vouchers for September 2026!`);
+                }}
+                className="bg-amber-400 hover:bg-amber-300 text-[#07193B] font-bold text-xs px-4 py-2 rounded-xl transition"
+              >
+                + Generate September Fee Vouchers
+              </button>
+            </div>
           </div>
 
-          {feeRecords.length === 0 ? (
+          {feeRecords.filter(f => !isDummyStudent(f)).length === 0 ? (
             <div className="text-center py-12 text-slate-500 text-xs italic bg-slate-50 rounded-xl border border-dashed border-slate-300">
               ابھی کوئی فیس واؤچر یا ریکارڈ موجود نہیں ہے۔ جیسے ہی آپ نئے طلباء داخل کریں گے، ان کا فیس ریکارڈ یہاں خود بخود آ جائے گا۔
             </div>
@@ -1456,11 +1476,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
                     <th className="p-3">Paid</th>
                     <th className="p-3">Balance</th>
                     <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Collect</th>
+                    <th className="p-3 text-right">Collect & Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {feeRecords.map(f => (
+                  {feeRecords.filter(f => !isDummyStudent(f)).map(f => (
                     <tr key={f.id} className="hover:bg-slate-50">
                       <td className="p-3 font-semibold text-slate-900">{f.studentName}</td>
                       <td className="p-3">{f.className}</td>
@@ -1504,6 +1524,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
                               Collect
                             </button>
                           )}
+                          <button
+                            onClick={() => {
+                              if (confirm(`کیا آپ ${f.studentName} کا یہ فیس واؤچر مستقل ڈیلیٹ کرنا چاہتے ہیں؟`)) {
+                                deleteFeeRecord(f.id);
+                              }
+                            }}
+                            className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 p-1 rounded text-xs transition shadow-sm"
+                            title="فیس واؤچر ڈیلیٹ کریں (Delete)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>

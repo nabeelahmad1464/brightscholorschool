@@ -17,7 +17,7 @@ import {
   Camera,
   Download
 } from 'lucide-react';
-import { useSchool } from '../context/SchoolContext';
+import { useSchool, isDummyStudent } from '../context/SchoolContext';
 import { Student, ClassLevel, SCHOOL_CLASSES, FeeRecord } from '../types';
 import { downloadReceiptElementAsImage, generateAndDownloadReceiptCanvas } from '../utils/downloadReceiptImage';
 
@@ -40,18 +40,20 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
     syncNowWithCloud
   } = useSchool();
 
-  // Find initial student if parent was already logged in
-  const loggedInStudent = currentParentStudentId
-    ? students.find(s => s.id === currentParentStudentId)
-    : null;
+  const validStudents = students.filter(s => !isDummyStudent(s));
+
+  // Find initial student if parent was already logged in with a valid non-dummy student
+  const loggedInStudent = (currentParentStudentId
+    ? validStudents.find(s => s.id === currentParentStudentId)
+    : null) || null;
 
   const [inputClass, setInputClass] = useState<string>(
-    loggedInStudent ? loggedInStudent.className : 'All'
+    loggedInStudent ? loggedInStudent.className : 'Play Group'
   );
   const [inputRollNo, setInputRollNo] = useState<string>(
     loggedInStudent ? loggedInStudent.rollNo : ''
   );
-  const [searchedStudent, setSearchedStudent] = useState<Student | null>(loggedInStudent || null);
+  const [searchedStudent, setSearchedStudent] = useState<Student | null>(loggedInStudent);
   const [hasSearched, setHasSearched] = useState<boolean>(!!loggedInStudent);
   const [errorMessage, setErrorMessage] = useState<string>('');
 
@@ -75,35 +77,15 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
   const [leaveTo, setLeaveTo] = useState(new Date().toISOString().split('T')[0]);
   const [leaveSubmitted, setLeaveSubmitted] = useState(false);
 
-  // If currentParentStudentId changes or logs in, sync searched student
-  useEffect(() => {
-    if (currentParentStudentId) {
-      const match = students.find(s => s.id === currentParentStudentId);
-      if (match) {
-        setSearchedStudent(match);
-        setInputClass(match.className);
-        setInputRollNo(match.rollNo);
-        setHasSearched(true);
-        setErrorMessage('');
-      } else {
-        setSearchedStudent(null);
-        setHasSearched(false);
-      }
-    }
-  }, [currentParentStudentId, students]);
-
-  // Handle Search: Searches in selected class first, and across all classes
+  // Handle Search: Searches strictly within selected class, NO unauthorized fallbacks
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setErrorMessage('');
     setLeaveSubmitted(false);
 
-    // Ensure freshest cloud data is pulled
-    syncNowWithCloud();
-
     const cleanRoll = inputRollNo.trim().toLowerCase();
     if (!cleanRoll) {
-      setErrorMessage('براہ کرم طالب علم کا رول نمبر یا نام درج کریں۔');
+      setErrorMessage('براہ کرم طالب علم کا رول نمبر یا نام درج کریں۔ (Please enter roll number or name)');
       setSearchedStudent(null);
       setHasSearched(true);
       return;
@@ -111,38 +93,36 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
 
     const cleanNum = cleanRoll.replace(/^0+/, '');
 
-    // 1. Search strictly within selected class if specific class chosen
-    let match = null;
+    let match: Student | null = null;
     if (inputClass && inputClass !== 'All') {
-      match = students.find(s => {
-        if (s.className !== inputClass) return false;
+      // STRICT SEARCH: ONLY in selected class! Never switch to another child in another class!
+      match = validStudents.find(s => {
+        if (s.className.toLowerCase().trim() !== inputClass.toLowerCase().trim()) return false;
         const rollClean = s.rollNo.trim().toLowerCase();
         const rollNum = rollClean.replace(/^0+/, '');
         return (
           rollClean === cleanRoll ||
           (cleanNum !== '' && rollNum === cleanNum) ||
           s.admissionNo.toLowerCase() === cleanRoll ||
-          s.admissionNo.toLowerCase().includes(cleanRoll) ||
+          s.name.toLowerCase() === cleanRoll ||
           s.name.toLowerCase().includes(cleanRoll) ||
           (s.contactNo && s.contactNo.replace(/\D/g, '').includes(cleanRoll.replace(/\D/g, '')))
         );
-      });
-    }
-
-    // 2. If not found in selected class or All selected, search across ALL classes
-    if (!match) {
-      match = students.find(s => {
+      }) || null;
+    } else {
+      // Search across all classes only if 'All' is selected
+      match = validStudents.find(s => {
         const rollClean = s.rollNo.trim().toLowerCase();
         const rollNum = rollClean.replace(/^0+/, '');
         return (
           rollClean === cleanRoll ||
           (cleanNum !== '' && rollNum === cleanNum) ||
           s.admissionNo.toLowerCase() === cleanRoll ||
-          s.admissionNo.toLowerCase().includes(cleanRoll) ||
+          s.name.toLowerCase() === cleanRoll ||
           s.name.toLowerCase().includes(cleanRoll) ||
           (s.contactNo && s.contactNo.replace(/\D/g, '').includes(cleanRoll.replace(/\D/g, '')))
         );
-      });
+      }) || null;
 
       if (match) {
         setInputClass(match.className);
@@ -151,12 +131,16 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
 
     if (match) {
       setSearchedStudent(match);
+      setInputClass(match.className);
+      setInputRollNo(match.rollNo);
       setCurrentParentStudentId(match.id);
       setHasSearched(true);
       setErrorMessage('');
     } else {
       setErrorMessage(
-        `رول نمبر / نام "${inputRollNo}" کا کوئی طالب علم نہیں ملا۔ براہ کرم رول نمبر یا نام درست درج فرمائیں یا اسکول واٹس ایپ پر رابطہ کریں۔`
+        inputClass && inputClass !== 'All'
+          ? `کلاس "${inputClass}" میں رول نمبر یا نام "${inputRollNo}" کا کوئی طالب علم موجود نہیں ہے۔ براہ کرم رول نمبر درست لکھیں یا نیچے دی گئی کلاس لسٹ میں سے طالب علم منتخب فرمائیں۔`
+          : `رول نمبر یا نام "${inputRollNo}" کا کوئی طالب علم نہیں ملا۔ براہ کرم رول نمبر درست درج فرمائیں۔`
       );
       setSearchedStudent(null);
       setHasSearched(true);
@@ -363,6 +347,57 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
               <span>{errorMessage}</span>
             </div>
           )}
+
+          {/* Quick Enrolled Students in Selected Class */}
+          <div className="pt-3 border-t border-slate-200">
+            <div className="text-xs font-bold text-slate-700 mb-2 flex items-center justify-between flex-wrap gap-1">
+              <span>
+                {inputClass === 'All'
+                  ? `اسکول کے تمام رجسٹرڈ بچے (${validStudents.length}):`
+                  : `کلاس ${inputClass} کے رجسٹرڈ طلباء (${validStudents.filter(s => s.className === inputClass).length}):`}
+              </span>
+              <span className="text-[11px] text-slate-400 font-normal">
+                (فوری ریکارڈ دیکھنے کے لیے نام پر کلک کریں)
+              </span>
+            </div>
+
+            {validStudents.filter(s => inputClass === 'All' || s.className === inputClass).length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {validStudents
+                  .filter(s => inputClass === 'All' || s.className === inputClass)
+                  .map(st => (
+                    <button
+                      key={st.id}
+                      type="button"
+                      onClick={() => {
+                        setSearchedStudent(st);
+                        setInputClass(st.className);
+                        setInputRollNo(st.rollNo);
+                        setErrorMessage('');
+                        setHasSearched(true);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border cursor-pointer active:scale-95 ${
+                        searchedStudent?.id === st.id
+                          ? 'bg-[#0D285F] text-amber-300 border-[#0D285F] shadow'
+                          : 'bg-slate-50 hover:bg-amber-50 text-slate-700 hover:text-[#0D285F] border-slate-200 hover:border-amber-400'
+                      }`}
+                    >
+                      <span className="w-5 h-5 rounded-full bg-amber-400 text-[#07193B] text-[10px] inline-flex items-center justify-center font-mono font-bold">
+                        {st.rollNo}
+                      </span>
+                      <span>{st.name}</span>
+                      <span className="text-[10px] text-slate-400 font-normal">({st.fatherName})</span>
+                    </button>
+                  ))}
+              </div>
+            ) : (
+              <div className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-dashed border-slate-300">
+                {inputClass === 'All'
+                  ? 'ابھی اسکول میں کوئی طالب علم درج نہیں ہے۔ ایڈمن پورٹل سے نیا طالب علم داخل کریں۔'
+                  : `کلاس ${inputClass} میں فی الحال کوئی طالب علم درج نہیں ہے۔ اوپر کلاس تبدیل کریں یا ایڈمن پورٹل سے داخل کریں۔`}
+              </div>
+            )}
+          </div>
         </form>
       </div>
 
@@ -379,14 +414,14 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
             </p>
           </div>
 
-          {students.length > 0 ? (
+          {validStudents.length > 0 ? (
             <div className="pt-2">
               <div className="text-xs font-bold text-[#0D285F] mb-3 flex items-center justify-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>اسکول کے رجسٹرڈ بچے (فوری رزلٹ اور رسید دیکھنے کے لیے نام پر کلک کریں):</span>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2.5 max-w-2xl mx-auto">
-                {students.map(st => (
+                {validStudents.map(st => (
                   <button
                     key={st.id}
                     type="button"
