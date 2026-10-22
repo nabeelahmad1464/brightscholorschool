@@ -48,7 +48,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
   const teacher = teachers.find(t => t.id === currentTeacherId) || teachers[0];
 
   const [activeTab, setActiveTab] = useState<'attendance' | 'students_list' | 'tarbiyat' | 'tests' | 'leave' | 'notices'>('attendance');
-  const [selectedClass, setSelectedClass] = useState<ClassLevel | 'ALL'>('ALL');
+  const [selectedClass, setSelectedClass] = useState<ClassLevel>(() => {
+    const firstWithStudents = SCHOOL_CLASSES.find(cls => students.some(s => s.className === cls));
+    return firstWithStudents || 'Play Group';
+  });
   const [attDate, setAttDate] = useState(new Date().toISOString().split('T')[0]);
   const [statusMap, setStatusMap] = useState<Record<string, 'Present' | 'Absent' | 'Leave' | 'Late'>>({});
   const [studentFilterQuery, setStudentFilterQuery] = useState('');
@@ -58,12 +61,15 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
     syncNowWithCloud();
   }, []);
 
-  // Auto-switch class to ALL or first class with students
+  // Auto-switch to first class with students if selected class is empty
   useEffect(() => {
-    if (students.length > 0 && selectedClass !== 'ALL' && !students.some(s => s.className === selectedClass)) {
-      setSelectedClass('ALL');
+    if (students.length > 0 && !students.some(s => s.className === selectedClass)) {
+      const firstWithStudents = SCHOOL_CLASSES.find(cls => students.some(s => s.className === cls));
+      if (firstWithStudents) {
+        setSelectedClass(firstWithStudents);
+      }
     }
-  }, [students, selectedClass]);
+  }, [students]);
 
   // Password change modal
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -81,9 +87,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
   const [testStudentId, setTestStudentId] = useState(students[0]?.id || '');
   const [marksObtained, setMarksObtained] = useState<number>(45);
   const [testSubTab, setTestSubTab] = useState<'enter_marks' | 'create_test'>('enter_marks');
-  const [newTestClass, setNewTestClass] = useState<ClassLevel>(
-    selectedClass === 'ALL' ? (students[0]?.className as ClassLevel || 'Class 5') : selectedClass
-  );
+  const [newTestClass, setNewTestClass] = useState<ClassLevel>(selectedClass);
   const [newTestSubject, setNewTestSubject] = useState('Mathematics (ریاضی)');
   const [customSubjectInput, setCustomSubjectInput] = useState('');
   const [newTestTotalMarks, setNewTestTotalMarks] = useState<number>(50);
@@ -97,9 +101,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
   const [leaveFrom, setLeaveFrom] = useState(new Date().toISOString().split('T')[0]);
   const [leaveTo, setLeaveTo] = useState(new Date().toISOString().split('T')[0]);
 
-  const classStudents = selectedClass === 'ALL'
-    ? students
-    : students.filter(s => s.className === selectedClass);
+  // Strictly Class-Wise Students: Only students in the selected class
+  const classStudents = students.filter(s => s.className === selectedClass);
 
   const filteredClassStudents = classStudents.filter(s => {
     if (!studentFilterQuery.trim()) return true;
@@ -118,27 +121,12 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
   });
 
   const handleSaveAttendance = () => {
-    if (selectedClass === 'ALL') {
-      const byClass: Record<string, { studentId: string; status: 'Present' | 'Absent' | 'Leave' | 'Late' }[]> = {};
-      classStudents.forEach(s => {
-        if (!byClass[s.className]) byClass[s.className] = [];
-        byClass[s.className].push({
-          studentId: s.id,
-          status: statusMap[s.id] || 'Present'
-        });
-      });
-      Object.entries(byClass).forEach(([cls, list]) => {
-        markClassAttendance(cls, attDate, list);
-      });
-      alert(`تمام کلاسز کے کل ${classStudents.length} طلباء کی حاضری کامیابی سے محفوظ ہو گئی!`);
-    } else {
-      const list = classStudents.map(s => ({
-        studentId: s.id,
-        status: statusMap[s.id] || 'Present'
-      }));
-      markClassAttendance(selectedClass, attDate, list);
-      alert(`حاضری برائے ${selectedClass} کامیابی سے محفوظ ہو گئی!`);
-    }
+    const list = classStudents.map(s => ({
+      studentId: s.id,
+      status: statusMap[s.id] || 'Present'
+    }));
+    markClassAttendance(selectedClass, attDate, list);
+    alert(`حاضری برائے ${selectedClass} (${classStudents.length} طلباء) کامیابی سے کلاؤڈ پر محفوظ ہو گئی!`);
   };
 
   const handleSaveDailyReport = (e: React.FormEvent) => {
@@ -345,15 +333,59 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
       {/* 1: ATTENDANCE */}
       {activeTab === 'attendance' && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-6">
+          {/* Class Selection Tabs */}
+          <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-black text-[#0D285F] uppercase tracking-wider flex items-center gap-1.5">
+                <GraduationCap className="w-4 h-4 text-amber-500" />
+                <span>کلاس منتخب کریں (Select Class for Attendance):</span>
+              </span>
+              <span className="text-xs text-slate-600 font-semibold">
+                حاضری برائے کلاس: <strong className="text-[#0D285F] text-sm">{selectedClass}</strong> ({classStudents.length} طلباء)
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-1">
+              {SCHOOL_CLASSES.map(cls => {
+                const count = students.filter(s => s.className === cls).length;
+                const isSelected = selectedClass === cls;
+                return (
+                  <button
+                    key={cls}
+                    type="button"
+                    onClick={() => {
+                      setSelectedClass(cls);
+                      setStudentFilterQuery('');
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#0D285F] text-amber-300 border-2 border-amber-400 scale-105'
+                        : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-300'
+                    }`}
+                  >
+                    <span>{cls}</span>
+                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                      isSelected ? 'bg-amber-400 text-[#07193B]' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Select Class (کلاس منتخب کریں)</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">کلاس ڈراپ ڈاؤن (Select Class Dropdown)</label>
               <select
                 value={selectedClass}
-                onChange={(e) => setSelectedClass(e.target.value as any)}
-                className="w-full px-3 py-2 text-sm border rounded-lg bg-white font-medium"
+                onChange={(e) => {
+                  setSelectedClass(e.target.value as ClassLevel);
+                  setStudentFilterQuery('');
+                }}
+                className="w-full px-3 py-2 text-sm border-2 border-slate-300 rounded-xl bg-white font-bold text-[#0D285F]"
               >
-                <option value="ALL">تمام کلاسز (تمام بچے - کل {students.length} طلباء)</option>
                 {SCHOOL_CLASSES.map(cls => {
                   const count = students.filter(s => s.className === cls).length;
                   return (
@@ -366,12 +398,12 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Attendance Date (تاریخ)</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Attendance Date (تاریخ)</label>
               <input
                 type="date"
                 value={attDate}
                 onChange={(e) => setAttDate(e.target.value)}
-                className="w-full px-3 py-2 text-sm border rounded-lg font-medium"
+                className="w-full px-3 py-2 text-sm border-2 border-slate-300 rounded-xl font-medium"
               />
             </div>
           </div>
@@ -435,17 +467,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
               <p className="text-slate-700 text-xs font-bold">
                 {studentFilterQuery
                   ? `تلاش کردہ نام یا رول نمبر "${studentFilterQuery}" کا کوئی بچہ نہیں ملا۔`
-                  : `اس کلاس (${selectedClass}) میں فی الحال کوئی بچہ داخل نہیں ہے۔`}
+                  : `کلاس "${selectedClass}" میں فی الحال کوئی بچہ داخل نہیں ہے۔ براہ کرم اوپر سے وہ کلاس منتخب فرمائیں جس میں طلباء داخل ہیں۔`}
               </p>
               <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                <span className="text-xs text-slate-500 font-semibold">کلاس سوئچ کریں:</span>
-                <button
-                  type="button"
-                  onClick={() => { setSelectedClass('ALL'); setStudentFilterQuery(''); }}
-                  className="bg-amber-400 hover:bg-amber-500 text-[#07193B] text-xs font-black px-3 py-1 rounded-lg transition shadow-sm"
-                >
-                  تمام کلاسز دکھائیں (All Classes)
-                </button>
+                <span className="text-xs text-slate-500 font-semibold">بچوں والی کلاس منتخب کریں:</span>
                 {SCHOOL_CLASSES.filter(c => students.some(s => s.className === c)).map(c => {
                   const cCount = students.filter(s => s.className === c).length;
                   return (
@@ -453,9 +478,9 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
                       key={c}
                       type="button"
                       onClick={() => { setSelectedClass(c); setStudentFilterQuery(''); }}
-                      className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 text-xs font-extrabold px-3 py-1 rounded-lg transition shadow-sm"
+                      className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 text-xs font-black px-3.5 py-1.5 rounded-xl transition shadow-sm"
                     >
-                      {c} ({cCount} طلباء)
+                      {c} ({cCount} بچے)
                     </button>
                   );
                 })}
@@ -467,7 +492,6 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
                 <thead className="bg-[#07193B] text-white">
                   <tr>
                     <th className="p-3">Roll No</th>
-                    {selectedClass === 'ALL' && <th className="p-3">Class</th>}
                     <th className="p-3">Student & Father Name</th>
                     <th className="p-3 text-center">Card / Photo</th>
                     <th className="p-3 text-center">Mark Attendance (حاضری لگائیں)</th>
@@ -486,13 +510,6 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
                             {st.rollNo}
                           </span>
                         </td>
-                        {selectedClass === 'ALL' && (
-                          <td className="p-3 font-semibold text-[#0D285F]">
-                            <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] font-bold">
-                              {st.className}
-                            </span>
-                          </td>
-                        )}
                         <td className="p-3">
                           <div className="flex items-center gap-2.5">
                             {st.photo ? (

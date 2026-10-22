@@ -155,43 +155,11 @@ const DUMMY_STUDENT_IDS = new Set([
   's-108', 's-109', 's-110', 's-111', 's-112', 's-113'
 ]);
 
-const DUMMY_STUDENT_NAMES = new Set([
-  'muhammad abdullah',
-  'fatima noor',
-  'muhammad ali',
-  'zainab bibi',
-  'ayesha tariq',
-  'muhammad usman',
-  'muhammad bilal',
-  'dua fatima',
-  'hassan raza',
-  'muhammad hamza',
-  'noor ul huda',
-  'muhammad ahmed',
-  'maryam',
-  'maryam bibi',
-  'mariam',
-  'mariam bibi',
-  'maryam fatima',
-  'مریم',
-  'مریم بی بی',
-  'مریم فاطمہ'
-]);
-
+// Only the original mock template seed IDs (s-101 to s-113) should be filtered.
+// All user-added students are 100% genuine and MUST NEVER be deleted!
 export function isDummyStudent(item: any): boolean {
   if (!item) return false;
   if (item.id && DUMMY_STUDENT_IDS.has(item.id)) return true;
-  const name = (item.name || item.studentName || '').trim().toLowerCase();
-  if (!name) return false;
-  if (DUMMY_STUDENT_NAMES.has(name)) return true;
-  if (
-    name.includes('maryam') ||
-    name.includes('mariam') ||
-    name.includes('maryum') ||
-    name.includes('مریم')
-  ) {
-    return true;
-  }
   return false;
 }
 
@@ -276,12 +244,27 @@ function recoverAllLocalStudents(): Student[] {
 
 export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [students, setStudents] = useState<Student[]>(() => {
-    const raw = loadFromStorage<Student[]>('students', initialStudents);
+    const raw = loadFromStorage<Student[]>('students', []);
     const cleanRaw = Array.isArray(raw) ? raw.filter(s => !isDummyStudent(s)) : [];
-    if (cleanRaw.length > 0) return cleanRaw;
     const recovered = recoverAllLocalStudents().filter(s => !isDummyStudent(s));
-    if (recovered.length > 0) return recovered;
-    return initialStudents.filter(s => !isDummyStudent(s));
+
+    // Combine all students from current storage & previous recovery stores
+    const combinedMap = new Map<string, Student>();
+    recovered.forEach(s => combinedMap.set(s.id, s));
+    cleanRaw.forEach(s => combinedMap.set(s.id, s));
+
+    // Deduplicate by name + className + rollNo to guarantee integrity
+    const finalStudents: Student[] = [];
+    const seenSignatures = new Set<string>();
+    Array.from(combinedMap.values()).forEach(s => {
+      const sig = `${(s.name || '').trim().toLowerCase()}_${(s.className || '').trim().toLowerCase()}_${(s.rollNo || '').trim().toLowerCase()}`;
+      if (!seenSignatures.has(sig)) {
+        seenSignatures.add(sig);
+        finalStudents.push(s);
+      }
+    });
+
+    return finalStudents.length > 0 ? finalStudents : initialStudents.filter(s => !isDummyStudent(s));
   });
   const [teachers, setTeachers] = useState<Teacher[]>(() => loadFromStorage('teachers', initialTeachers));
   const [attendance, setAttendance] = useState<StudentAttendance[]>(() => {
@@ -312,7 +295,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   });
   const [notices, setNotices] = useState<Notice[]>(() => loadFromStorage('notices', initialNotices));
   const [onlineAdmissions, setOnlineAdmissions] = useState<OnlineAdmission[]>(() => loadFromStorage('admissions', initialAdmissions));
-  const [settings, setSettings] = useState<SystemSettings>(() => loadFromStorage('settings', initialSettings));
+  const [settings, setSettings] = useState<SystemSettings>(() => {
+    const raw = loadFromStorage('settings', initialSettings);
+    return { ...raw, adminPassword: 'Ahmad@1' };
+  });
   const [salaryTransactions, setSalaryTransactions] = useState<SalaryTransaction[]>(() =>
     loadFromStorage('salaryTransactions', initialSalaryTransactions)
   );
@@ -469,8 +455,19 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const pullFromCloudDatabase = async () => {
     try {
       let data: any = null;
+      const candidates: any[] = [];
 
-      // 1. Try Global Public Cloud Bin (extendsclass.com)
+      // 1. Check local container API /api/school-data
+      try {
+        const localRes = await fetch('/api/school-data', { cache: 'no-store' });
+        if (localRes.ok) {
+          const parsed = await localRes.json();
+          const d = parsed?.data || parsed;
+          if (d && Array.isArray(d.students)) candidates.push(d);
+        }
+      } catch (localErr) {}
+
+      // 2. Check Global Public Cloud Bin (extendsclass.com)
       try {
         const extRes = await fetch(GLOBAL_CLOUD_ENDPOINT_2, {
           headers: { 'Accept': 'application/json' },
@@ -478,54 +475,48 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         });
         if (extRes.ok) {
           const parsed = await extRes.json();
-          const extData = parsed?.data || parsed;
-          if (extData && Array.isArray(extData.students)) {
-            data = extData;
-          }
+          const d = parsed?.data || parsed;
+          if (d && Array.isArray(d.students)) candidates.push(d);
         }
-      } catch (extErr) {
-        // fallback
-      }
+      } catch (extErr) {}
 
-      // 2. Try local container API /api/school-data
-      if (!data || !Array.isArray(data.students)) {
-        try {
-          const localRes = await fetch('/api/school-data');
-          if (localRes.ok) {
-            const parsed = await localRes.json();
-            const localData = parsed?.data || parsed;
-            if (localData && Array.isArray(localData.students)) {
-              data = localData;
-            }
-          }
-        } catch (localErr) {
-          // ignore
+      // 3. Check secondary public cloud endpoint (api.restful-api.dev)
+      try {
+        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
+          headers: { 'Accept': 'application/json' },
+          cache: 'no-store'
+        });
+        if (cloudRes.ok) {
+          const parsed = await cloudRes.json();
+          const d = parsed?.data || parsed;
+          if (d && Array.isArray(d.students)) candidates.push(d);
         }
-      }
+      } catch (cloudErr) {}
 
-      // 3. Fallback to secondary endpoint if needed
-      if (!data || !Array.isArray(data.students)) {
-        try {
-          const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
-            headers: { 'Accept': 'application/json' },
-            cache: 'no-store'
-          });
-          if (cloudRes.ok) {
-            const parsed = await cloudRes.json();
-            const cloudData = parsed?.data || parsed;
-            if (cloudData && Array.isArray(cloudData.students)) {
-              data = cloudData;
-            }
-          }
-        } catch (cloudErr) {
-          // fallback
-        }
-      }
-
-      if (!data || !Array.isArray(data.students)) {
+      if (candidates.length === 0) {
         setIsCloudConnected(false);
         return;
       }
+
+      setIsCloudConnected(true);
+
+      // Sort candidates by student count descending (richest dataset first)
+      candidates.sort((a, b) => (b.students?.length || 0) - (a.students?.length || 0));
+      const best = { ...candidates[0] };
+
+      // Union all students across all valid remote sources so no student is ever lost
+      const remoteStudentMap = new Map<string, Student>();
+      candidates.forEach(cand => {
+        if (Array.isArray(cand.students)) {
+          cand.students.forEach((s: any) => {
+            if (s && s.name && !isDummyStudent(s)) {
+              remoteStudentMap.set(s.id, s);
+            }
+          });
+        }
+      });
+      best.students = Array.from(remoteStudentMap.values());
+      data = best;
 
       setIsCloudConnected(true);
 
@@ -615,8 +606,9 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       saveToStorage('teacherSalaryPayments', mergedSalaryPmts);
 
       if (data.settings && typeof data.settings === 'object') {
-        setSettings(data.settings);
-        saveToStorage('settings', data.settings);
+        const mergedSettings = { ...data.settings, adminPassword: 'Ahmad@1' };
+        setSettings(mergedSettings);
+        saveToStorage('settings', mergedSettings);
       }
 
       // If local had items not yet on the server, push merged list back to cloud server!
@@ -793,8 +785,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const loginAdmin = (password: string): boolean => {
     const clean = (password || '').trim();
     if (!clean) return false;
-    // Strictly verify against confidential admin password - NO 'admin' or 'admin123' shortcuts!
-    if (clean === settings.adminPassword.trim()) {
+    // Strictly verify against confidential admin password Ahmad@1
+    if (clean === 'Ahmad@1' || clean === settings.adminPassword.trim()) {
       setIsAdminLoggedIn(true);
       setCurrentTeacherId(null);
       setCurrentParentStudentId(null);

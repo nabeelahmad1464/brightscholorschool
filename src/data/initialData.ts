@@ -14,7 +14,7 @@ import {
 } from '../types';
 
 export const initialSettings: SystemSettings = {
-  adminPassword: 'Nabeel#0',
+  adminPassword: 'Ahmad@1',
   teacherPassword: 'teacher123',
   finePerAbsentDay: 50, // Rs. 50 per unapproved absent day
   schoolName: 'Bright Scholar School',

@@ -7,10 +7,11 @@ import { downloadReceiptElementAsImage, generateAndDownloadReceiptCanvas } from 
 interface FeeReceiptModalProps {
   feeRecord: FeeRecord | null;
   onClose: () => void;
+  initialEditMode?: boolean;
 }
 
-export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onClose }) => {
-  const { settings, openWhatsApp, students, updateFeeRecord } = useSchool();
+export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onClose, initialEditMode }) => {
+  const { settings, openWhatsApp, students, updateFeeRecord, updateStudent } = useSchool();
 
   if (!feeRecord) return null;
 
@@ -19,7 +20,7 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
   const finePerDay = settings.finePerAbsentDay || 50;
 
   // Custom Fee Editing State (علیحدہ سے فیس درج کریں)
-  const [isEditingCustomFee, setIsEditingCustomFee] = useState(false);
+  const [isEditingCustomFee, setIsEditingCustomFee] = useState(initialEditMode || false);
   const [customTuitionInput, setCustomTuitionInput] = useState<number>(feeRecord.tuitionFee);
   const [customFineInput, setCustomFineInput] = useState<number>(feeRecord.fineAmount);
   const [customPaidInput, setCustomPaidInput] = useState<number>(feeRecord.paidAmount);
@@ -45,6 +46,15 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
     };
 
     updateFeeRecord(updated);
+
+    // Also update student's profile monthly fee so subsequent months/records reflect the adjustment
+    if (student && student.monthlyFee !== tuition) {
+      updateStudent({
+        ...student,
+        monthlyFee: tuition
+      });
+    }
+
     setIsEditingCustomFee(false);
     setSaveSuccessMsg(true);
     setTimeout(() => setSaveSuccessMsg(false), 2500);
@@ -187,6 +197,38 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
                   onChange={(e) => setCustomTuitionInput(Number(e.target.value))}
                   className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-900 outline-none focus:ring-2 focus:ring-[#0D285F]"
                 />
+                <div className="flex items-center gap-1 mt-1 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setCustomTuitionInput(prev => Math.max(0, prev - 500))}
+                    className="bg-red-100 hover:bg-red-200 text-red-800 text-[10px] font-bold px-1.5 py-0.5 rounded border border-red-200"
+                    title="فیس 500 کم کریں"
+                  >
+                    -500
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomTuitionInput(prev => prev + 500)}
+                    className="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded border border-emerald-200"
+                    title="فیس 500 زیادہ کریں"
+                  >
+                    +500
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomTuitionInput(prev => Math.max(0, prev - 1000))}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold px-1 py-0.5 rounded border"
+                  >
+                    -1000
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomTuitionInput(prev => prev + 1000)}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold px-1 py-0.5 rounded border"
+                  >
+                    +1000
+                  </button>
+                </div>
               </div>
 
               <div>

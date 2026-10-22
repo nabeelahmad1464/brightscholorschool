@@ -31,7 +31,8 @@ import {
   Printer,
   X,
   Database,
-  CheckCircle2
+  CheckCircle2,
+  Edit3
 } from 'lucide-react';
 import { useSchool, isDummyStudent } from '../context/SchoolContext';
 import {
@@ -93,6 +94,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
     markClassAttendance,
     markTeacherAttendance,
     updateLeaveStatus,
+    addFeeRecord,
     deleteFeeRecord,
     recordFeePayment,
     generateMonthlyFeeVouchers,
@@ -172,6 +174,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [receiptNo, setReceiptNo] = useState('');
   const [selectedFeeForReceipt, setSelectedFeeForReceipt] = useState<FeeRecord | null>(null);
+  const [feeReceiptEditMode, setFeeReceiptEditMode] = useState<boolean>(false);
 
   // New Notice state
   const [newNoticeTitle, setNewNoticeTitle] = useState('');
@@ -875,6 +878,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
                                 Edit
                               </button>
                               <button
+                                onClick={() => {
+                                  let record = feeRecords.find(f => f.studentId === st.id);
+                                  if (!record) {
+                                    record = {
+                                      id: `fee-${st.id}`,
+                                      studentId: st.id,
+                                      studentName: st.name,
+                                      fatherName: st.fatherName,
+                                      className: st.className,
+                                      month: 'October 2026',
+                                      tuitionFee: st.monthlyFee,
+                                      absentDays: 0,
+                                      fineAmount: 0,
+                                      totalPayable: st.monthlyFee,
+                                      paidAmount: 0,
+                                      balanceRemaining: st.monthlyFee,
+                                      status: 'Unpaid',
+                                      receiptNo: `REC-BSS-${st.id.slice(-4)}`
+                                    };
+                                    addFeeRecord(record);
+                                  }
+                                  setSelectedFeeForReceipt(record);
+                                  setFeeReceiptEditMode(true);
+                                }}
+                                className="bg-emerald-50 text-emerald-800 border border-emerald-300 px-2.5 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-100 transition"
+                                title="اس بچے کی فیس کم یا زیادہ کریں"
+                              >
+                                <Edit3 className="w-3.5 h-3.5 inline mr-1 text-emerald-700" />
+                                فیس ایڈٹ
+                              </button>
+                              <button
                                 onClick={() => setStudentToDelete(st)}
                                 className="bg-red-50 text-red-600 px-2.5 py-1.5 rounded-lg text-xs font-semibold hover:bg-red-100 transition"
                                 title="Delete student"
@@ -1506,12 +1540,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
                       <td className="p-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
-                            onClick={() => setSelectedFeeForReceipt(f)}
+                            onClick={() => {
+                              setSelectedFeeForReceipt(f);
+                              setFeeReceiptEditMode(false);
+                            }}
                             className="bg-blue-50 hover:bg-blue-100 text-[#0D285F] border border-blue-200 px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1 shadow-sm"
                             title="Print / View Fee Receipt"
                           >
                             <Printer className="w-3.5 h-3.5 text-blue-700" />
                             <span>رسید</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedFeeForReceipt(f);
+                              setFeeReceiptEditMode(true);
+                            }}
+                            className="bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1 shadow-sm"
+                            title="فیس کم یا زیادہ کریں"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-amber-800" />
+                            <span>فیس کم/زیادہ</span>
                           </button>
                           {f.balanceRemaining > 0 && (
                             <button
@@ -2754,7 +2802,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
       {/* MODAL 7: FEE RECEIPT MODAL */}
       <FeeReceiptModal
         feeRecord={selectedFeeForReceipt}
-        onClose={() => setSelectedFeeForReceipt(null)}
+        onClose={() => {
+          setSelectedFeeForReceipt(null);
+          setFeeReceiptEditMode(false);
+        }}
+        initialEditMode={feeReceiptEditMode}
       />
     </div>
   );
