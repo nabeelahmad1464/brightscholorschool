@@ -12,6 +12,8 @@ import {
   OnlineAdmission,
   SystemSettings
 } from '../types';
+import { all51SchoolStudents } from './studentsRoster';
+import { all51InitialFeeRecords } from './feeRecordsRoster';
 
 export const initialSettings: SystemSettings = {
   adminPassword: 'Ahmad@1',
@@ -71,7 +73,7 @@ export const initialTeachers: Teacher[] = [
 
 export const initialSalaryTransactions: import('../types').SalaryTransaction[] = [];
 
-export const initialStudents: Student[] = [];
+export const initialStudents: Student[] = all51SchoolStudents;
 
 export const initialAttendance: StudentAttendance[] = [];
 
@@ -79,7 +81,7 @@ export const initialTeacherAttendance: TeacherAttendance[] = [];
 
 export const initialLeaves: LeaveRequest[] = [];
 
-export const initialFeeRecords: FeeRecord[] = [];
+export const initialFeeRecords: FeeRecord[] = all51InitialFeeRecords;
 
 export const initialDailyReports: DailyReport[] = [];
 

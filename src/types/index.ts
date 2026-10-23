@@ -61,7 +61,8 @@ export interface Student {
   name: string;
   fatherName: string;
   className: ClassLevel;
-  dob: string;
+  dob?: string;
+  dateOfBirth?: string;
   contactNo: string;
   whatsappNo: string;
   address: string;

@@ -149,23 +149,31 @@ interface SchoolContextType {
 
 const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
 
-// Strict filter to permanently eliminate all fake/dummy seed students across all devices & storage
+// Strict filter to permanently eliminate all fake/dummy seed students (including Maryam Shabbir s-105) across all devices & storage
 const DUMMY_STUDENT_IDS = new Set([
-  's-101', 's-102', 's-103', 's-104', 's-106', 's-107',
+  's-101', 's-102', 's-103', 's-104', 's-105', 's-106', 's-107',
   's-108', 's-109', 's-110', 's-111', 's-112', 's-113'
 ]);
 
-// Only the original mock template seed IDs (s-101 to s-113) should be filtered.
-// All user-added students are 100% genuine and MUST NEVER be deleted!
 export function isDummyStudent(item: any): boolean {
   if (!item) return false;
   if (item.id && DUMMY_STUDENT_IDS.has(item.id)) return true;
+  const name = String(item.name || item.studentName || '').toLowerCase().trim();
+  const fName = String(item.fatherName || '').toLowerCase().trim();
+  if (
+    name.includes('maryam shabbir') ||
+    name.includes('مریم شبیر') ||
+    (name.includes('maryam') && (item.className === 'Class 4' || item.rollNo === '02' || fName.includes('shabbir'))) ||
+    (name.includes('مریم') && (item.className === 'Class 4' || item.rollNo === '02' || fName.includes('شبیر')))
+  ) {
+    return true;
+  }
   return false;
 }
 
 function loadFromStorage<T>(key: string, defaultValue: T): T {
   try {
-    const item = localStorage.getItem(`bss_v7_${key}`);
+    const item = localStorage.getItem(`bss_v8_${key}`);
     return item ? JSON.parse(item) : defaultValue;
   } catch (e) {
     return defaultValue;
@@ -174,9 +182,9 @@ function loadFromStorage<T>(key: string, defaultValue: T): T {
 
 function saveToStorage<T>(key: string, value: T) {
   try {
-    localStorage.setItem(`bss_v7_${key}`, JSON.stringify(value));
+    localStorage.setItem(`bss_v8_${key}`, JSON.stringify(value));
   } catch (e) {
-    console.error(`Failed to save bss_v7_${key}`, e);
+    console.error(`Failed to save bss_v8_${key}`, e);
   }
 }
 
@@ -248,8 +256,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const cleanRaw = Array.isArray(raw) ? raw.filter(s => !isDummyStudent(s)) : [];
     const recovered = recoverAllLocalStudents().filter(s => !isDummyStudent(s));
 
-    // Combine all students from current storage & previous recovery stores
+    // Combine all students from base roster, current storage & previous recovery stores
     const combinedMap = new Map<string, Student>();
+    // First seed with all 51 school students so all classes (including Class 7 Roll 02) are guaranteed present!
+    initialStudents.filter(s => !isDummyStudent(s)).forEach(s => combinedMap.set(s.id, s));
     recovered.forEach(s => combinedMap.set(s.id, s));
     cleanRaw.forEach(s => combinedMap.set(s.id, s));
 
@@ -257,6 +267,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const finalStudents: Student[] = [];
     const seenSignatures = new Set<string>();
     Array.from(combinedMap.values()).forEach(s => {
+      if (isDummyStudent(s)) return;
       const sig = `${(s.name || '').trim().toLowerCase()}_${(s.className || '').trim().toLowerCase()}_${(s.rollNo || '').trim().toLowerCase()}`;
       if (!seenSignatures.has(sig)) {
         seenSignatures.add(sig);
@@ -275,11 +286,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [teacherAttendance, setTeacherAttendance] = useState<TeacherAttendance[]>(() => loadFromStorage('teacherAttendance', initialTeacherAttendance));
   const [leaves, setLeaves] = useState<LeaveRequest[]>(() => loadFromStorage('leaves', initialLeaves));
   const [feeRecords, setFeeRecords] = useState<FeeRecord[]>(() => {
-    const raw = loadFromStorage<FeeRecord[]>('feeRecords', []);
+    const raw = loadFromStorage<FeeRecord[]>('feeRecords', initialFeeRecords);
     const clean = Array.isArray(raw) ? raw.filter(f => !isDummyStudent(f)) : [];
-    // Ensure purged list is stored back to storage
-    saveToStorage('feeRecords', clean);
-    return clean;
+    if (clean.length > 0) return clean;
+    return initialFeeRecords.filter(f => !isDummyStudent(f));
   });
   const [dailyReports, setDailyReports] = useState<DailyReport[]>(() => {
     const raw = loadFromStorage<DailyReport[]>('dailyReports', initialDailyReports);
@@ -851,20 +861,32 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!clean) return null;
     const cleanNum = clean.replace(/^0+/, ''); // '01' -> '1'
 
-    const student = students.find(s => {
-      const rollClean = s.rollNo.trim().toLowerCase();
-      const rollNum = rollClean.replace(/^0+/, '');
-      const matchRoll = rollClean === clean || (cleanNum !== '' && rollNum === cleanNum);
-      const matchAdm = s.admissionNo.toLowerCase() === clean || s.admissionNo.toLowerCase().includes(clean);
-      const matchName = s.name.toLowerCase().includes(clean) || s.fatherName.toLowerCase().includes(clean);
-      const matchClass = !className || className === 'All' || s.className.toLowerCase() === className.toLowerCase();
+    const valid = students.filter(s => !isDummyStudent(s));
 
-      return (matchRoll || matchAdm || matchName) && matchClass;
-    }) || students.find(s => {
-      const rollClean = s.rollNo.trim().toLowerCase();
-      const rollNum = rollClean.replace(/^0+/, '');
-      return rollClean === clean || (cleanNum !== '' && rollNum === cleanNum) || s.admissionNo.toLowerCase() === clean;
-    });
+    let student: Student | undefined;
+
+    if (className && className !== 'All') {
+      // 1. Strict Search in specified class
+      student = valid.find(s => {
+        if (s.className.toLowerCase().trim() !== className.toLowerCase().trim()) return false;
+        const rollClean = s.rollNo.trim().toLowerCase();
+        const rollNum = rollClean.replace(/^0+/, '');
+        const matchRoll = rollClean === clean || (cleanNum !== '' && rollNum === cleanNum);
+        const matchAdm = s.admissionNo.toLowerCase() === clean || s.admissionNo.toLowerCase().includes(clean);
+        const matchName = s.name.toLowerCase().trim() === clean || s.name.toLowerCase().includes(clean);
+        return matchRoll || matchAdm || matchName;
+      });
+    } else {
+      // 2. Search across all classes
+      student = valid.find(s => {
+        const rollClean = s.rollNo.trim().toLowerCase();
+        const rollNum = rollClean.replace(/^0+/, '');
+        const matchRoll = rollClean === clean || (cleanNum !== '' && rollNum === cleanNum);
+        const matchAdm = s.admissionNo.toLowerCase() === clean || s.admissionNo.toLowerCase().includes(clean);
+        const matchName = s.name.toLowerCase().trim() === clean || s.name.toLowerCase().includes(clean);
+        return matchRoll || matchAdm || matchName;
+      });
+    }
 
     if (student) {
       setCurrentParentStudentId(student.id);
@@ -1286,7 +1308,12 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const updateSettings = (newSettings: Partial<SystemSettings>) => {
-    setSettings(prev => ({ ...prev, ...newSettings }));
+    setSettings(prev => {
+      const updated = { ...prev, ...newSettings };
+      saveToStorage('settings', updated);
+      pushCurrentDataToCloud({ settings: updated });
+      return updated;
+    });
   };
 
   // Student 360 Full Report
