@@ -94,6 +94,7 @@ interface SchoolContextType {
   updateStudent: (student: Student) => void;
   deleteStudent: (id: string) => void;
   toggleStudentActive: (id: string) => void;
+  purgePlaceholderStudents: () => number;
 
   addTeacher: (teacher: Omit<Teacher, 'id' | 'allowances' | 'deductions'>) => Teacher;
   updateTeacher: (teacher: Teacher) => void;
@@ -256,26 +257,36 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const cleanRaw = Array.isArray(raw) ? raw.filter(s => !isDummyStudent(s)) : [];
     const recovered = recoverAllLocalStudents().filter(s => !isDummyStudent(s));
 
-    // Combine all students from base roster, current storage & previous recovery stores
-    const combinedMap = new Map<string, Student>();
-    // First seed with all 51 school students so all classes (including Class 7 Roll 02) are guaranteed present!
-    initialStudents.filter(s => !isDummyStudent(s)).forEach(s => combinedMap.set(s.id, s));
-    recovered.forEach(s => combinedMap.set(s.id, s));
-    cleanRaw.forEach(s => combinedMap.set(s.id, s));
+    // Find all real students created by the user (IDs do not start with 'bss-')
+    const realUserCandidates = [
+      ...cleanRaw.filter(s => !s.id.startsWith('bss-')),
+      ...recovered.filter(s => !s.id.startsWith('bss-'))
+    ];
 
-    // Deduplicate by name + className + rollNo to guarantee integrity
-    const finalStudents: Student[] = [];
-    const seenSignatures = new Set<string>();
-    Array.from(combinedMap.values()).forEach(s => {
-      if (isDummyStudent(s)) return;
-      const sig = `${(s.name || '').trim().toLowerCase()}_${(s.className || '').trim().toLowerCase()}_${(s.rollNo || '').trim().toLowerCase()}`;
-      if (!seenSignatures.has(sig)) {
-        seenSignatures.add(sig);
-        finalStudents.push(s);
+    if (realUserCandidates.length > 0) {
+      // Prioritize user's own genuine students exclusively - NEVER mix with placeholder 'bss-' students!
+      const map = new Map<string, Student>();
+      const seenSignatures = new Set<string>();
+      const realOnly: Student[] = [];
+
+      realUserCandidates.forEach(s => {
+        if (!s || !s.name || isDummyStudent(s)) return;
+        const sig = `${(s.name || '').trim().toLowerCase()}_${(s.className || '').trim().toLowerCase()}_${(s.rollNo || '').trim().toLowerCase()}`;
+        if (!seenSignatures.has(sig) && !map.has(s.id)) {
+          seenSignatures.add(sig);
+          map.set(s.id, s);
+          realOnly.push(s);
+        }
+      });
+
+      if (realOnly.length > 0) {
+        saveToStorage('students', realOnly);
+        return realOnly;
       }
-    });
+    }
 
-    return finalStudents.length > 0 ? finalStudents : initialStudents.filter(s => !isDummyStudent(s));
+    // Only fallback to initial roster if absolutely no real user students exist anywhere
+    return initialStudents.filter(s => !isDummyStudent(s));
   });
   const [teachers, setTeachers] = useState<Teacher[]>(() => loadFromStorage('teachers', initialTeachers));
   const [attendance, setAttendance] = useState<StudentAttendance[]>(() => {
@@ -288,8 +299,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [feeRecords, setFeeRecords] = useState<FeeRecord[]>(() => {
     const raw = loadFromStorage<FeeRecord[]>('feeRecords', initialFeeRecords);
     const clean = Array.isArray(raw) ? raw.filter(f => !isDummyStudent(f)) : [];
-    if (clean.length > 0) return clean;
-    return initialFeeRecords.filter(f => !isDummyStudent(f));
+    // If real fee records exist without 'fee-bss-' placeholder prefix, prefer them
+    const realFees = clean.filter(f => !f.id.startsWith('fee-bss-') && !f.studentId?.startsWith('bss-'));
+    if (realFees.length > 0) return realFees;
+    return clean.length > 0 ? clean : initialFeeRecords.filter(f => !isDummyStudent(f));
   });
   const [dailyReports, setDailyReports] = useState<DailyReport[]>(() => {
     const raw = loadFromStorage<DailyReport[]>('dailyReports', initialDailyReports);
@@ -557,12 +570,43 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return Array.from(map.values());
       };
 
-      const mergedStudents = mergeEntities(data.students, currentLocal.students);
+      // Smart Student Merge: Purge all 'bss-' placeholders if real students exist
+      const mergeStudents = (serverStudents?: Student[], localStudents?: Student[]): Student[] => {
+        const cleanServer = Array.isArray(serverStudents) ? serverStudents.filter(s => !isDummyStudent(s)) : [];
+        const cleanLocal = Array.isArray(localStudents) ? localStudents.filter(s => !isDummyStudent(s)) : [];
+
+        const realServer = cleanServer.filter(s => !s.id.startsWith('bss-'));
+        const realLocal = cleanLocal.filter(s => !s.id.startsWith('bss-'));
+
+        const hasRealStudents = realServer.length > 0 || realLocal.length > 0;
+        const pool = hasRealStudents ? [...realServer, ...realLocal] : [...cleanServer, ...cleanLocal];
+
+        const map = new Map<string, Student>();
+        const seenSignatures = new Set<string>();
+        const result: Student[] = [];
+
+        pool.forEach(st => {
+          if (!st || !st.name) return;
+          const sig = `${(st.name || '').trim().toLowerCase()}_${(st.className || '').trim().toLowerCase()}_${(st.rollNo || '').trim().toLowerCase()}`;
+          if (!seenSignatures.has(sig) && !map.has(st.id)) {
+            seenSignatures.add(sig);
+            map.set(st.id, st);
+            result.push(st);
+          }
+        });
+
+        return result.length > 0 ? result : (cleanLocal.length > 0 ? cleanLocal : cleanServer);
+      };
+
+      const mergedStudents = mergeStudents(data.students, currentLocal.students);
+      const hasReal = mergedStudents.some(s => !s.id.startsWith('bss-'));
       const mergedTeachers = mergeEntities(data.teachers, currentLocal.teachers);
-      const mergedAttendance = mergeEntities(data.attendance, currentLocal.attendance);
+      const mergedAttendance = mergeEntities(data.attendance, currentLocal.attendance)
+        .filter(a => !hasReal || !a.studentId?.startsWith('bss-'));
       const mergedTeacherAttendance = mergeEntities(data.teacherAttendance, currentLocal.teacherAttendance);
       const mergedLeaves = mergeEntities(data.leaves, currentLocal.leaves);
-      const mergedFees = mergeEntities(data.feeRecords, currentLocal.feeRecords);
+      const mergedFees = mergeEntities(data.feeRecords, currentLocal.feeRecords)
+        .filter(f => !hasReal || (!f.id.startsWith('fee-bss-') && !f.studentId?.startsWith('bss-')));
       const mergedReports = mergeEntities(data.dailyReports, currentLocal.dailyReports);
       const mergedTests = mergeEntities(data.tests, currentLocal.tests);
       const mergedTestResults = mergeEntities(data.testResults, currentLocal.testResults);
@@ -965,6 +1009,28 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setStudents(updatedList);
     saveToStorage('students', updatedList);
     pushCurrentDataToCloud({ students: updatedList });
+  };
+
+  const purgePlaceholderStudents = (): number => {
+    const realOnly = stateRef.current.students.filter(s => !s.id.startsWith('bss-') && !isDummyStudent(s));
+    setStudents(realOnly);
+    saveToStorage('students', realOnly);
+
+    const realFees = stateRef.current.feeRecords.filter(f => !f.id.startsWith('fee-bss-') && !f.studentId?.startsWith('bss-'));
+    setFeeRecords(realFees);
+    saveToStorage('feeRecords', realFees);
+
+    const realAtt = stateRef.current.attendance.filter(a => !a.studentId?.startsWith('bss-'));
+    setAttendance(realAtt);
+    saveToStorage('attendance', realAtt);
+
+    pushCurrentDataToCloud({
+      students: realOnly,
+      feeRecords: realFees,
+      attendance: realAtt
+    });
+
+    return realOnly.length;
   };
 
   // Teacher CRUD
@@ -1494,6 +1560,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         updateStudent,
         deleteStudent,
         toggleStudentActive,
+        purgePlaceholderStudents,
         addTeacher,
         updateTeacher,
         deleteTeacher,

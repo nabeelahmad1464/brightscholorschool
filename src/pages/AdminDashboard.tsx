@@ -84,6 +84,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
     updateStudent,
     deleteStudent,
     toggleStudentActive,
+    purgePlaceholderStudents,
     addTeacher,
     updateTeacher,
     deleteTeacher,
@@ -654,6 +655,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
+                {students.some(s => s.id.startsWith('bss-')) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const count = purgePlaceholderStudents();
+                      alert(`فرضی اور ڈمی طلباء خارج کر دیے گئے ہیں! اب کل ${count} اصل طلباء کلاؤڈ پر محفوظ ہیں۔`);
+                    }}
+                    className="bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-extrabold text-xs px-3.5 py-2.5 rounded-xl transition shadow flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>فرضی بچے خارج کریں (صرف اصل رکھیں)</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleManualSync}
