@@ -417,34 +417,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       let success = false;
 
-      // 1. Push to Primary Global Cloud Bin (api.restful-api.dev)
-      try {
-        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: 'BSS_DATA',
-            data: payload
-          })
-        });
-        if (cloudRes.ok) success = true;
-      } catch (cloudErr) {
-        console.warn('Primary cloud sync warning:', cloudErr);
-      }
-
-      // 2. Mirror to Secondary Global Cloud Bin (extendsclass.com)
-      try {
-        const extRes = await fetch(GLOBAL_CLOUD_ENDPOINT_2, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        if (extRes.ok) success = true;
-      } catch (extErr) {
-        // secondary mirror
-      }
-
-      // 3. Push to local API as container backup
+      // 1. Primary: Server API (/api/school-data) - same origin, works reliably from all mobile devices
       try {
         const localRes = await fetch('/api/school-data', {
           method: 'POST',
@@ -453,8 +426,18 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         });
         if (localRes.ok) success = true;
       } catch (localErr) {
-        // local dev backup
+        console.warn('Server API sync error:', localErr);
       }
+
+      // 2. Secondary backup: Global Cloud Bin (extendsclass.com)
+      try {
+        const extRes = await fetch(GLOBAL_CLOUD_ENDPOINT_2, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (extRes.ok) success = true;
+      } catch (extErr) {}
 
       if (success) {
         setIsCloudConnected(true);
@@ -704,31 +687,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       };
 
       let success = false;
-      try {
-        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: 'BSS_DATA',
-            data: payload
-          })
-        });
-        if (cloudRes.ok) success = true;
-      } catch (err) {
-        // fallback
-      }
-
-      try {
-        const extRes = await fetch(GLOBAL_CLOUD_ENDPOINT_2, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        if (extRes.ok) success = true;
-      } catch (err) {
-        // fallback
-      }
-
+      // 1. Primary: Server API (/api/school-data)
       try {
         const localRes = await fetch('/api/school-data', {
           method: 'POST',
@@ -736,6 +695,18 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           body: JSON.stringify(payload)
         });
         if (localRes.ok) success = true;
+      } catch (err) {
+        // fallback
+      }
+
+      // 2. Secondary backup: Global Cloud Bin (extendsclass.com)
+      try {
+        const extRes = await fetch(GLOBAL_CLOUD_ENDPOINT_2, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (extRes.ok) success = true;
       } catch (err) {
         // fallback
       }
@@ -762,11 +733,11 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Sync to Cloud Server when local data changes (debounced backup)
   useEffect(() => {
     if (isApplyingRemoteUpdate.current) return;
-    if (!hasInitializedFromCloud.current) return;
+    if (stateRef.current.students.length === 0) return;
 
     const timer = setTimeout(() => {
       pushCurrentDataToCloud();
-    }, 1000);
+    }, 800);
 
     return () => clearTimeout(timer);
   }, [
@@ -788,8 +759,14 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Periodic polling & window focus pull
   useEffect(() => {
-    pullFromCloudDatabase();
+    // 1. If this device already has students, push them to server immediately!
+    if (stateRef.current.students.length > 0) {
+      pushCurrentDataToCloud();
+    } else {
+      pullFromCloudDatabase();
+    }
 
+    // 2. Poll every 4 seconds to sync any updates from other devices
     const interval = setInterval(() => {
       pullFromCloudDatabase();
     }, 4000);

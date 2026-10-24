@@ -299,18 +299,15 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
               </label>
               <select
                 value={inputClass}
-                onChange={(e) => setInputClass(e.target.value)}
+                onChange={(e) => {
+                  setInputClass(e.target.value);
+                  setErrorMessage('');
+                }}
                 className="w-full bg-slate-50 border-2 border-slate-300 focus:border-[#0D285F] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-extrabold text-[#0D285F] outline-none shadow-sm"
               >
-                <option value="All">تمام کلاسز (خودکار تلاش / All Classes)</option>
-                {SCHOOL_CLASSES.map(cls => {
-                  const count = students.filter(s => s.className === cls).length;
-                  return (
-                    <option key={cls} value={cls}>
-                      {cls} ({count} طلباء)
-                    </option>
-                  );
-                })}
+                {SCHOOL_CLASSES.map(cls => (
+                  <option key={cls} value={cls}>{cls}</option>
+                ))}
               </select>
             </div>
 
@@ -324,7 +321,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                 required
                 value={inputRollNo}
                 onChange={(e) => setInputRollNo(e.target.value)}
-                placeholder="رول نمبر (01, 1) یا نام درج کریں..."
+                placeholder="طالب علم کا رول نمبر (مثلاً: 01 یا 02)..."
                 className="w-full bg-slate-50 border-2 border-slate-300 focus:border-[#0D285F] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-extrabold text-slate-900 outline-none shadow-sm"
               />
             </div>
@@ -347,110 +344,19 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
               <span>{errorMessage}</span>
             </div>
           )}
-
-          {/* Quick Enrolled Students in Selected Class */}
-          <div className="pt-3 border-t border-slate-200">
-            <div className="text-xs font-bold text-slate-700 mb-2 flex items-center justify-between flex-wrap gap-1">
-              <span>
-                {inputClass === 'All'
-                  ? `اسکول کے تمام رجسٹرڈ بچے (${validStudents.length}):`
-                  : `کلاس ${inputClass} کے رجسٹرڈ طلباء (${validStudents.filter(s => s.className === inputClass).length}):`}
-              </span>
-              <span className="text-[11px] text-slate-400 font-normal">
-                (فوری ریکارڈ دیکھنے کے لیے نام پر کلک کریں)
-              </span>
-            </div>
-
-            {validStudents.filter(s => inputClass === 'All' || s.className === inputClass).length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {validStudents
-                  .filter(s => inputClass === 'All' || s.className === inputClass)
-                  .map(st => (
-                    <button
-                      key={st.id}
-                      type="button"
-                      onClick={() => {
-                        setSearchedStudent(st);
-                        setInputClass(st.className);
-                        setInputRollNo(st.rollNo);
-                        setErrorMessage('');
-                        setHasSearched(true);
-                      }}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border cursor-pointer active:scale-95 ${
-                        searchedStudent?.id === st.id
-                          ? 'bg-[#0D285F] text-amber-300 border-[#0D285F] shadow'
-                          : 'bg-slate-50 hover:bg-amber-50 text-slate-700 hover:text-[#0D285F] border-slate-200 hover:border-amber-400'
-                      }`}
-                    >
-                      <span className="w-5 h-5 rounded-full bg-amber-400 text-[#07193B] text-[10px] inline-flex items-center justify-center font-mono font-bold">
-                        {st.rollNo}
-                      </span>
-                      <span>{st.name}</span>
-                      <span className="text-[10px] text-slate-400 font-normal">({st.fatherName})</span>
-                    </button>
-                  ))}
-              </div>
-            ) : (
-              <div className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-dashed border-slate-300">
-                {inputClass === 'All'
-                  ? 'ابھی اسکول میں کوئی طالب علم درج نہیں ہے۔ ایڈمن پورٹل سے نیا طالب علم داخل کریں۔'
-                  : `کلاس ${inputClass} میں فی الحال کوئی طالب علم درج نہیں ہے۔ اوپر کلاس تبدیل کریں یا ایڈمن پورٹل سے داخل کریں۔`}
-              </div>
-            )}
-          </div>
         </form>
       </div>
 
-      {/* 3. PROMPT & QUICK STUDENT SELECTOR */}
+      {/* 3. PROMPT & SEARCH INSTRUCTIONS */}
       {!activeStudent && (
-        <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-6 sm:p-8 text-center space-y-4 print:hidden">
+        <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-6 sm:p-8 text-center space-y-3 print:hidden">
           <GraduationCap className="w-12 h-12 text-[#0D285F] mx-auto opacity-75" />
-          <div>
-            <h3 className="text-base font-extrabold text-slate-800">
-              محترم والدین! بچے کا تعلیمی ریکارڈ اور فیس رسید
-            </h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
-              اوپر رول نمبر یا نام لکھ کر تلاش کریں، یا نیچے فہرست میں سے اپنے بچے کا نام منتخب کریں:
-            </p>
-          </div>
-
-          {validStudents.length > 0 ? (
-            <div className="pt-2">
-              <div className="text-xs font-bold text-[#0D285F] mb-3 flex items-center justify-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>اسکول کے رجسٹرڈ بچے (فوری رزلٹ اور رسید دیکھنے کے لیے نام پر کلک کریں):</span>
-              </div>
-              <div className="flex flex-wrap items-center justify-center gap-2.5 max-w-2xl mx-auto">
-                {validStudents.map(st => (
-                  <button
-                    key={st.id}
-                    type="button"
-                    onClick={() => {
-                      setSearchedStudent(st);
-                      setCurrentParentStudentId(st.id);
-                      setInputClass(st.className);
-                      setInputRollNo(st.rollNo);
-                      setHasSearched(true);
-                      setErrorMessage('');
-                    }}
-                    className="bg-white hover:bg-amber-50 border-2 border-slate-200 hover:border-amber-400 text-slate-800 hover:text-[#0D285F] px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2 cursor-pointer active:scale-95 group"
-                  >
-                    <span className="w-6 h-6 rounded-full bg-[#0D285F] group-hover:bg-amber-400 group-hover:text-[#0D285F] text-amber-300 inline-flex items-center justify-center text-[10px] font-mono transition">
-                      {st.rollNo}
-                    </span>
-                    <span className="text-sm font-extrabold">{st.name}</span>
-                    <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-medium">
-                      {st.className}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="text-xs text-slate-500 max-w-sm mx-auto bg-amber-50 border border-amber-200 p-3 rounded-xl">
-              اگر آپ نے ایڈمن پورٹل سے نیا بچہ داخل کیا ہے تو اوپر دیئے گئے باکس میں رول نمبر یا نام لکھ کر سرچ کریں۔
-            </div>
-          )}
+          <h3 className="text-base font-extrabold text-slate-800">
+            محترم والدین! بچے کا تعلیمی ریکارڈ اور فیس رسید
+          </h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            براہ کرم اوپر اپنے بچے کی کلاس منتخب کریں اور درست رول نمبر درج کر کے "رسید دیکھیں" کا بٹن دبائیں۔ رازداری کے اصول کے تحت صرف آپ کے اپنے بچے کا ریکارڈ ظاہر ہوگا۔
+          </p>
         </div>
       )}
 

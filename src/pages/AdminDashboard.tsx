@@ -32,7 +32,9 @@ import {
   X,
   Database,
   CheckCircle2,
-  Edit3
+  Edit3,
+  Share2,
+  Copy
 } from 'lucide-react';
 import { useSchool, isDummyStudent } from '../context/SchoolContext';
 import {
@@ -112,13 +114,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
     forceSyncAllToCloud,
     isCloudConnected,
     isCloudSyncing,
-    lastCloudSyncTime
+    lastCloudSyncTime,
+    exportAllSchoolData,
+    importSchoolData
   } = useSchool();
 
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [selectedClassFolder, setSelectedClassFolder] = useState<ClassLevel>('Class 5');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [syncStatusMessage, setSyncStatusMessage] = useState<string | null>(null);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferInputCode, setTransferInputCode] = useState('');
 
   const handleManualSync = async () => {
     const res = await forceSyncAllToCloud();
@@ -655,6 +661,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setShowTransferModal(true)}
+                  className="bg-white/15 hover:bg-white/25 active:bg-white/30 text-white font-extrabold text-xs px-3.5 py-2.5 rounded-xl transition shadow flex items-center gap-1.5 active:scale-95 border border-white/20 cursor-pointer"
+                >
+                  <Share2 className="w-4 h-4 text-amber-300" />
+                  <span>دوسرے موبائل پر ڈیٹا بھیجیں / لائیں (Transfer Code)</span>
+                </button>
                 {students.some(s => s.id.startsWith('bss-')) && (
                   <button
                     type="button"
@@ -2808,6 +2822,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
               >
                 Delete
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: MOBILE TRANSFER CODE MODAL */}
+      {showTransferModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <Share2 className="w-5 h-5 text-[#0D285F]" />
+                <h3 className="font-extrabold text-[#0D285F] text-base">
+                  موبائل ٹو موبائل ڈیٹا ٹرانسفر (Device Transfer)
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowTransferModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Option 1: Copy from this phone */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                <h4 className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                  <span>1. اس موبائل سے ڈیٹا دوسرے موبائل پر بھیجیں:</span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                    {students.length} طلباء موجود ہیں
+                  </span>
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  اگر آپ نے اس موبائل پر طلباء ایڈ کیے ہیں، تو نیچے بٹن دبا کر "ٹرانسفر کوڈ" کاپی کریں اور دوسرے موبائل پر بھیج دیں۔
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const dataStr = exportAllSchoolData();
+                    navigator.clipboard.writeText(dataStr);
+                    alert(`اسکول کے تمام ${students.length} طلباء کا ٹرانسفر کوڈ کاپی ہو گیا ہے!\n\nاب اپنے دوسرے موبائل پر جا کر "دوسرے موبائل پر ڈیٹا بھیجیں / لائیں" کھولیں اور کوڈ پیسٹ کر کے "بحال کریں" دبا دیں۔`);
+                  }}
+                  className="w-full bg-[#0D285F] hover:bg-[#07193B] text-amber-300 font-bold text-xs py-2.5 rounded-xl transition shadow flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Copy className="w-4 h-4" />
+                  <span>ٹرانسفر کوڈ کاپی کریں (Copy Code)</span>
+                </button>
+              </div>
+
+              {/* Option 2: Paste on this phone */}
+              <div className="bg-amber-50/60 p-4 rounded-xl border border-amber-200 space-y-2">
+                <h4 className="text-xs font-bold text-amber-900">
+                  2. اگر آپ دوسرے موبائل پر ہیں، تو یہاں کوڈ پیسٹ کریں:
+                </h4>
+                <textarea
+                  rows={3}
+                  value={transferInputCode}
+                  onChange={(e) => setTransferInputCode(e.target.value)}
+                  placeholder="یہاں ٹرانسفر کوڈ پیسٹ کریں..."
+                  className="w-full p-2.5 text-xs bg-white border border-amber-300 rounded-xl outline-none font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!transferInputCode.trim()) {
+                      alert('براہ کرم پہلے ٹرانسفر کوڈ پیسٹ فرمائیں۔');
+                      return;
+                    }
+                    const res = importSchoolData(transferInputCode.trim());
+                    if (res.success) {
+                      alert(`مبارک ہو! تمام ${res.studentCount} طلباء کامیابی سے اس موبائل پر بحال ہو گئے ہیں!`);
+                      setShowTransferModal(false);
+                      setTransferInputCode('');
+                    } else {
+                      alert(res.message);
+                    }
+                  }}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-xl transition shadow flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>کوڈ سے تمام طلباء بحال کریں (Import & Restore)</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

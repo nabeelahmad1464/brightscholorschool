@@ -298,14 +298,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, initial
                   }}
                   className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0D285F] outline-none bg-white font-bold text-[#0D285F]"
                 >
-                  {SCHOOL_CLASSES.map(cls => {
-                    const count = students.filter(s => !isDummyStudent(s) && s.className === cls).length;
-                    return (
-                      <option key={cls} value={cls}>
-                        {cls} ({count} طلباء)
-                      </option>
-                    );
-                  })}
+                  {SCHOOL_CLASSES.map(cls => (
+                    <option key={cls} value={cls}>{cls}</option>
+                  ))}
                 </select>
               </div>
 
@@ -318,7 +313,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, initial
                   required
                   value={parentIdentifier}
                   onChange={(e) => setParentIdentifier(e.target.value)}
-                  placeholder="مثلاً: 01 یا 02 یا نام درج کریں..."
+                  placeholder="طالب علم کا رول نمبر (مثلاً: 01 یا 02 یا داخلہ نمبر)..."
                   className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0D285F] outline-none font-bold text-slate-900"
                 />
               </div>
@@ -330,42 +325,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, initial
                 >
                   <span>بچے کا پورٹل اور فیس رسید دیکھیں (View Portal & Receipt)</span>
                 </button>
-              </div>
-
-              {/* Quick Select Buttons for Enrolled Children in Selected Class */}
-              <div className="pt-2 border-t border-slate-200">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-700 mb-2">
-                  <span>کلاس {parentClass} کے رجسٹرڈ بچے ({students.filter(s => !isDummyStudent(s) && s.className === parentClass).length}):</span>
-                  <span className="text-[10px] text-slate-400 font-normal">(نام پر کلک کریں)</span>
-                </div>
-                {students.filter(s => !isDummyStudent(s) && s.className === parentClass).length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1.5 bg-slate-50 rounded-xl border border-slate-200">
-                    {students
-                      .filter(s => !isDummyStudent(s) && s.className === parentClass)
-                      .map(st => (
-                        <button
-                          key={st.id}
-                          type="button"
-                          onClick={() => {
-                            setParentIdentifier(st.rollNo);
-                            const matched = loginParent(st.rollNo, st.className);
-                            if (matched) onClose();
-                          }}
-                          className="bg-white hover:bg-[#0D285F] text-slate-800 hover:text-amber-300 border border-slate-200 hover:border-[#0D285F] text-xs font-bold px-2.5 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 group"
-                        >
-                          <span className="w-5 h-5 rounded-full bg-[#0D285F] group-hover:bg-amber-400 text-amber-300 group-hover:text-[#0D285F] inline-flex items-center justify-center text-[10px] font-mono font-bold transition">
-                            {st.rollNo}
-                          </span>
-                          <span>{st.name}</span>
-                          <span className="text-[10px] text-slate-400 group-hover:text-amber-200 font-normal">({st.fatherName})</span>
-                        </button>
-                      ))}
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-lg text-center">
-                    کلاس {parentClass} میں کوئی طالب علم درج نہیں ہے۔
-                  </p>
-                )}
               </div>
             </form>
           )}
