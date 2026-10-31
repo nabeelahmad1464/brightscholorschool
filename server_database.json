@@ -1,6 +1,13 @@
 {
+  "updatedAt": "2026-10-31T08:58:17.331Z",
   "students": [],
-  "updatedAt": "2026-10-24T16:59:45.294Z",
   "feeRecords": [],
-  "attendance": []
+  "attendance": [],
+  "teachers": [],
+  "dailyReports": [],
+  "tests": [],
+  "testResults": [],
+  "notices": [],
+  "leaves": [],
+  "onlineAdmissions": []
 }

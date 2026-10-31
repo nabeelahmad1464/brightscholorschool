@@ -88,11 +88,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, initial
       setError('Please enter Student Roll Number or Admission ID.');
       return;
     }
-    const student = loginParent(parentIdentifier, parentClass) || loginParent(parentIdentifier, undefined);
+    const student = loginParent(parentIdentifier, parentClass);
     if (student) {
       onClose();
     } else {
-      setError(`طالب علم رول نمبر "${parentIdentifier}" کلاس "${parentClass}" میں نہیں ملا۔ براہ کرم رول نمبر درست درج کریں یا اسکول واٹس ایپ پر رابطہ کریں۔`);
+      setError('Student not found. Please check the roll number and class. (طالب علم کا ریکارڈ نہیں ملا۔ براہ کرم کلاس اور رول نمبر درست درج کریں)');
     }
   };
 

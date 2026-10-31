@@ -77,6 +77,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
   const [leaveTo, setLeaveTo] = useState(new Date().toISOString().split('T')[0]);
   const [leaveSubmitted, setLeaveSubmitted] = useState(false);
 
+  const [isSearching, setIsSearching] = useState(false);
+
   // Handle Search: Searches strictly within selected class, NO unauthorized fallbacks
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -85,49 +87,34 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
 
     const cleanRoll = inputRollNo.trim().toLowerCase();
     if (!cleanRoll) {
-      setErrorMessage('براہ کرم طالب علم کا رول نمبر یا نام درج کریں۔ (Please enter roll number or name)');
+      setErrorMessage('Please enter student roll number (براہ کرم طالب علم کا رول نمبر درج فرمائیں)');
       setSearchedStudent(null);
+      setCurrentParentStudentId(null);
       setHasSearched(true);
       return;
     }
 
+    setIsSearching(true);
+    // Fetch freshest cloud data right before search to guarantee cross-device sync
+    try {
+      await syncNowWithCloud();
+    } catch (err) {}
+    setIsSearching(false);
+
     const cleanNum = cleanRoll.replace(/^0+/, '');
+    const targetClass = inputClass.trim().toLowerCase();
 
-    let match: Student | null = null;
-    if (inputClass && inputClass !== 'All') {
-      // STRICT SEARCH: ONLY in selected class! Never switch to another child in another class!
-      match = validStudents.find(s => {
-        if (s.className.toLowerCase().trim() !== inputClass.toLowerCase().trim()) return false;
-        const rollClean = s.rollNo.trim().toLowerCase();
-        const rollNum = rollClean.replace(/^0+/, '');
-        return (
-          rollClean === cleanRoll ||
-          (cleanNum !== '' && rollNum === cleanNum) ||
-          s.admissionNo.toLowerCase() === cleanRoll ||
-          s.name.toLowerCase() === cleanRoll ||
-          s.name.toLowerCase().includes(cleanRoll) ||
-          (s.contactNo && s.contactNo.replace(/\D/g, '').includes(cleanRoll.replace(/\D/g, '')))
-        );
-      }) || null;
-    } else {
-      // Search across all classes only if 'All' is selected
-      match = validStudents.find(s => {
-        const rollClean = s.rollNo.trim().toLowerCase();
-        const rollNum = rollClean.replace(/^0+/, '');
-        return (
-          rollClean === cleanRoll ||
-          (cleanNum !== '' && rollNum === cleanNum) ||
-          s.admissionNo.toLowerCase() === cleanRoll ||
-          s.name.toLowerCase() === cleanRoll ||
-          s.name.toLowerCase().includes(cleanRoll) ||
-          (s.contactNo && s.contactNo.replace(/\D/g, '').includes(cleanRoll.replace(/\D/g, '')))
-        );
-      }) || null;
-
-      if (match) {
-        setInputClass(match.className);
-      }
-    }
+    // STRICT SEARCH: ONLY in selected class! Never switch to another child in another class!
+    const match = validStudents.find(s => {
+      const sClass = (s.className || '').trim().toLowerCase();
+      if (sClass !== targetClass) return false;
+      const rollClean = (s.rollNo || '').trim().toLowerCase();
+      const rollNum = rollClean.replace(/^0+/, '');
+      const admClean = (s.admissionNo || '').trim().toLowerCase();
+      const matchRoll = rollClean === cleanRoll || (cleanNum !== '' && rollNum === cleanNum);
+      const matchAdm = admClean === cleanRoll;
+      return matchRoll || matchAdm;
+    }) || null;
 
     if (match) {
       setSearchedStudent(match);
@@ -137,12 +124,9 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
       setHasSearched(true);
       setErrorMessage('');
     } else {
-      setErrorMessage(
-        inputClass && inputClass !== 'All'
-          ? `کلاس "${inputClass}" میں رول نمبر یا نام "${inputRollNo}" کا کوئی طالب علم موجود نہیں ہے۔ براہ کرم رول نمبر درست لکھیں یا نیچے دی گئی کلاس لسٹ میں سے طالب علم منتخب فرمائیں۔`
-          : `رول نمبر یا نام "${inputRollNo}" کا کوئی طالب علم نہیں ملا۔ براہ کرم رول نمبر درست درج فرمائیں۔`
-      );
+      setErrorMessage('Student not found. Please check the roll number and class. (طالب علم کا ریکارڈ نہیں ملا۔ براہ کرم کلاس اور رول نمبر درست درج کریں)');
       setSearchedStudent(null);
+      setCurrentParentStudentId(null);
       setHasSearched(true);
     }
   };
@@ -301,7 +285,10 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                 value={inputClass}
                 onChange={(e) => {
                   setInputClass(e.target.value);
+                  setSearchedStudent(null);
+                  setCurrentParentStudentId(null);
                   setErrorMessage('');
+                  setHasSearched(false);
                 }}
                 className="w-full bg-slate-50 border-2 border-slate-300 focus:border-[#0D285F] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-extrabold text-[#0D285F] outline-none shadow-sm"
               >
@@ -320,7 +307,13 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                 type="text"
                 required
                 value={inputRollNo}
-                onChange={(e) => setInputRollNo(e.target.value)}
+                onChange={(e) => {
+                  setInputRollNo(e.target.value);
+                  setSearchedStudent(null);
+                  setCurrentParentStudentId(null);
+                  setErrorMessage('');
+                  setHasSearched(false);
+                }}
                 placeholder="طالب علم کا رول نمبر (مثلاً: 01 یا 02)..."
                 className="w-full bg-slate-50 border-2 border-slate-300 focus:border-[#0D285F] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-extrabold text-slate-900 outline-none shadow-sm"
               />
@@ -330,10 +323,11 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
             <div className="sm:col-span-3 flex items-end">
               <button
                 type="submit"
-                className="w-full bg-[#0D285F] hover:bg-[#07193B] text-amber-300 font-black text-xs sm:text-sm py-3 rounded-xl transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                disabled={isSearching}
+                className="w-full bg-[#0D285F] hover:bg-[#07193B] text-amber-300 font-black text-xs sm:text-sm py-3 rounded-xl transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-75"
               >
-                <Search className="w-4 h-4" />
-                <span>رسید دیکھیں</span>
+                <Search className={`w-4 h-4 ${isSearching ? 'animate-spin' : ''}`} />
+                <span>{isSearching ? 'براہ راست تلاش...' : 'رسید دیکھیں'}</span>
               </button>
             </div>
           </div>

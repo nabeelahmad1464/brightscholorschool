@@ -150,7 +150,7 @@ interface SchoolContextType {
 
 const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
 
-// Strict filter to permanently eliminate all fake/dummy seed students (including Maryam Shabbir s-105) across all devices & storage
+// Strict filter to permanently eliminate all fake/dummy seed students across all devices & storage
 const DUMMY_STUDENT_IDS = new Set([
   's-101', 's-102', 's-103', 's-104', 's-105', 's-106', 's-107',
   's-108', 's-109', 's-110', 's-111', 's-112', 's-113'
@@ -158,14 +158,18 @@ const DUMMY_STUDENT_IDS = new Set([
 
 export function isDummyStudent(item: any): boolean {
   if (!item) return false;
-  if (item.id && DUMMY_STUDENT_IDS.has(item.id)) return true;
+  const id = String(item.id || item.studentId || '');
+  if (id && (DUMMY_STUDENT_IDS.has(id) || id.startsWith('bss-') || id.startsWith('fee-bss-'))) return true;
   const name = String(item.name || item.studentName || '').toLowerCase().trim();
   const fName = String(item.fatherName || '').toLowerCase().trim();
+  const cName = String(item.className || '').toLowerCase().trim();
   if (
     name.includes('maryam shabbir') ||
     name.includes('مریم شبیر') ||
-    (name.includes('maryam') && (item.className === 'Class 4' || item.rollNo === '02' || fName.includes('shabbir'))) ||
-    (name.includes('مریم') && (item.className === 'Class 4' || item.rollNo === '02' || fName.includes('شبیر')))
+    (name.includes('maryam') && (cName === 'class 4' || item.rollNo === '02' || fName.includes('shabbir'))) ||
+    (name.includes('مریم') && (cName === 'class 4' || item.rollNo === '02' || fName.includes('شبیر'))) ||
+    (name.includes('abdullah') && cName.includes('7') && fName.includes('aslam')) ||
+    (name.includes('عبداللہ') && cName.includes('7') && fName.includes('اسلم'))
   ) {
     return true;
   }
@@ -429,7 +433,19 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         console.warn('Server API sync error:', localErr);
       }
 
-      // 2. Secondary backup: Global Cloud Bin (extendsclass.com)
+      // 2. Secondary: Global Cloud Bin (api.restful-api.dev - 0ms cache, instant cloud propagation)
+      try {
+        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'BSS_DATA', data: payload })
+        });
+        if (cloudRes.ok) success = true;
+      } catch (cloudErr) {
+        console.warn('Cloud API 1 sync error:', cloudErr);
+      }
+
+      // 3. Tertiary backup: Global Cloud Bin (extendsclass.com)
       try {
         const extRes = await fetch(GLOBAL_CLOUD_ENDPOINT_2, {
           method: 'PUT',
@@ -462,10 +478,13 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       let data: any = null;
       const candidates: any[] = [];
+      const cacheBust = `t=${Date.now()}`;
 
       // 1. Check local container API /api/school-data
       try {
-        const localRes = await fetch('/api/school-data', { cache: 'no-store' });
+        const localRes = await fetch(`/api/school-data?${cacheBust}`, {
+          headers: { 'Cache-Control': 'no-cache, no-store' }
+        });
         if (localRes.ok) {
           const parsed = await localRes.json();
           const d = parsed?.data || parsed;
@@ -473,24 +492,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       } catch (localErr) {}
 
-      // 2. Check Global Public Cloud Bin (extendsclass.com)
+      // 2. Check Global Public Cloud API (api.restful-api.dev)
       try {
-        const extRes = await fetch(GLOBAL_CLOUD_ENDPOINT_2, {
-          headers: { 'Accept': 'application/json' },
-          cache: 'no-store'
-        });
-        if (extRes.ok) {
-          const parsed = await extRes.json();
-          const d = parsed?.data || parsed;
-          if (d && Array.isArray(d.students)) candidates.push(d);
-        }
-      } catch (extErr) {}
-
-      // 3. Check secondary public cloud endpoint (api.restful-api.dev)
-      try {
-        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
-          headers: { 'Accept': 'application/json' },
-          cache: 'no-store'
+        const cloudRes = await fetch(`${GLOBAL_CLOUD_ENDPOINT_1}?${cacheBust}`, {
+          headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache, no-store' }
         });
         if (cloudRes.ok) {
           const parsed = await cloudRes.json();
@@ -499,6 +504,18 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       } catch (cloudErr) {}
 
+      // 3. Check Global Public Cloud Bin (extendsclass.com)
+      try {
+        const extRes = await fetch(`${GLOBAL_CLOUD_ENDPOINT_2}?${cacheBust}`, {
+          headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache, no-store' }
+        });
+        if (extRes.ok) {
+          const parsed = await extRes.json();
+          const d = parsed?.data || parsed;
+          if (d && Array.isArray(d.students)) candidates.push(d);
+        }
+      } catch (extErr) {}
+
       if (candidates.length === 0) {
         setIsCloudConnected(false);
         return;
@@ -506,22 +523,17 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       setIsCloudConnected(true);
 
-      // Sort candidates by student count descending (richest dataset first)
-      candidates.sort((a, b) => (b.students?.length || 0) - (a.students?.length || 0));
+      // Sort candidates by updatedAt descending (freshest cloud state wins)
+      candidates.sort((a, b) => {
+        const timeA = new Date(a.updatedAt || 0).getTime();
+        const timeB = new Date(b.updatedAt || 0).getTime();
+        return timeB - timeA;
+      });
+
       const best = { ...candidates[0] };
 
-      // Union all students across all valid remote sources so no student is ever lost
-      const remoteStudentMap = new Map<string, Student>();
-      candidates.forEach(cand => {
-        if (Array.isArray(cand.students)) {
-          cand.students.forEach((s: any) => {
-            if (s && s.name && !isDummyStudent(s)) {
-              remoteStudentMap.set(s.id, s);
-            }
-          });
-        }
-      });
-      best.students = Array.from(remoteStudentMap.values());
+      // Strictly filter out any dummy or template students from remote candidates
+      best.students = Array.isArray(best.students) ? best.students.filter((s: any) => !isDummyStudent(s)) : [];
       data = best;
 
       setIsCloudConnected(true);
@@ -699,7 +711,19 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // fallback
       }
 
-      // 2. Secondary backup: Global Cloud Bin (extendsclass.com)
+      // 2. Secondary: Global Cloud Bin (api.restful-api.dev)
+      try {
+        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'BSS_DATA', data: payload })
+        });
+        if (cloudRes.ok) success = true;
+      } catch (err) {
+        // fallback
+      }
+
+      // 3. Tertiary backup: Global Cloud Bin (extendsclass.com)
       try {
         const extRes = await fetch(GLOBAL_CLOUD_ENDPOINT_2, {
           method: 'PUT',
@@ -733,7 +757,6 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Sync to Cloud Server when local data changes (debounced backup)
   useEffect(() => {
     if (isApplyingRemoteUpdate.current) return;
-    if (stateRef.current.students.length === 0) return;
 
     const timer = setTimeout(() => {
       pushCurrentDataToCloud();
@@ -759,24 +782,28 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Periodic polling & window focus pull
   useEffect(() => {
-    // 1. If this device already has students, push them to server immediately!
-    if (stateRef.current.students.length > 0) {
-      pushCurrentDataToCloud();
-    } else {
-      pullFromCloudDatabase();
-    }
+    // 1. On mount, ALWAYS fetch freshest cloud database first so this device gets latest updates from all phones
+    pullFromCloudDatabase();
 
-    // 2. Poll every 4 seconds to sync any updates from other devices
+    // 2. Poll every 3 seconds to sync real-time changes made by other devices/phones
     const interval = setInterval(() => {
       pullFromCloudDatabase();
-    }, 4000);
+    }, 3000);
 
     const onFocus = () => pullFromCloudDatabase();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        pullFromCloudDatabase();
+      }
+    };
+
     window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
 
@@ -886,26 +913,32 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     let student: Student | undefined;
 
+    const isNumeric = /^\d+$/.test(clean);
+
     if (className && className !== 'All') {
       // 1. Strict Search in specified class
       student = valid.find(s => {
         if (s.className.toLowerCase().trim() !== className.toLowerCase().trim()) return false;
-        const rollClean = s.rollNo.trim().toLowerCase();
+        const rollClean = (s.rollNo || '').trim().toLowerCase();
         const rollNum = rollClean.replace(/^0+/, '');
-        const matchRoll = rollClean === clean || (cleanNum !== '' && rollNum === cleanNum);
-        const matchAdm = s.admissionNo.toLowerCase() === clean || s.admissionNo.toLowerCase().includes(clean);
-        const matchName = s.name.toLowerCase().trim() === clean || s.name.toLowerCase().includes(clean);
-        return matchRoll || matchAdm || matchName;
+        const admClean = (s.admissionNo || '').trim().toLowerCase();
+        if (isNumeric) {
+          return rollClean === clean || (cleanNum !== '' && rollNum === cleanNum) || admClean === clean;
+        } else {
+          return admClean === clean || s.name.toLowerCase().trim() === clean;
+        }
       });
     } else {
       // 2. Search across all classes
       student = valid.find(s => {
-        const rollClean = s.rollNo.trim().toLowerCase();
+        const rollClean = (s.rollNo || '').trim().toLowerCase();
         const rollNum = rollClean.replace(/^0+/, '');
-        const matchRoll = rollClean === clean || (cleanNum !== '' && rollNum === cleanNum);
-        const matchAdm = s.admissionNo.toLowerCase() === clean || s.admissionNo.toLowerCase().includes(clean);
-        const matchName = s.name.toLowerCase().trim() === clean || s.name.toLowerCase().includes(clean);
-        return matchRoll || matchAdm || matchName;
+        const admClean = (s.admissionNo || '').trim().toLowerCase();
+        if (isNumeric) {
+          return rollClean === clean || (cleanNum !== '' && rollNum === cleanNum) || admClean === clean;
+        } else {
+          return admClean === clean || s.name.toLowerCase().trim() === clean;
+        }
       });
     }
 
@@ -1131,37 +1164,49 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     records: { studentId: string; status: 'Present' | 'Absent' | 'Leave' | 'Late' }[]
   ) => {
     const month = date.substring(0, 7);
+    const updated = [...stateRef.current.attendance];
     records.forEach(r => {
-      const st = students.find(s => s.id === r.studentId);
+      const st = stateRef.current.students.find(s => s.id === r.studentId);
       if (st) {
-        markStudentAttendance({
-          studentId: r.studentId,
-          studentName: st.name,
-          className,
-          date,
-          month,
-          status: r.status,
-          fineAmount: r.status === 'Absent' ? settings.finePerAbsentDay : 0
-        });
+        const fineAmount = r.status === 'Absent' ? settings.finePerAbsentDay : 0;
+        const existingIndex = updated.findIndex(a => a.studentId === r.studentId && a.date === date);
+        if (existingIndex >= 0) {
+          updated[existingIndex] = { ...updated[existingIndex], status: r.status, fineAmount };
+        } else {
+          updated.unshift({
+            id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            studentId: r.studentId,
+            studentName: st.name,
+            className,
+            date,
+            month,
+            status: r.status,
+            fineAmount
+          });
+        }
       }
     });
+    setAttendance(updated);
+    saveToStorage('attendance', updated);
+    pushCurrentDataToCloud({ attendance: updated });
   };
 
   const markTeacherAttendance = (record: Omit<TeacherAttendance, 'id'>) => {
-    const existingIndex = teacherAttendance.findIndex(a => a.teacherId === record.teacherId && a.date === record.date);
+    const existingIndex = stateRef.current.teacherAttendance.findIndex(a => a.teacherId === record.teacherId && a.date === record.date);
+    let updated: TeacherAttendance[];
     if (existingIndex >= 0) {
-      setTeacherAttendance(prev => {
-        const copy = [...prev];
-        copy[existingIndex] = { ...copy[existingIndex], status: record.status };
-        return copy;
-      });
+      updated = [...stateRef.current.teacherAttendance];
+      updated[existingIndex] = { ...updated[existingIndex], status: record.status };
     } else {
       const newRecord: TeacherAttendance = {
         ...record,
         id: `ta-${Date.now()}`
       };
-      setTeacherAttendance(prev => [newRecord, ...prev]);
+      updated = [newRecord, ...stateRef.current.teacherAttendance];
     }
+    setTeacherAttendance(updated);
+    saveToStorage('teacherAttendance', updated);
+    pushCurrentDataToCloud({ teacherAttendance: updated });
   };
 
   // Leaves
@@ -1171,11 +1216,17 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       id: `l-${Date.now()}`,
       appliedDate: new Date().toISOString().split('T')[0]
     };
-    setLeaves(prev => [newLeave, ...prev]);
+    const updated = [newLeave, ...stateRef.current.leaves];
+    setLeaves(updated);
+    saveToStorage('leaves', updated);
+    pushCurrentDataToCloud({ leaves: updated });
   };
 
   const updateLeaveStatus = (id: string, status: 'Approved' | 'Rejected') => {
-    setLeaves(prev => prev.map(l => l.id === id ? { ...l, status } : l));
+    const updated = stateRef.current.leaves.map(l => l.id === id ? { ...l, status } : l);
+    setLeaves(updated);
+    saveToStorage('leaves', updated);
+    pushCurrentDataToCloud({ leaves: updated });
   };
 
   // Fees
@@ -1206,11 +1257,11 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const recordFeePayment = (feeRecordId: string, amount: number, receiptNo: string) => {
     const today = new Date().toISOString().split('T')[0];
-    setFeeRecords(prev => prev.map(f => {
+    const updated = stateRef.current.feeRecords.map(f => {
       if (f.id === feeRecordId) {
         const newPaid = f.paidAmount + amount;
         const newBalance = Math.max(0, f.totalPayable - newPaid);
-        const status = newBalance === 0 ? 'Paid' : (newPaid > 0 ? 'Partial' : 'Unpaid');
+        const status: 'Paid' | 'Partial' | 'Unpaid' = newBalance === 0 ? 'Paid' : (newPaid > 0 ? 'Partial' : 'Unpaid');
         return {
           ...f,
           paidAmount: newPaid,
@@ -1221,18 +1272,21 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         };
       }
       return f;
-    }));
+    });
+    setFeeRecords(updated);
+    saveToStorage('feeRecords', updated);
+    pushCurrentDataToCloud({ feeRecords: updated });
   };
 
   const generateMonthlyFeeVouchers = (monthName: string): number => {
     let count = 0;
     const newRecords: FeeRecord[] = [];
 
-    students.forEach(st => {
-      const exists = feeRecords.some(f => f.studentId === st.id && f.month === monthName);
+    stateRef.current.students.forEach(st => {
+      const exists = stateRef.current.feeRecords.some(f => f.studentId === st.id && f.month === monthName);
       if (!exists) {
         // Calculate absents in this month
-        const absents = attendance.filter(a => a.studentId === st.id && a.status === 'Absent').length;
+        const absents = stateRef.current.attendance.filter(a => a.studentId === st.id && a.status === 'Absent').length;
         const fine = absents * settings.finePerAbsentDay;
         const tuition = st.monthlyFee || getDefaultMonthlyFee(st.className);
         const total = tuition + fine;
@@ -1257,7 +1311,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     if (newRecords.length > 0) {
-      setFeeRecords(prev => [...newRecords, ...prev]);
+      const updated = [...newRecords, ...stateRef.current.feeRecords];
+      setFeeRecords(updated);
+      saveToStorage('feeRecords', updated);
+      pushCurrentDataToCloud({ feeRecords: updated });
     }
     return count;
   };
@@ -1268,7 +1325,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ...report,
       id: `dr-${Date.now()}`
     };
-    setDailyReports(prev => [newReport, ...prev]);
+    const updated = [newReport, ...stateRef.current.dailyReports];
+    setDailyReports(updated);
+    saveToStorage('dailyReports', updated);
+    pushCurrentDataToCloud({ dailyReports: updated });
   };
 
   // Tests
@@ -1277,20 +1337,24 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ...testData,
       id: `tst-${Date.now()}`
     };
-    setTests(prev => [newTest, ...prev]);
+    const updated = [newTest, ...stateRef.current.tests];
+    setTests(updated);
+    saveToStorage('tests', updated);
+    pushCurrentDataToCloud({ tests: updated });
     return newTest;
   };
 
   const addTestResult = (resultData: Omit<TestResult, 'id'>) => {
-    setTestResults(prev => {
-      const idx = prev.findIndex(r => r.testId === resultData.testId && r.studentId === resultData.studentId);
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = { ...resultData, id: copy[idx].id };
-        return copy;
-      }
-      return [{ ...resultData, id: `tr-${Date.now()}-${resultData.studentId}` }, ...prev];
-    });
+    const updated = [...stateRef.current.testResults];
+    const idx = updated.findIndex(r => r.testId === resultData.testId && r.studentId === resultData.studentId);
+    if (idx >= 0) {
+      updated[idx] = { ...resultData, id: updated[idx].id };
+    } else {
+      updated.unshift({ ...resultData, id: `tr-${Date.now()}-${resultData.studentId}` });
+    }
+    setTestResults(updated);
+    saveToStorage('testResults', updated);
+    pushCurrentDataToCloud({ testResults: updated });
   };
 
   // Notices
@@ -1299,11 +1363,17 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ...noticeData,
       id: `not-${Date.now()}`
     };
-    setNotices(prev => [newNotice, ...prev]);
+    const updated = [newNotice, ...stateRef.current.notices];
+    setNotices(updated);
+    saveToStorage('notices', updated);
+    pushCurrentDataToCloud({ notices: updated });
   };
 
   const deleteNotice = (id: string) => {
-    setNotices(prev => prev.filter(n => n.id !== id));
+    const updated = stateRef.current.notices.filter(n => n.id !== id);
+    setNotices(updated);
+    saveToStorage('notices', updated);
+    pushCurrentDataToCloud({ notices: updated });
   };
 
   // Online Admissions
