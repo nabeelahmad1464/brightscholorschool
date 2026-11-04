@@ -723,8 +723,7 @@ export const all51SchoolStudents: Student[] = [
     isActive: true
   },
 
-  // --- CLASS 7 (4 Students, Rs. 3,000) ---
-  // Notice: Roll 02 is Muhammad Abdullah, Son of Muhammad Aslam (Class 7) as requested!
+  // --- CLASS 7 (3 Students, Rs. 3,000) ---
   {
     id: 'bss-c7-01',
     admissionNo: 'BSS-2026-045',
@@ -745,22 +744,6 @@ export const all51SchoolStudents: Student[] = [
     id: 'bss-c7-02',
     admissionNo: 'BSS-2026-046',
     rollNo: '02',
-    name: 'Muhammad Abdullah',
-    fatherName: 'Muhammad Aslam',
-    className: 'Class 7',
-    dateOfBirth: '2013-08-24',
-    admissionDate: '2026-03-01',
-    gender: 'Male',
-    contactNo: '0302-5053993',
-    whatsappNo: '0302-5053993',
-    address: 'Chak No. 47 GB, Samundri',
-    monthlyFee: 3000,
-    isActive: true
-  },
-  {
-    id: 'bss-c7-03',
-    admissionNo: 'BSS-2026-047',
-    rollNo: '03',
     name: 'Ayesha Noor',
     fatherName: 'Abdul Ghaffar',
     className: 'Class 7',
@@ -774,9 +757,9 @@ export const all51SchoolStudents: Student[] = [
     isActive: true
   },
   {
-    id: 'bss-c7-04',
-    admissionNo: 'BSS-2026-048',
-    rollNo: '04',
+    id: 'bss-c7-03',
+    admissionNo: 'BSS-2026-047',
+    rollNo: '03',
     name: 'Muhammad Ali Raza',
     fatherName: 'Ghulam Mustafa',
     className: 'Class 7',
@@ -840,3 +823,4 @@ export const all51SchoolStudents: Student[] = [
     isActive: true
   }
 ];
+export const all50SchoolStudents = all51SchoolStudents;

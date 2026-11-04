@@ -187,6 +187,38 @@ export interface Test {
   description: string;
 }
 
+export interface SubjectMarkEntry {
+  subject: string;
+  totalMarks: number;
+  obtainedMarks: number;
+  grade?: string;
+  remarks?: string;
+}
+
+export interface StudentExamReport {
+  id: string;
+  examTitle: string; // e.g. "First Term Examination 2026"
+  examDate: string; // YYYY-MM-DD
+  studentId: string;
+  studentName: string;
+  fatherName: string;
+  className: string;
+  rollNo: string;
+  admissionNo: string;
+  subjects: SubjectMarkEntry[];
+  grandTotal: number;
+  totalObtained: number;
+  percentage: number;
+  grade: string;
+  status: 'Pass' | 'Fail';
+  position?: string;
+  generalRemarks?: string;
+  isPublished: boolean; // Controls parent portal visibility
+  updatedAt: string;
+  enteredByRole?: 'Admin' | 'Teacher';
+  enteredByName?: string;
+}
+
 export interface TestResult {
   id: string;
   testId: string;

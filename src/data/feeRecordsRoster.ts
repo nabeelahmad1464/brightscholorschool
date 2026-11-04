@@ -20,3 +20,4 @@ export const all51InitialFeeRecords: FeeRecord[] = all51SchoolStudents.map((st, 
     receiptNo: `REC-BSS-${String(index + 1).padStart(3, '0')}`
   };
 });
+export const all50InitialFeeRecords = all51InitialFeeRecords;

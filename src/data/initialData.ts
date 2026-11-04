@@ -10,8 +10,11 @@ import {
   TestResult,
   Notice,
   OnlineAdmission,
-  SystemSettings
+  SystemSettings,
+  StudentExamReport
 } from '../types';
+import { all50SchoolStudents } from './studentsRoster';
+import { all50InitialFeeRecords } from './feeRecordsRoster';
 
 export const initialSettings: SystemSettings = {
   adminPassword: 'Ahmad@1',
@@ -71,7 +74,7 @@ export const initialTeachers: Teacher[] = [
 
 export const initialSalaryTransactions: import('../types').SalaryTransaction[] = [];
 
-export const initialStudents: Student[] = [];
+export const initialStudents: Student[] = all50SchoolStudents;
 
 export const initialAttendance: StudentAttendance[] = [];
 
@@ -79,7 +82,7 @@ export const initialTeacherAttendance: TeacherAttendance[] = [];
 
 export const initialLeaves: LeaveRequest[] = [];
 
-export const initialFeeRecords: FeeRecord[] = [];
+export const initialFeeRecords: FeeRecord[] = all50InitialFeeRecords;
 
 export const initialDailyReports: DailyReport[] = [];
 
@@ -123,3 +126,5 @@ export const initialNotices: Notice[] = [
 ];
 
 export const initialAdmissions: OnlineAdmission[] = [];
+
+export const initialStudentExamReports: StudentExamReport[] = [];

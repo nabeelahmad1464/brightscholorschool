@@ -49,6 +49,7 @@ import {
   TestResult
 } from '../types';
 import { FeeReceiptModal } from '../components/FeeReceiptModal';
+import { StudentMarksAndResultsSection } from '../components/StudentMarksAndResultsSection';
 
 interface AdminDashboardProps {
   onSelectStudent: (student: Student) => void;
@@ -204,14 +205,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
   const [teacherGeneralPassInput, setTeacherGeneralPassInput] = useState(settings.teacherPassword);
   const [showAdminPass, setShowAdminPass] = useState(false);
 
-  // KPI Calculations
+  // KPI Calculations (Auto-calculation for 50 students: PG-Class 4 = Rs. 2,000; Class 5-Class 8 = Rs. 3,000)
   const totalStudents = students.length;
   const activeStudents = students.filter(s => s.isActive).length;
   const totalTeachers = teachers.length;
   const pendingLeavesCount = leaves.filter(l => l.status === 'Pending').length;
   const pendingAdmissionsCount = onlineAdmissions.filter(a => a.status === 'Pending').length;
-  const totalFeesCollected = students.length === 0 ? 0 : feeRecords.reduce((acc, curr) => acc + curr.paidAmount, 0);
-  const totalFeesPending = students.length === 0 ? 0 : feeRecords.reduce((acc, curr) => acc + curr.balanceRemaining, 0);
+  const totalMonthlyFees = students.reduce((sum, s) => sum + (s.monthlyFee || getDefaultMonthlyFee(s.className)), 0);
+  const totalFeesCollected = feeRecords.reduce((acc, curr) => acc + (curr.paidAmount || 0), 0);
+  const totalFeesPending = Math.max(0, totalMonthlyFees - totalFeesCollected);
 
   // Class students for folder view
   const classStudents = students.filter(s => s.className === selectedClassFolder);
@@ -531,7 +533,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
           { id: 'attendance', label: 'Class Attendance Register' },
           { id: 'teachers', label: 'Faculty & Salaries' },
           { id: 'fees', label: 'Fee & Fine Ledger' },
-          { id: 'tests', label: 'Tests & Marks' },
+          { id: 'tests', label: 'Tests & Results (امتحانات و نتائج)' },
           { id: 'tarbiyat', label: 'Daily Tarbiyat' },
           { id: 'leaves', label: `Leaves (${pendingLeavesCount})` },
           { id: 'admissions', label: `Online Admissions (${pendingAdmissionsCount})` },
@@ -556,36 +558,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
       {activeTab === 'overview' && (
         <div className="space-y-6">
           {/* Quick KPI Stat Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-xs text-slate-500 font-semibold block">Total Enrolled</span>
+          {/* Quick KPI Stat Cards: 50 Students & Fee Structure */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm border-t-4 border-t-[#0D285F]">
+              <span className="text-xs text-slate-500 font-bold block">کل رجسٹرڈ طلباء (Total Students)</span>
               <span className="text-2xl font-black text-[#0D285F] mt-1 block">{totalStudents}</span>
-              <span className="text-[11px] text-emerald-600 font-medium">{activeStudents} Active Students</span>
+              <span className="text-[11px] text-emerald-600 font-semibold">{activeStudents} طلباء زیر تعلیم (100% Active)</span>
             </div>
 
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-xs text-slate-500 font-semibold block">Teaching Faculty</span>
-              <span className="text-2xl font-black text-[#0D285F] mt-1 block">{totalTeachers}</span>
-              <span className="text-[11px] text-slate-400">Total Staff</span>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm border-t-4 border-t-blue-600">
+              <span className="text-xs text-slate-500 font-bold block">کل ماہانہ فیس (Total Monthly Fees)</span>
+              <span className="text-2xl font-black text-blue-900 mt-1 block">
+                Rs. {totalMonthlyFees.toLocaleString()}
+              </span>
+              <span className="text-[11px] text-slate-500 font-medium">PG-C4: Rs. 2,000 | C5-C8: Rs. 3,000</span>
             </div>
 
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-xs text-slate-500 font-semibold block">Fees Collected (وصول شدہ فیس)</span>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm border-t-4 border-t-emerald-600">
+              <span className="text-xs text-slate-500 font-bold block">وصول شدہ فیس (Received Fees)</span>
               <span className="text-2xl font-black text-emerald-700 mt-1 block">
                 Rs. {totalFeesCollected.toLocaleString()}
               </span>
-              <span className="text-[11px] text-slate-400">
-                {totalFeesCollected === 0 ? 'کوئی فیس وصول نہیں ہوئی (0 روپے)' : 'Recorded Receipts'}
+              <span className="text-[11px] text-slate-500 font-medium">
+                {totalFeesCollected === 0 ? 'کوئی فیس وصول نہیں ہوئی (0 روپے)' : 'وصول شدہ واؤچرز'}
               </span>
             </div>
 
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-xs text-slate-500 font-semibold block">Unpaid Fees Balance (بقایا فیس)</span>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm border-t-4 border-t-amber-500">
+              <span className="text-xs text-slate-500 font-bold block">بقایا واجب الادا فیس (Pending Fees)</span>
               <span className="text-2xl font-black text-amber-700 mt-1 block">
                 Rs. {totalFeesPending.toLocaleString()}
               </span>
-              <span className="text-[11px] text-slate-400">
-                {totalFeesPending === 0 ? 'کوئی بقایا نہیں (0 روپے)' : 'Includes absent fines'}
+              <span className="text-[11px] text-amber-700 font-medium">
+                باقی بقایا رقم (خودکار حساب)
               </span>
             </div>
           </div>
@@ -1520,6 +1525,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
             </div>
           </div>
 
+          {/* Fee Breakdown Summary for 50 Students */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <span className="text-[11px] font-bold text-slate-500 block">کل رجسٹرڈ طلباء</span>
+              <span className="text-xl font-black text-[#0D285F] mt-0.5 block">{totalStudents} Students</span>
+              <span className="text-[10px] text-slate-500 font-medium">{activeStudents} طلباء زیر تعلیم</span>
+            </div>
+
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+              <span className="text-[11px] font-bold text-blue-900 block">کل ماہانہ فیس (Total Monthly)</span>
+              <span className="text-xl font-black text-blue-950 mt-0.5 block">
+                Rs. {totalMonthlyFees.toLocaleString()}
+              </span>
+              <span className="text-[10px] text-blue-700 font-medium">PG-C4: Rs. 2,000 | C5-C8: Rs. 3,000</span>
+            </div>
+
+            <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+              <span className="text-[11px] font-bold text-emerald-900 block">وصول شدہ فیس (Received)</span>
+              <span className="text-xl font-black text-emerald-800 mt-0.5 block">
+                Rs. {totalFeesCollected.toLocaleString()}
+              </span>
+              <span className="text-[10px] text-emerald-700 font-medium">
+                {totalFeesCollected === 0 ? 'کوئی فیس وصول نہیں ہوئی (0 روپے)' : 'وصول شدہ واؤچرز'}
+              </span>
+            </div>
+
+            <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+              <span className="text-[11px] font-bold text-amber-900 block">بقایا واجب الادا فیس (Pending)</span>
+              <span className="text-xl font-black text-amber-800 mt-0.5 block">
+                Rs. {totalFeesPending.toLocaleString()}
+              </span>
+              <span className="text-[10px] text-amber-700 font-medium">
+                باقی بقایا رقم (خودکار حساب)
+              </span>
+            </div>
+          </div>
+
           {feeRecords.filter(f => !isDummyStudent(f)).length === 0 ? (
             <div className="text-center py-12 text-slate-500 text-xs italic bg-slate-50 rounded-xl border border-dashed border-slate-300">
               ابھی کوئی فیس واؤچر یا ریکارڈ موجود نہیں ہے۔ جیسے ہی آپ نئے طلباء داخل کریں گے، ان کا فیس ریکارڈ یہاں خود بخود آ جائے گا۔
@@ -1658,336 +1700,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
         </div>
       )}
 
-      {/* TAB 6: TESTS */}
+      {/* TAB 6: TESTS & RESULTS */}
       {activeTab === 'tests' && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h3 className="font-bold text-slate-900 text-base">Assessment & Test Management</h3>
-              <p className="text-xs text-slate-500">Create scheduled tests and upload marks.</p>
-            </div>
-          </div>
-
-          <form onSubmit={handleAddTest} className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="font-extrabold text-xs text-[#0D285F] uppercase tracking-wider block">
-                Schedule New Assessment (نیا ٹیسٹ شیڈول کریں)
-              </span>
-              <span className="text-[11px] text-slate-500">
-                سبجیکٹ سلیکٹ کریں اور کل نمبر درج کریں
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {/* Class Select */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">Class (کلاس)</label>
-                <select
-                  value={newTestClass}
-                  onChange={(e) => {
-                    const cls = e.target.value as ClassLevel;
-                    setNewTestClass(cls);
-                    setNewTestTitle(`${newTestSubject.split(' ')[0]} Test - ${cls}`);
-                  }}
-                  className="w-full px-3 py-2 text-xs border rounded-xl bg-white font-medium"
-                >
-                  {SCHOOL_CLASSES.map(cls => (
-                    <option key={cls} value={cls}>{cls}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Subject Select */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">Subject (مضمون کی فہرست)</label>
-                <select
-                  value={newTestSubject}
-                  onChange={(e) => {
-                    const sub = e.target.value;
-                    setNewTestSubject(sub);
-                    if (sub !== 'Other (دیگر مضمون)') {
-                      setNewTestTitle(`${sub.split(' ')[0]} Assessment - ${newTestClass}`);
-                    }
-                  }}
-                  className="w-full px-3 py-2 text-xs border rounded-xl bg-white font-medium"
-                >
-                  {SCHOOL_SUBJECTS.map(sub => (
-                    <option key={sub} value={sub}>{sub}</option>
-                  ))}
-                  <option value="Other (دیگر مضمون)">Other (دیگر مضمون - خود لکھیں)</option>
-                </select>
-              </div>
-
-              {/* Total Marks */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">Total Marks (کل نمبر)</label>
-                <div className="flex gap-1.5">
-                  <select
-                    value={newTestMarks}
-                    onChange={(e) => setNewTestMarks(Number(e.target.value))}
-                    className="w-full px-3 py-2 text-xs border rounded-xl bg-white font-bold text-[#0D285F]"
-                  >
-                    {[20, 25, 50, 75, 100].map(m => (
-                      <option key={m} value={m}>{m} Marks</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Test Title */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">Test Title (عنوان)</label>
-                <input
-                  type="text"
-                  required
-                  value={newTestTitle}
-                  onChange={(e) => setNewTestTitle(e.target.value)}
-                  placeholder="e.g. Mathematics Monthly Test"
-                  className="w-full px-3 py-2 text-xs border rounded-xl bg-white font-medium"
-                />
-              </div>
-            </div>
-
-            {newTestSubject === 'Other (دیگر مضمون)' && (
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">Enter Custom Subject Name</label>
-                <input
-                  type="text"
-                  required
-                  value={customSubjectInput}
-                  onChange={(e) => {
-                    setCustomSubjectInput(e.target.value);
-                    setNewTestTitle(`${e.target.value} Assessment - ${newTestClass}`);
-                  }}
-                  placeholder="e.g. Arabic Grammar, Qirat, Tarbiyat Viva"
-                  className="w-full sm:w-1/2 px-3 py-2 text-xs border rounded-xl bg-white"
-                />
-              </div>
-            )}
-
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                className="bg-[#0D285F] hover:bg-[#07193B] text-white px-6 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow"
-              >
-                <Plus className="w-4 h-4 text-amber-400" />
-                <span>Create Assessment (ٹیسٹ درج کریں)</span>
-              </button>
-            </div>
-          </form>
-
-          {/* ACTIVE TEST MARKS ENTRY SHEET MODAL */}
-          {selectedTestForMarks && (
-            <div className="bg-amber-50/70 border-2 border-amber-300 rounded-2xl p-5 space-y-4 shadow-sm animate-fadeIn">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200 pb-3">
-                <div>
-                  <span className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded uppercase">
-                    Marks Entry Sheet
-                  </span>
-                  <h4 className="text-base font-extrabold text-[#0D285F] mt-1">
-                    {selectedTestForMarks.title} ({selectedTestForMarks.className})
-                  </h4>
-                  <p className="text-xs text-slate-600">
-                    Subject: <strong>{selectedTestForMarks.subject}</strong> • Total Marks: <strong>{selectedTestForMarks.totalMarks}</strong>
-                  </p>
-                </div>
-                <button
-                  onClick={() => setSelectedTestForMarks(null)}
-                  className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-300 px-3 py-1.5 rounded-lg"
-                >
-                  ✕ Close Sheet
-                </button>
-              </div>
-
-              {students.filter(s => s.className === selectedTestForMarks.className).length === 0 ? (
-                <p className="text-xs text-slate-500 italic py-4">
-                  اس کلاس ({selectedTestForMarks.className}) میں ابھی کوئی طالب علم داخل نہیں ہے۔
-                </p>
-              ) : (
-                <div className="overflow-x-auto border border-amber-200 rounded-xl bg-white">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-[#07193B] text-white">
-                      <tr>
-                        <th className="p-2.5">Roll #</th>
-                        <th className="p-2.5">Student & Father</th>
-                        <th className="p-2.5">Marks Obtained (out of {selectedTestForMarks.totalMarks})</th>
-                        <th className="p-2.5">Percentage & Grade</th>
-                        <th className="p-2.5">Teacher Remarks</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {students
-                        .filter(s => s.className === selectedTestForMarks.className)
-                        .map(st => {
-                          const existingRes = testResults.find(r => r.testId === selectedTestForMarks.id && r.studentId === st.id);
-                          const currentMarks = adminMarksMap[st.id] ?? existingRes?.marksObtained ?? 0;
-                          const total = selectedTestForMarks.totalMarks;
-                          const pct = Math.round((currentMarks / total) * 100);
-                          const grade = pct >= 90 ? 'A+' : pct >= 80 ? 'A' : pct >= 70 ? 'B' : pct >= 60 ? 'C' : pct >= 50 ? 'D' : 'F';
-
-                          return (
-                            <tr key={st.id} className="hover:bg-slate-50">
-                              <td className="p-2.5 font-bold font-mono text-[#0D285F]">
-                                {st.rollNo}
-                              </td>
-                              <td className="p-2.5">
-                                <div className="font-bold text-slate-900">{st.name}</div>
-                                <div className="text-[10px] text-slate-400">ولدیت: {st.fatherName}</div>
-                              </td>
-                              <td className="p-2.5">
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    max={selectedTestForMarks.totalMarks}
-                                    value={adminMarksMap[st.id] ?? existingRes?.marksObtained ?? ''}
-                                    onChange={(e) => {
-                                      const val = Math.min(total, Math.max(0, Number(e.target.value)));
-                                      setAdminMarksMap(prev => ({ ...prev, [st.id]: val }));
-                                    }}
-                                    placeholder="Marks"
-                                    className="w-24 px-3 py-1.5 border rounded-lg font-bold text-center text-sm"
-                                  />
-                                  <span className="text-slate-400 font-bold">/ {total}</span>
-                                </div>
-                              </td>
-                              <td className="p-2.5">
-                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${
-                                  pct >= 80
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : pct >= 50
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : 'bg-red-100 text-red-800'
-                                }`}>
-                                  {pct}% • Grade {grade}
-                                </span>
-                              </td>
-                              <td className="p-2.5">
-                                <input
-                                  type="text"
-                                  value={adminRemarksMap[st.id] ?? existingRes?.remarks ?? ''}
-                                  onChange={(e) => setAdminRemarksMap(prev => ({ ...prev, [st.id]: e.target.value }))}
-                                  placeholder="e.g. Well prepared"
-                                  className="w-full px-2.5 py-1.5 border rounded-lg text-xs"
-                                />
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              <div className="flex justify-between items-center pt-2">
-                <span className="text-xs text-slate-600">
-                  تمام بچوں کے نمبر درج کرنے کے بعد نیچے والا بٹن دبائیں۔
-                </span>
-                <button
-                  type="button"
-                  onClick={handleSaveAdminTestMarks}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow transition"
-                >
-                  ✓ Save All Marks (تمام نمبر محفوظ کریں)
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* SCHEDULED TESTS LIST */}
-          <div className="space-y-4">
-            <h4 className="font-bold text-xs text-slate-700 uppercase tracking-wider">Scheduled Assessments & Tests</h4>
-            {tests.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">No scheduled tests created yet. Use the form above to schedule a test.</p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {tests.map(t => (
-                  <div key={t.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3 hover:border-[#0D285F] transition">
-                    <div className="flex justify-between items-start">
-                      <span className="bg-blue-50 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded">
-                        {t.className}
-                      </span>
-                      <span className="text-[11px] text-slate-400">{t.testDate}</span>
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-sm text-slate-900">{t.title}</h4>
-                      <p className="text-xs text-slate-600 mt-0.5">
-                        {t.subject} • <strong className="text-[#0D285F]">{t.totalMarks} Marks</strong>
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setSelectedTestForMarks(t);
-                        // Populate marks map from existing results
-                        const map: Record<string, number> = {};
-                        const rem: Record<string, string> = {};
-                        testResults.filter(r => r.testId === t.id).forEach(r => {
-                          map[r.studentId] = r.marksObtained;
-                          rem[r.studentId] = r.remarks;
-                        });
-                        setAdminMarksMap(map);
-                        setAdminRemarksMap(rem);
-                      }}
-                      className="w-full bg-[#0D285F] hover:bg-[#07193B] text-amber-300 font-bold text-xs py-2 rounded-lg transition flex items-center justify-center gap-1.5 shadow-sm"
-                    >
-                      <Award className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Enter / Update Student Marks</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* RECENT TEST RESULTS LEDGER */}
-          {testResults.length > 0 && (
-            <div className="space-y-3 pt-6 border-t border-slate-200">
-              <h4 className="font-bold text-xs text-slate-800 uppercase tracking-wider">
-                Submitted Student Test Results History (ریکارڈ شدہ ٹیسٹ رزلٹ)
-              </h4>
-              <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#07193B] text-white">
-                    <tr>
-                      <th className="p-3">Student</th>
-                      <th className="p-3">Class</th>
-                      <th className="p-3">Subject</th>
-                      <th className="p-3">Test Title</th>
-                      <th className="p-3">Marks Obtained</th>
-                      <th className="p-3">Grade</th>
-                      <th className="p-3">Remarks</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {testResults.slice(0, 20).map(tr => (
-                      <tr key={tr.id} className="hover:bg-slate-50">
-                        <td className="p-3 font-semibold text-slate-900">{tr.studentName}</td>
-                        <td className="p-3">{tr.className}</td>
-                        <td className="p-3 text-slate-700">{tr.subject}</td>
-                        <td className="p-3 text-slate-500">{tr.testTitle}</td>
-                        <td className="p-3 font-bold text-[#0D285F]">
-                          {tr.marksObtained} / {tr.totalMarks}
-                        </td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
-                            tr.grade === 'A+' || tr.grade === 'A'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : tr.grade === 'F'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-blue-100 text-blue-800'
-                          }`}>
-                            {tr.grade}
-                          </span>
-                        </td>
-                        <td className="p-3 text-slate-500 italic">{tr.remarks}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
+        <StudentMarksAndResultsSection role="admin" />
       )}
 
       {/* TAB 7: TARBIYAT */}

@@ -15,7 +15,10 @@ import {
   PortalType,
   ClassLevel,
   getDefaultMonthlyFee,
-  SCHOOL_CLASSES
+  SCHOOL_CLASSES,
+  StudentExamReport,
+  SalaryTransaction,
+  TeacherSalaryPayment
 } from '../types';
 import {
   initialStudents,
@@ -30,9 +33,9 @@ import {
   initialNotices,
   initialAdmissions,
   initialSettings,
-  initialSalaryTransactions
+  initialSalaryTransactions,
+  initialStudentExamReports
 } from '../data/initialData';
-import { SalaryTransaction, TeacherSalaryPayment } from '../types';
 
 export interface StudentFullReport {
   student: Student;
@@ -117,10 +120,15 @@ interface SchoolContextType {
   recordFeePayment: (feeRecordId: string, amount: number, receiptNo: string) => void;
   generateMonthlyFeeVouchers: (monthName: string) => number;
 
-  addDailyReport: (report: Omit<DailyReport, 'id'>) => void;
-
   addTest: (test: Omit<Test, 'id'>) => Test;
   addTestResult: (result: Omit<TestResult, 'id'>) => void;
+  addDailyReport: (report: Omit<DailyReport, 'id'>) => void;
+
+  // Official Student Exam Reports (Tests & Results Section)
+  studentExamReports: StudentExamReport[];
+  saveStudentExamReport: (report: StudentExamReport) => void;
+  deleteStudentExamReport: (reportId: string) => void;
+  togglePublishExamReport: (reportId: string) => void;
 
   addNotice: (notice: Omit<Notice, 'id'>) => void;
   deleteNotice: (id: string) => void;
@@ -159,11 +167,12 @@ const DUMMY_STUDENT_IDS = new Set([
 export function isDummyStudent(item: any): boolean {
   if (!item) return false;
   const id = String(item.id || item.studentId || '');
-  if (id && (DUMMY_STUDENT_IDS.has(id) || id.startsWith('bss-') || id.startsWith('fee-bss-'))) return true;
+  if (id && DUMMY_STUDENT_IDS.has(id)) return true;
   const name = String(item.name || item.studentName || '').toLowerCase().trim();
   const fName = String(item.fatherName || '').toLowerCase().trim();
   const cName = String(item.className || '').toLowerCase().trim();
   if (
+    (id === 'bss-c7-02' && (name.includes('abdullah') || fName.includes('aslam'))) ||
     name.includes('maryam shabbir') ||
     name.includes('مریم شبیر') ||
     (name.includes('maryam') && (cName === 'class 4' || item.rollNo === '02' || fName.includes('shabbir'))) ||
@@ -178,7 +187,7 @@ export function isDummyStudent(item: any): boolean {
 
 function loadFromStorage<T>(key: string, defaultValue: T): T {
   try {
-    const item = localStorage.getItem(`bss_v8_${key}`);
+    const item = localStorage.getItem(`bss_v9_${key}`);
     return item ? JSON.parse(item) : defaultValue;
   } catch (e) {
     return defaultValue;
@@ -187,9 +196,9 @@ function loadFromStorage<T>(key: string, defaultValue: T): T {
 
 function saveToStorage<T>(key: string, value: T) {
   try {
-    localStorage.setItem(`bss_v8_${key}`, JSON.stringify(value));
+    localStorage.setItem(`bss_v9_${key}`, JSON.stringify(value));
   } catch (e) {
-    console.error(`Failed to save bss_v8_${key}`, e);
+    console.error(`Failed to save bss_v9_${key}`, e);
   }
 }
 
@@ -197,6 +206,7 @@ function saveToStorage<T>(key: string, value: T) {
 function recoverAllLocalStudents(): Student[] {
   const recoveredMap = new Map<string, Student>();
   const priorityKeys = [
+    'bss_v8_students',
     'bss_v7_students',
     'bss_v6_students',
     'bss_v5_students',
@@ -226,28 +236,6 @@ function recoverAllLocalStudents(): Student[] {
         }
       } catch (e) {}
     });
-
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && (k.includes('student') || k.includes('bss') || k.includes('school'))) {
-        try {
-          const val = localStorage.getItem(k);
-          if (val && val.startsWith('[')) {
-            const arr = JSON.parse(val);
-            if (Array.isArray(arr)) {
-              arr.forEach((item: any) => {
-                if (item && item.name && (item.rollNo || item.className || item.fatherName) && !isDummyStudent(item)) {
-                  const id = item.id || `s-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-                  if (!recoveredMap.has(id)) {
-                    recoveredMap.set(id, { ...item, id });
-                  }
-                }
-              });
-            }
-          }
-        } catch (e) {}
-      }
-    }
   } catch (err) {
     console.warn('Error recovering local students:', err);
   }
@@ -259,38 +247,19 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [students, setStudents] = useState<Student[]>(() => {
     const raw = loadFromStorage<Student[]>('students', []);
     const cleanRaw = Array.isArray(raw) ? raw.filter(s => !isDummyStudent(s)) : [];
-    const recovered = recoverAllLocalStudents().filter(s => !isDummyStudent(s));
 
-    // Find all real students created by the user (IDs do not start with 'bss-')
-    const realUserCandidates = [
-      ...cleanRaw.filter(s => !s.id.startsWith('bss-')),
-      ...recovered.filter(s => !s.id.startsWith('bss-'))
-    ];
-
-    if (realUserCandidates.length > 0) {
-      // Prioritize user's own genuine students exclusively - NEVER mix with placeholder 'bss-' students!
-      const map = new Map<string, Student>();
-      const seenSignatures = new Set<string>();
-      const realOnly: Student[] = [];
-
-      realUserCandidates.forEach(s => {
-        if (!s || !s.name || isDummyStudent(s)) return;
-        const sig = `${(s.name || '').trim().toLowerCase()}_${(s.className || '').trim().toLowerCase()}_${(s.rollNo || '').trim().toLowerCase()}`;
-        if (!seenSignatures.has(sig) && !map.has(s.id)) {
-          seenSignatures.add(sig);
-          map.set(s.id, s);
-          realOnly.push(s);
-        }
-      });
-
-      if (realOnly.length > 0) {
-        saveToStorage('students', realOnly);
-        return realOnly;
+    // Prioritize genuine base 50 school students, preserving any newly added or updated students
+    const map = new Map<string, Student>();
+    initialStudents.filter(s => !isDummyStudent(s)).forEach(s => map.set(s.id, s));
+    cleanRaw.forEach(s => {
+      if (s && s.id && !isDummyStudent(s)) {
+        map.set(s.id, s);
       }
-    }
+    });
 
-    // Only fallback to initial roster if absolutely no real user students exist anywhere
-    return initialStudents.filter(s => !isDummyStudent(s));
+    const list = Array.from(map.values());
+    saveToStorage('students', list);
+    return list;
   });
   const [teachers, setTeachers] = useState<Teacher[]>(() => loadFromStorage('teachers', initialTeachers));
   const [attendance, setAttendance] = useState<StudentAttendance[]>(() => {
@@ -301,12 +270,21 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [teacherAttendance, setTeacherAttendance] = useState<TeacherAttendance[]>(() => loadFromStorage('teacherAttendance', initialTeacherAttendance));
   const [leaves, setLeaves] = useState<LeaveRequest[]>(() => loadFromStorage('leaves', initialLeaves));
   const [feeRecords, setFeeRecords] = useState<FeeRecord[]>(() => {
-    const raw = loadFromStorage<FeeRecord[]>('feeRecords', initialFeeRecords);
+    const raw = loadFromStorage<FeeRecord[]>('feeRecords', []);
     const clean = Array.isArray(raw) ? raw.filter(f => !isDummyStudent(f)) : [];
-    // If real fee records exist without 'fee-bss-' placeholder prefix, prefer them
-    const realFees = clean.filter(f => !f.id.startsWith('fee-bss-') && !f.studentId?.startsWith('bss-'));
-    if (realFees.length > 0) return realFees;
-    return clean.length > 0 ? clean : initialFeeRecords.filter(f => !isDummyStudent(f));
+
+    // Seed 50 fee vouchers, overlaying stored fee records (which might contain payments)
+    const map = new Map<string, FeeRecord>();
+    initialFeeRecords.filter(f => !isDummyStudent(f)).forEach(f => map.set(f.id, f));
+    clean.forEach(f => {
+      if (f && f.id && !isDummyStudent(f)) {
+        map.set(f.id, f);
+      }
+    });
+
+    const list = Array.from(map.values());
+    saveToStorage('feeRecords', list);
+    return list;
   });
   const [dailyReports, setDailyReports] = useState<DailyReport[]>(() => {
     const raw = loadFromStorage<DailyReport[]>('dailyReports', initialDailyReports);
@@ -320,6 +298,9 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const raw = loadFromStorage<TestResult[]>('testResults', initialTestResults);
     return Array.isArray(raw) ? raw.filter(tr => !isDummyStudent(tr)) : [];
   });
+  const [studentExamReports, setStudentExamReports] = useState<StudentExamReport[]>(() =>
+    loadFromStorage('studentExamReports', initialStudentExamReports)
+  );
   const [notices, setNotices] = useState<Notice[]>(() => loadFromStorage('notices', initialNotices));
   const [onlineAdmissions, setOnlineAdmissions] = useState<OnlineAdmission[]>(() => loadFromStorage('admissions', initialAdmissions));
   const [settings, setSettings] = useState<SystemSettings>(() => {
@@ -352,6 +333,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => saveToStorage('dailyReports', dailyReports), [dailyReports]);
   useEffect(() => saveToStorage('tests', tests), [tests]);
   useEffect(() => saveToStorage('testResults', testResults), [testResults]);
+  useEffect(() => saveToStorage('studentExamReports', studentExamReports), [studentExamReports]);
   useEffect(() => saveToStorage('notices', notices), [notices]);
   useEffect(() => saveToStorage('admissions', onlineAdmissions), [onlineAdmissions]);
   useEffect(() => saveToStorage('settings', settings), [settings]);
@@ -383,6 +365,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     dailyReports,
     tests,
     testResults,
+    studentExamReports,
     notices,
     onlineAdmissions,
     settings,
@@ -401,6 +384,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     dailyReports,
     tests,
     testResults,
+    studentExamReports,
     notices,
     onlineAdmissions,
     settings,
@@ -538,8 +522,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       setIsCloudConnected(true);
 
-      // Check if server data matches what we already have
-      if (data.updatedAt && data.updatedAt === lastKnownServerUpdatedAt.current && hasInitializedFromCloud.current) {
+      // Check if server data is older than or equal to local data
+      const remoteTime = new Date(data.updatedAt || 0).getTime();
+      const localTime = new Date(lastKnownServerUpdatedAt.current || 0).getTime();
+      if (remoteTime <= localTime && hasInitializedFromCloud.current) {
         return;
       }
 
@@ -554,9 +540,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (cleanLocal.length === 0) return cleanServer;
 
         const map = new Map<string, T>();
-        // Add clean server items first
         cleanServer.forEach(item => map.set(item.id, item));
-        // Preserve any locally added real items
         cleanLocal.forEach(item => {
           if (!map.has(item.id)) {
             map.set(item.id, item);
@@ -565,46 +549,53 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return Array.from(map.values());
       };
 
-      // Smart Student Merge: Purge all 'bss-' placeholders if real students exist
+      // Resilient Student Merge: Preserves all 50 enrolled school students and user additions
       const mergeStudents = (serverStudents?: Student[], localStudents?: Student[]): Student[] => {
         const cleanServer = Array.isArray(serverStudents) ? serverStudents.filter(s => !isDummyStudent(s)) : [];
         const cleanLocal = Array.isArray(localStudents) ? localStudents.filter(s => !isDummyStudent(s)) : [];
 
-        const realServer = cleanServer.filter(s => !s.id.startsWith('bss-'));
-        const realLocal = cleanLocal.filter(s => !s.id.startsWith('bss-'));
-
-        const hasRealStudents = realServer.length > 0 || realLocal.length > 0;
-        const pool = hasRealStudents ? [...realServer, ...realLocal] : [...cleanServer, ...cleanLocal];
-
         const map = new Map<string, Student>();
-        const seenSignatures = new Set<string>();
-        const result: Student[] = [];
-
-        pool.forEach(st => {
-          if (!st || !st.name) return;
-          const sig = `${(st.name || '').trim().toLowerCase()}_${(st.className || '').trim().toLowerCase()}_${(st.rollNo || '').trim().toLowerCase()}`;
-          if (!seenSignatures.has(sig) && !map.has(st.id)) {
-            seenSignatures.add(sig);
-            map.set(st.id, st);
-            result.push(st);
-          }
+        // Base 50 students first
+        initialStudents.filter(s => !isDummyStudent(s)).forEach(s => map.set(s.id, s));
+        // Server students
+        cleanServer.forEach(st => {
+          if (st && st.id && !isDummyStudent(st)) map.set(st.id, st);
+        });
+        // Local students
+        cleanLocal.forEach(st => {
+          if (st && st.id && !isDummyStudent(st)) map.set(st.id, st);
         });
 
-        return result.length > 0 ? result : (cleanLocal.length > 0 ? cleanLocal : cleanServer);
+        return Array.from(map.values());
+      };
+
+      const mergeFees = (serverFees?: FeeRecord[], localFees?: FeeRecord[]): FeeRecord[] => {
+        const cleanServer = Array.isArray(serverFees) ? serverFees.filter(f => !isDummyStudent(f)) : [];
+        const cleanLocal = Array.isArray(localFees) ? localFees.filter(f => !isDummyStudent(f)) : [];
+
+        const map = new Map<string, FeeRecord>();
+        // Initial fee vouchers for all 50 students
+        initialFeeRecords.filter(f => !isDummyStudent(f)).forEach(f => map.set(f.id, f));
+        cleanServer.forEach(f => {
+          if (f && f.id && !isDummyStudent(f)) map.set(f.id, f);
+        });
+        cleanLocal.forEach(f => {
+          if (f && f.id && !isDummyStudent(f)) map.set(f.id, f);
+        });
+
+        return Array.from(map.values());
       };
 
       const mergedStudents = mergeStudents(data.students, currentLocal.students);
-      const hasReal = mergedStudents.some(s => !s.id.startsWith('bss-'));
       const mergedTeachers = mergeEntities(data.teachers, currentLocal.teachers);
-      const mergedAttendance = mergeEntities(data.attendance, currentLocal.attendance)
-        .filter(a => !hasReal || !a.studentId?.startsWith('bss-'));
+      const mergedAttendance = mergeEntities(data.attendance, currentLocal.attendance);
       const mergedTeacherAttendance = mergeEntities(data.teacherAttendance, currentLocal.teacherAttendance);
       const mergedLeaves = mergeEntities(data.leaves, currentLocal.leaves);
-      const mergedFees = mergeEntities(data.feeRecords, currentLocal.feeRecords)
-        .filter(f => !hasReal || (!f.id.startsWith('fee-bss-') && !f.studentId?.startsWith('bss-')));
+      const mergedFees = mergeFees(data.feeRecords, currentLocal.feeRecords);
       const mergedReports = mergeEntities(data.dailyReports, currentLocal.dailyReports);
       const mergedTests = mergeEntities(data.tests, currentLocal.tests);
       const mergedTestResults = mergeEntities(data.testResults, currentLocal.testResults);
+      const mergedExamReports = mergeEntities(data.studentExamReports, currentLocal.studentExamReports);
       const mergedNotices = mergeEntities(data.notices, currentLocal.notices);
       const mergedAdmissions = mergeEntities(data.onlineAdmissions, currentLocal.onlineAdmissions);
       const mergedSalaryTx = mergeEntities(data.salaryTransactions, currentLocal.salaryTransactions);
@@ -642,6 +633,9 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setTestResults(mergedTestResults);
       saveToStorage('testResults', mergedTestResults);
 
+      setStudentExamReports(mergedExamReports);
+      saveToStorage('studentExamReports', mergedExamReports);
+
       setNotices(mergedNotices);
       saveToStorage('notices', mergedNotices);
 
@@ -672,6 +666,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           dailyReports: mergedReports,
           tests: mergedTests,
           testResults: mergedTestResults,
+          studentExamReports: mergedExamReports,
           notices: mergedNotices,
           onlineAdmissions: mergedAdmissions,
           salaryTransactions: mergedSalaryTx,
@@ -1001,10 +996,45 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const updateStudent = (updated: Student) => {
-    const updatedList = stateRef.current.students.map(s => s.id === updated.id ? updated : s);
+    const prev = stateRef.current.students.find(s => s.id === updated.id);
+    let finalStudent = { ...updated };
+    let updatedFees = [...stateRef.current.feeRecords];
+
+    // Automatically calculate and update fee according to the new class
+    if (prev && prev.className !== updated.className) {
+      const newClassFee = getDefaultMonthlyFee(updated.className);
+      finalStudent.monthlyFee = newClassFee;
+
+      // Update future/unpaid fee records for this student while strictly preserving payment history
+      updatedFees = updatedFees.map(f => {
+        if (f.studentId === updated.id) {
+          if (f.paidAmount === 0) {
+            const fine = f.fineAmount || 0;
+            return {
+              ...f,
+              className: updated.className,
+              tuitionFee: newClassFee,
+              totalPayable: newClassFee + fine,
+              balanceRemaining: newClassFee + fine
+            };
+          } else {
+            // Student has paid amount; update class name only, do not change existing fee payment history!
+            return {
+              ...f,
+              className: updated.className
+            };
+          }
+        }
+        return f;
+      });
+      setFeeRecords(updatedFees);
+      saveToStorage('feeRecords', updatedFees);
+    }
+
+    const updatedList = stateRef.current.students.map(s => s.id === finalStudent.id ? finalStudent : s);
     setStudents(updatedList);
     saveToStorage('students', updatedList);
-    pushCurrentDataToCloud({ students: updatedList });
+    pushCurrentDataToCloud({ students: updatedList, feeRecords: updatedFees });
   };
 
   const deleteStudent = (id: string) => {
@@ -1022,15 +1052,15 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const purgePlaceholderStudents = (): number => {
-    const realOnly = stateRef.current.students.filter(s => !s.id.startsWith('bss-') && !isDummyStudent(s));
+    const realOnly = stateRef.current.students.filter(s => !isDummyStudent(s));
     setStudents(realOnly);
     saveToStorage('students', realOnly);
 
-    const realFees = stateRef.current.feeRecords.filter(f => !f.id.startsWith('fee-bss-') && !f.studentId?.startsWith('bss-'));
+    const realFees = stateRef.current.feeRecords.filter(f => !isDummyStudent(f));
     setFeeRecords(realFees);
     saveToStorage('feeRecords', realFees);
 
-    const realAtt = stateRef.current.attendance.filter(a => !a.studentId?.startsWith('bss-'));
+    const realAtt = stateRef.current.attendance.filter(a => !isDummyStudent(a));
     setAttendance(realAtt);
     saveToStorage('attendance', realAtt);
 
@@ -1043,7 +1073,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return realOnly.length;
   };
 
-  // Teacher CRUD
+  // Teacher CRUD with immediate storage and cloud sync
   const addTeacher = (tData: Omit<Teacher, 'id' | 'allowances' | 'deductions'>): Teacher => {
     const newTeacher: Teacher = {
       ...tData,
@@ -1051,16 +1081,25 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       allowances: 0,
       deductions: 0,
     };
-    setTeachers(prev => [...prev, newTeacher]);
+    const updated = [...stateRef.current.teachers, newTeacher];
+    setTeachers(updated);
+    saveToStorage('teachers', updated);
+    pushCurrentDataToCloud({ teachers: updated });
     return newTeacher;
   };
 
   const updateTeacher = (updated: Teacher) => {
-    setTeachers(prev => prev.map(t => t.id === updated.id ? updated : t));
+    const updatedList = stateRef.current.teachers.map(t => t.id === updated.id ? updated : t);
+    setTeachers(updatedList);
+    saveToStorage('teachers', updatedList);
+    pushCurrentDataToCloud({ teachers: updatedList });
   };
 
   const deleteTeacher = (id: string) => {
-    setTeachers(prev => prev.filter(t => t.id !== id));
+    const updatedList = stateRef.current.teachers.filter(t => t.id !== id);
+    setTeachers(updatedList);
+    saveToStorage('teachers', updatedList);
+    pushCurrentDataToCloud({ teachers: updatedList });
   };
 
   const adjustTeacherSalary = (
@@ -1068,23 +1107,21 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     amount: number,
     type: 'Addition' | 'Deduction',
     reason: string,
-    month: string = 'September 2026'
+    month: string = 'October 2026'
   ) => {
-    const teacher = teachers.find(t => t.id === teacherId);
+    const teacher = stateRef.current.teachers.find(t => t.id === teacherId);
     if (!teacher) return;
 
-    setTeachers(prev =>
-      prev.map(t => {
-        if (t.id === teacherId) {
-          if (type === 'Addition') {
-            return { ...t, allowances: (t.allowances || 0) + amount };
-          } else {
-            return { ...t, deductions: (t.deductions || 0) + amount };
-          }
+    const updatedTeachers = stateRef.current.teachers.map(t => {
+      if (t.id === teacherId) {
+        if (type === 'Addition') {
+          return { ...t, allowances: (t.allowances || 0) + amount };
+        } else {
+          return { ...t, deductions: (t.deductions || 0) + amount };
         }
-        return t;
-      })
-    );
+      }
+      return t;
+    });
 
     const newTx: SalaryTransaction = {
       id: `sal-${Date.now()}`,
@@ -1096,7 +1133,13 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       reason,
       date: new Date().toISOString().split('T')[0]
     };
-    setSalaryTransactions(prev => [newTx, ...prev]);
+    const updatedTx = [newTx, ...stateRef.current.salaryTransactions];
+
+    setTeachers(updatedTeachers);
+    setSalaryTransactions(updatedTx);
+    saveToStorage('teachers', updatedTeachers);
+    saveToStorage('salaryTransactions', updatedTx);
+    pushCurrentDataToCloud({ teachers: updatedTeachers, salaryTransactions: updatedTx });
   };
 
   const setTeacherPassword = (teacherId: string, newPassword: string) => {
@@ -1355,6 +1398,40 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setTestResults(updated);
     saveToStorage('testResults', updated);
     pushCurrentDataToCloud({ testResults: updated });
+  };
+
+  // Official Student Exam Reports (Tests & Results Section)
+  const saveStudentExamReport = (report: StudentExamReport) => {
+    const updated = [...stateRef.current.studentExamReports];
+    const idx = updated.findIndex(r => r.id === report.id);
+    const enriched: StudentExamReport = {
+      ...report,
+      updatedAt: new Date().toISOString()
+    };
+    if (idx >= 0) {
+      updated[idx] = enriched;
+    } else {
+      updated.unshift(enriched);
+    }
+    setStudentExamReports(updated);
+    saveToStorage('studentExamReports', updated);
+    pushCurrentDataToCloud({ studentExamReports: updated });
+  };
+
+  const deleteStudentExamReport = (reportId: string) => {
+    const updated = stateRef.current.studentExamReports.filter(r => r.id !== reportId);
+    setStudentExamReports(updated);
+    saveToStorage('studentExamReports', updated);
+    pushCurrentDataToCloud({ studentExamReports: updated });
+  };
+
+  const togglePublishExamReport = (reportId: string) => {
+    const updated = stateRef.current.studentExamReports.map(r =>
+      r.id === reportId ? { ...r, isPublished: !r.isPublished, updatedAt: new Date().toISOString() } : r
+    );
+    setStudentExamReports(updated);
+    saveToStorage('studentExamReports', updated);
+    pushCurrentDataToCloud({ studentExamReports: updated });
   };
 
   // Notices
@@ -1628,6 +1705,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         addDailyReport,
         addTest,
         addTestResult,
+        studentExamReports,
+        saveStudentExamReport,
+        deleteStudentExamReport,
+        togglePublishExamReport,
         addNotice,
         deleteNotice,
         submitOnlineAdmission,
