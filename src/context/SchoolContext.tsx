@@ -478,7 +478,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (localRes.ok) {
           const parsed = await localRes.json();
           const d = parsed?.data || parsed;
-          if (d && Array.isArray(d.students) && d.students.filter((s: any) => !isDummyStudent(s)).length > 0) {
+          if (d && Array.isArray(d.students)) {
             candidates.push(d);
           }
         }
@@ -492,7 +492,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (cloudRes.ok) {
           const parsed = await cloudRes.json();
           const d = parsed?.data || parsed;
-          if (d && Array.isArray(d.students) && d.students.filter((s: any) => !isDummyStudent(s)).length > 0) {
+          if (d && Array.isArray(d.students)) {
             candidates.push(d);
           }
         }
@@ -506,7 +506,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (extRes.ok) {
           const parsed = await extRes.json();
           const d = parsed?.data || parsed;
-          if (d && Array.isArray(d.students) && d.students.filter((s: any) => !isDummyStudent(s)).length > 0) {
+          if (d && Array.isArray(d.students)) {
             candidates.push(d);
           }
         }

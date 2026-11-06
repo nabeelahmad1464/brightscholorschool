@@ -74,7 +74,7 @@ export const initialTeachers: Teacher[] = [
 
 export const initialSalaryTransactions: import('../types').SalaryTransaction[] = [];
 
-export const initialStudents: Student[] = all50SchoolStudents;
+export const initialStudents: Student[] = [];
 
 export const initialAttendance: StudentAttendance[] = [];
 
@@ -82,7 +82,7 @@ export const initialTeacherAttendance: TeacherAttendance[] = [];
 
 export const initialLeaves: LeaveRequest[] = [];
 
-export const initialFeeRecords: FeeRecord[] = all50InitialFeeRecords;
+export const initialFeeRecords: FeeRecord[] = [];
 
 export const initialDailyReports: DailyReport[] = [];
 
