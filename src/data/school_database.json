@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-04T05:10:54.884Z",
+  "updatedAt": "2026-11-06T04:54:29.552Z",
   "students": [
     {
       "id": "bss-pg-01",
@@ -1605,11 +1605,87 @@
     }
   ],
   "attendance": [],
-  "teachers": [],
+  "teachers": [
+    {
+      "id": "t-1",
+      "name": "Principal Sir Tasawar",
+      "qualification": "M.Sc. / B.Ed",
+      "subject": "School Administration & Science/Math",
+      "assignedClasses": "All Classes",
+      "contactNo": "0302-5053993",
+      "whatsappNo": "0302-5053993",
+      "joiningDate": "2022-01-01",
+      "salary": 35000,
+      "allowances": 0,
+      "deductions": 0,
+      "personalPassword": "teacher123"
+    },
+    {
+      "id": "t-2",
+      "name": "Mam Maham",
+      "qualification": "M.A. English / B.Ed",
+      "subject": "English & Urdu Language",
+      "assignedClasses": "Class 3, Class 4, Class 5, Class 6",
+      "contactNo": "0302-5053993",
+      "whatsappNo": "0302-5053993",
+      "joiningDate": "2023-01-01",
+      "salary": 25000,
+      "allowances": 0,
+      "deductions": 0,
+      "personalPassword": "teacher123"
+    },
+    {
+      "id": "t-3",
+      "name": "Mam Shahista",
+      "qualification": "Montessori / B.A.",
+      "subject": "Primary & Early Childhood Tarbiyat",
+      "assignedClasses": "Play Group, Nursery, Prep, Class 1, Class 2",
+      "contactNo": "0302-5053993",
+      "whatsappNo": "0302-5053993",
+      "joiningDate": "2023-03-01",
+      "salary": 25000,
+      "allowances": 0,
+      "deductions": 0,
+      "personalPassword": "teacher123"
+    }
+  ],
   "dailyReports": [],
   "tests": [],
   "testResults": [],
-  "notices": [],
+  "notices": [
+    {
+      "id": "not-1",
+      "title": "Admissions Open Session 2026-2027",
+      "category": "Announcement",
+      "date": "2026-09-28",
+      "content": "Admissions are open from Play Group to Class 8 / Middle. Parents can fill the Online Admission Form on our website or visit school office in Chak 47 GB, Samundri.",
+      "targetAudience": "All"
+    },
+    {
+      "id": "not-2",
+      "title": "Absence Fine Policy & Punctuality",
+      "category": "Fee Notice",
+      "date": "2026-09-20",
+      "content": "As per school discipline rules, unapproved absence will incur a fine of Rs. 50 per day. Please submit leave requests in advance through the Parent Portal.",
+      "targetAudience": "Parents"
+    },
+    {
+      "id": "not-3",
+      "title": "Parent-Teacher Meeting (PTM) Scheduled",
+      "category": "Parent Meeting",
+      "date": "2026-09-15",
+      "content": "PTM for September progress reviews and moral tarbiyat discussion will be held on the first Saturday of next month from 9:00 AM to 1:00 PM.",
+      "targetAudience": "Parents"
+    },
+    {
+      "id": "not-4",
+      "title": "Weekly Nazra Quran & Hadith Competition",
+      "category": "Announcement",
+      "date": "2026-09-10",
+      "content": "Under the motto \"Pehle Tarbiyat, Phir Taleem\", all students will participate in Friday recitation & ethical character building sessions.",
+      "targetAudience": "All"
+    }
+  ],
   "leaves": [],
   "onlineAdmissions": [],
   "settings": {
@@ -1621,5 +1697,9 @@
     "schoolAddress": "Chak No. 47 GB, Samundri, Faisalabad, Punjab, Pakistan",
     "schoolPhone": "0302-5053993",
     "schoolWhatsApp": "0302-5053993"
-  }
+  },
+  "teacherAttendance": [],
+  "studentExamReports": [],
+  "salaryTransactions": [],
+  "teacherSalaryPayments": []
 }

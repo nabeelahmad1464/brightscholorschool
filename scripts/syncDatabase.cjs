@@ -104,8 +104,100 @@ const feeRecords = students.map((st, i) => ({
   receiptNo: `REC-BSS-${String(i + 1).padStart(3, '0')}`
 }));
 
+const teachers = [
+  {
+    id: 't-1',
+    name: 'Principal Sir Tasawar',
+    qualification: 'M.Sc. / B.Ed',
+    subject: 'School Administration & Science/Math',
+    assignedClasses: 'All Classes',
+    contactNo: '0302-5053993',
+    whatsappNo: '0302-5053993',
+    joiningDate: '2022-01-01',
+    salary: 35000,
+    allowances: 0,
+    deductions: 0,
+    personalPassword: 'teacher123'
+  },
+  {
+    id: 't-2',
+    name: 'Mam Maham',
+    qualification: 'M.A. English / B.Ed',
+    subject: 'English & Urdu Language',
+    assignedClasses: 'Class 3, Class 4, Class 5, Class 6',
+    contactNo: '0302-5053993',
+    whatsappNo: '0302-5053993',
+    joiningDate: '2023-01-01',
+    salary: 25000,
+    allowances: 0,
+    deductions: 0,
+    personalPassword: 'teacher123'
+  },
+  {
+    id: 't-3',
+    name: 'Mam Shahista',
+    qualification: 'Montessori / B.A.',
+    subject: 'Primary & Early Childhood Tarbiyat',
+    assignedClasses: 'Play Group, Nursery, Prep, Class 1, Class 2',
+    contactNo: '0302-5053993',
+    whatsappNo: '0302-5053993',
+    joiningDate: '2023-03-01',
+    salary: 25000,
+    allowances: 0,
+    deductions: 0,
+    personalPassword: 'teacher123'
+  }
+];
+
+const notices = [
+  {
+    id: 'not-1',
+    title: 'Admissions Open Session 2026-2027',
+    category: 'Announcement',
+    date: '2026-09-28',
+    content: 'Admissions are open from Play Group to Class 8 / Middle. Parents can fill the Online Admission Form on our website or visit school office in Chak 47 GB, Samundri.',
+    targetAudience: 'All',
+  },
+  {
+    id: 'not-2',
+    title: 'Absence Fine Policy & Punctuality',
+    category: 'Fee Notice',
+    date: '2026-09-20',
+    content: 'As per school discipline rules, unapproved absence will incur a fine of Rs. 50 per day. Please submit leave requests in advance through the Parent Portal.',
+    targetAudience: 'Parents',
+  },
+  {
+    id: 'not-3',
+    title: 'Parent-Teacher Meeting (PTM) Scheduled',
+    category: 'Parent Meeting',
+    date: '2026-09-15',
+    content: 'PTM for September progress reviews and moral tarbiyat discussion will be held on the first Saturday of next month from 9:00 AM to 1:00 PM.',
+    targetAudience: 'Parents',
+  },
+  {
+    id: 'not-4',
+    title: 'Weekly Nazra Quran & Hadith Competition',
+    category: 'Announcement',
+    date: '2026-09-10',
+    content: 'Under the motto "Pehle Tarbiyat, Phir Taleem", all students will participate in Friday recitation & ethical character building sessions.',
+    targetAudience: 'All',
+  }
+];
+
 db.students = students;
 db.feeRecords = feeRecords;
+db.teachers = (Array.isArray(db.teachers) && db.teachers.length > 0) ? db.teachers : teachers;
+db.notices = (Array.isArray(db.notices) && db.notices.length > 0) ? db.notices : notices;
+db.attendance = Array.isArray(db.attendance) ? db.attendance : [];
+db.teacherAttendance = Array.isArray(db.teacherAttendance) ? db.teacherAttendance : [];
+db.leaves = Array.isArray(db.leaves) ? db.leaves : [];
+db.dailyReports = Array.isArray(db.dailyReports) ? db.dailyReports : [];
+db.tests = Array.isArray(db.tests) ? db.tests : [];
+db.testResults = Array.isArray(db.testResults) ? db.testResults : [];
+db.studentExamReports = Array.isArray(db.studentExamReports) ? db.studentExamReports : [];
+db.onlineAdmissions = Array.isArray(db.onlineAdmissions) ? db.onlineAdmissions : [];
+db.salaryTransactions = Array.isArray(db.salaryTransactions) ? db.salaryTransactions : [];
+db.teacherSalaryPayments = Array.isArray(db.teacherSalaryPayments) ? db.teacherSalaryPayments : [];
 db.settings = {
   adminPassword: 'Ahmad@1',
   teacherPassword: 'teacher123',
@@ -123,4 +215,4 @@ try {
   fs.writeFileSync(fallbackDbPath, JSON.stringify(db, null, 2), 'utf8');
 } catch (e) {}
 
-console.log('Database synced with', students.length, 'students and', feeRecords.length, 'fee records!');
+console.log('Database synced with', students.length, 'students,', db.teachers.length, 'teachers, and', feeRecords.length, 'fee records!');

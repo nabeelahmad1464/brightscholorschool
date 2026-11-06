@@ -261,7 +261,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     saveToStorage('students', list);
     return list;
   });
-  const [teachers, setTeachers] = useState<Teacher[]>(() => loadFromStorage('teachers', initialTeachers));
+  const [teachers, setTeachers] = useState<Teacher[]>(() => {
+    const raw = loadFromStorage<Teacher[]>('teachers', initialTeachers);
+    return Array.isArray(raw) && raw.length > 0 ? raw : initialTeachers;
+  });
   const [attendance, setAttendance] = useState<StudentAttendance[]>(() => {
     const raw = loadFromStorage<StudentAttendance[]>('attendance', initialAttendance);
     const clean = Array.isArray(raw) ? raw.filter(a => !isDummyStudent(a)) : [];
@@ -301,7 +304,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [studentExamReports, setStudentExamReports] = useState<StudentExamReport[]>(() =>
     loadFromStorage('studentExamReports', initialStudentExamReports)
   );
-  const [notices, setNotices] = useState<Notice[]>(() => loadFromStorage('notices', initialNotices));
+  const [notices, setNotices] = useState<Notice[]>(() => {
+    const raw = loadFromStorage<Notice[]>('notices', initialNotices);
+    return Array.isArray(raw) && raw.length > 0 ? raw : initialNotices;
+  });
   const [onlineAdmissions, setOnlineAdmissions] = useState<OnlineAdmission[]>(() => loadFromStorage('admissions', initialAdmissions));
   const [settings, setSettings] = useState<SystemSettings>(() => {
     const raw = loadFromStorage('settings', initialSettings);
@@ -472,7 +478,9 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (localRes.ok) {
           const parsed = await localRes.json();
           const d = parsed?.data || parsed;
-          if (d && Array.isArray(d.students)) candidates.push(d);
+          if (d && Array.isArray(d.students) && d.students.filter((s: any) => !isDummyStudent(s)).length > 0) {
+            candidates.push(d);
+          }
         }
       } catch (localErr) {}
 
@@ -484,7 +492,9 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (cloudRes.ok) {
           const parsed = await cloudRes.json();
           const d = parsed?.data || parsed;
-          if (d && Array.isArray(d.students)) candidates.push(d);
+          if (d && Array.isArray(d.students) && d.students.filter((s: any) => !isDummyStudent(s)).length > 0) {
+            candidates.push(d);
+          }
         }
       } catch (cloudErr) {}
 
@@ -496,7 +506,9 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (extRes.ok) {
           const parsed = await extRes.json();
           const d = parsed?.data || parsed;
-          if (d && Array.isArray(d.students)) candidates.push(d);
+          if (d && Array.isArray(d.students) && d.students.filter((s: any) => !isDummyStudent(s)).length > 0) {
+            candidates.push(d);
+          }
         }
       } catch (extErr) {}
 
@@ -586,8 +598,28 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return Array.from(map.values());
       };
 
+      const mergeTeachers = (serverTeachers?: Teacher[], localTeachers?: Teacher[]): Teacher[] => {
+        const cleanServer = Array.isArray(serverTeachers) ? serverTeachers : [];
+        const cleanLocal = Array.isArray(localTeachers) ? localTeachers : [];
+        const map = new Map<string, Teacher>();
+        initialTeachers.forEach(t => map.set(t.id, t));
+        cleanServer.forEach(t => { if (t && t.id) map.set(t.id, t); });
+        cleanLocal.forEach(t => { if (t && t.id) map.set(t.id, t); });
+        return Array.from(map.values());
+      };
+
+      const mergeNotices = (serverNotices?: Notice[], localNotices?: Notice[]): Notice[] => {
+        const cleanServer = Array.isArray(serverNotices) ? serverNotices : [];
+        const cleanLocal = Array.isArray(localNotices) ? localNotices : [];
+        const map = new Map<string, Notice>();
+        initialNotices.forEach(n => map.set(n.id, n));
+        cleanServer.forEach(n => { if (n && n.id) map.set(n.id, n); });
+        cleanLocal.forEach(n => { if (n && n.id) map.set(n.id, n); });
+        return Array.from(map.values());
+      };
+
       const mergedStudents = mergeStudents(data.students, currentLocal.students);
-      const mergedTeachers = mergeEntities(data.teachers, currentLocal.teachers);
+      const mergedTeachers = mergeTeachers(data.teachers, currentLocal.teachers);
       const mergedAttendance = mergeEntities(data.attendance, currentLocal.attendance);
       const mergedTeacherAttendance = mergeEntities(data.teacherAttendance, currentLocal.teacherAttendance);
       const mergedLeaves = mergeEntities(data.leaves, currentLocal.leaves);
@@ -596,7 +628,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const mergedTests = mergeEntities(data.tests, currentLocal.tests);
       const mergedTestResults = mergeEntities(data.testResults, currentLocal.testResults);
       const mergedExamReports = mergeEntities(data.studentExamReports, currentLocal.studentExamReports);
-      const mergedNotices = mergeEntities(data.notices, currentLocal.notices);
+      const mergedNotices = mergeNotices(data.notices, currentLocal.notices);
       const mergedAdmissions = mergeEntities(data.onlineAdmissions, currentLocal.onlineAdmissions);
       const mergedSalaryTx = mergeEntities(data.salaryTransactions, currentLocal.salaryTransactions);
       const mergedSalaryPmts = mergeEntities(data.teacherSalaryPayments, currentLocal.teacherSalaryPayments);

@@ -38,43 +38,22 @@ interface StudentMarksAndResultsSectionProps {
   teacherName?: string;
 }
 
-// Default standard subjects recommended per class level (fully customizable)
-const DEFAULT_PRIMARY_SUBJECTS: { subject: string; totalMarks: number }[] = [
-  { subject: 'English (انگریزی)', totalMarks: 100 },
-  { subject: 'Urdu (اردو)', totalMarks: 100 },
-  { subject: 'Mathematics (ریاضی)', totalMarks: 100 },
-  { subject: 'General Science (سائنس)', totalMarks: 100 },
-  { subject: 'Islamiat (اسلامیات / اخلاقیات)', totalMarks: 50 },
-  { subject: 'Nazra Quran & Tarbiyat (ناظرہ قرآن و تربیت)', totalMarks: 50 }
+// The 6 official school books taught at Bright Scholar School
+export const BRIGHT_SCHOLAR_SUBJECTS: string[] = [
+  'English',
+  'Urdu',
+  'Islamiat',
+  'Mathematics',
+  'Social Studies',
+  'Science'
 ];
 
-const DEFAULT_PLAYGROUP_SUBJECTS: { subject: string; totalMarks: number }[] = [
-  { subject: 'English Alphabets & Oral (انگریزی)', totalMarks: 50 },
-  { subject: 'Urdu Huroof & Nazm (اردو نظم)', totalMarks: 50 },
-  { subject: 'Mathematics Numbers & Counting (گنتی)', totalMarks: 50 },
-  { subject: 'General Knowledge & Tarbiyat (معلومات عامہ)', totalMarks: 50 }
-];
-
-const DEFAULT_MIDDLE_SUBJECTS: { subject: string; totalMarks: number }[] = [
-  { subject: 'English Compulsory (انگریزی)', totalMarks: 100 },
-  { subject: 'Urdu Compulsory (اردو)', totalMarks: 100 },
-  { subject: 'Mathematics (ریاضی)', totalMarks: 100 },
-  { subject: 'General Science (سائنس)', totalMarks: 100 },
-  { subject: 'Islamiat (اسلامیات)', totalMarks: 50 },
-  { subject: 'Social Studies / Pak Studies (مطالعہ پاکستان)', totalMarks: 50 },
-  { subject: 'Computer Education (کمپیوٹر)', totalMarks: 50 },
-  { subject: 'Tarjuma-tul-Quran (ترجمۃ القرآن)', totalMarks: 50 }
-];
-
-function getDefaultSubjectsForClass(className: string): { subject: string; totalMarks: number }[] {
-  const c = className.toLowerCase();
-  if (c.includes('play') || c.includes('nursery') || c.includes('prep')) {
-    return DEFAULT_PLAYGROUP_SUBJECTS;
-  }
-  if (c.includes('6') || c.includes('7') || c.includes('8') || c.includes('middle')) {
-    return DEFAULT_MIDDLE_SUBJECTS;
-  }
-  return DEFAULT_PRIMARY_SUBJECTS;
+export interface FormSubjectMarkEntry {
+  subject: string;
+  totalMarks: number | '';
+  obtainedMarks: number | '';
+  grade?: string;
+  remarks?: string;
 }
 
 export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSectionProps> = ({
@@ -121,10 +100,10 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
   const [formClass, setFormClass] = useState<ClassLevel>(availableClasses[0] || 'Class 5');
   const [formStudentId, setFormStudentId] = useState<string>('');
   const [studentSearchInput, setStudentSearchInput] = useState<string>('');
-  const [formExamTitle, setFormExamTitle] = useState<string>('First Term Examination 2026');
+  const [formExamTitle, setFormExamTitle] = useState<string>('Term Examination 2026');
   const [formExamDate, setFormExamDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [formRemarks, setFormRemarks] = useState<string>('Hardworking and morally disciplined.');
-  const [formSubjects, setFormSubjects] = useState<SubjectMarkEntry[]>([]);
+  const [formRemarks, setFormRemarks] = useState<string>('');
+  const [formSubjects, setFormSubjects] = useState<FormSubjectMarkEntry[]>([]);
   const [formIsPublished, setFormIsPublished] = useState<boolean>(true);
 
   // New custom subject inputs
@@ -164,20 +143,19 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
     setFormClass(initialClass);
     setFormStudentId(preselectedStudent ? preselectedStudent.id : (validStudents.find(s => s.className === initialClass)?.id || ''));
     setStudentSearchInput(preselectedStudent ? `${preselectedStudent.name} (Roll ${preselectedStudent.rollNo})` : '');
-    setFormExamTitle('First Term Examination 2026');
+    setFormExamTitle('Term Examination 2026');
     setFormExamDate(new Date().toISOString().split('T')[0]);
-    setFormRemarks('Demonstrated good discipline and regular studies.');
+    setFormRemarks('');
     setFormIsPublished(true);
 
-    // Populate default subjects
-    const defaults = getDefaultSubjectsForClass(initialClass);
+    // 6 official Bright Scholar School books: Total marks and obtained marks start empty until entered
     setFormSubjects(
-      defaults.map(d => ({
-        subject: d.subject,
-        totalMarks: d.totalMarks,
-        obtainedMarks: Math.round(d.totalMarks * 0.75), // sensible starter marks
-        grade: 'A',
-        remarks: 'Good'
+      BRIGHT_SCHOLAR_SUBJECTS.map(subj => ({
+        subject: subj,
+        totalMarks: '' as any,
+        obtainedMarks: '' as any,
+        grade: '',
+        remarks: ''
       }))
     );
 
@@ -192,7 +170,7 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
     setStudentSearchInput(`${report.studentName} (Roll ${report.rollNo})`);
     setFormExamTitle(report.examTitle);
     setFormExamDate(report.examDate);
-    setFormRemarks(report.generalRemarks || 'Hardworking and well behaved.');
+    setFormRemarks(report.generalRemarks || '');
     setFormIsPublished(report.isPublished);
     setFormSubjects([...report.subjects]);
     setCurrentView('entry');
@@ -205,14 +183,13 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
     setFormStudentId(firstInClass ? firstInClass.id : '');
     setStudentSearchInput(firstInClass ? `${firstInClass.name} (Roll ${firstInClass.rollNo})` : '');
 
-    // Reset default subjects for this class level
-    const defaults = getDefaultSubjectsForClass(newCls);
+    // Reset with 6 official books, empty marks until entered
     setFormSubjects(
-      defaults.map(d => ({
-        subject: d.subject,
-        totalMarks: d.totalMarks,
-        obtainedMarks: 0,
-        grade: 'F',
+      BRIGHT_SCHOLAR_SUBJECTS.map(subj => ({
+        subject: subj,
+        totalMarks: '' as any,
+        obtainedMarks: '' as any,
+        grade: '',
         remarks: ''
       }))
     );
@@ -229,15 +206,27 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
   };
 
   // Update marks for a subject
-  const updateSubjectMarks = (index: number, obtained: number, total?: number) => {
+  const updateSubjectMarks = (index: number, obtained: number | '', total?: number | '') => {
     setFormSubjects(prev => {
       const copy = [...prev];
       const sub = { ...copy[index] };
-      if (total !== undefined) sub.totalMarks = Math.max(1, total);
-      sub.obtainedMarks = Math.max(0, Math.min(sub.totalMarks, obtained));
-      const pct = Math.round((sub.obtainedMarks / sub.totalMarks) * 100);
-      sub.grade = calculateGrade(pct);
-      sub.remarks = pct >= 80 ? 'Very Good' : pct >= 50 ? 'Satisfactory' : 'Needs Practice';
+      if (total !== undefined) {
+        sub.totalMarks = total as any;
+      }
+      sub.obtainedMarks = obtained as any;
+
+      const numTotal = Number(sub.totalMarks);
+      const numObt = Number(sub.obtainedMarks);
+
+      if (sub.totalMarks !== '' && !isNaN(numTotal) && numTotal > 0 && sub.obtainedMarks !== '' && !isNaN(numObt)) {
+        const clampedObt = Math.max(0, Math.min(numTotal, numObt));
+        const pct = Math.round((clampedObt / numTotal) * 100);
+        sub.grade = calculateGrade(pct);
+        sub.remarks = pct >= 80 ? 'Very Good' : pct >= 50 ? 'Satisfactory' : 'Needs Practice';
+      } else {
+        sub.grade = '';
+        sub.remarks = '';
+      }
       copy[index] = sub;
       return copy;
     });
@@ -253,10 +242,10 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
       ...prev,
       {
         subject: cleanName,
-        totalMarks: cleanTotal,
-        obtainedMarks: Math.round(cleanTotal * 0.7),
-        grade: 'B',
-        remarks: 'Good'
+        totalMarks: cleanTotal as any,
+        obtainedMarks: '' as any,
+        grade: '',
+        remarks: ''
       }
     ]);
     setNewSubjectName('');
@@ -272,27 +261,43 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
     setFormSubjects(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Live Calculations
+  // Live Calculations (empty until entered)
+  const hasAnyTotalMarks = useMemo(() => {
+    return formSubjects.some(s => s.totalMarks !== '' && !isNaN(Number(s.totalMarks)) && Number(s.totalMarks) > 0);
+  }, [formSubjects]);
+
+  const hasAnyObtainedMarks = useMemo(() => {
+    return formSubjects.some(s => s.obtainedMarks !== '' && !isNaN(Number(s.obtainedMarks)));
+  }, [formSubjects]);
+
   const calculatedGrandTotal = useMemo(() => {
-    return formSubjects.reduce((sum, s) => sum + s.totalMarks, 0);
+    return formSubjects.reduce((sum, s) => {
+      const v = Number(s.totalMarks);
+      return sum + (isNaN(v) ? 0 : v);
+    }, 0);
   }, [formSubjects]);
 
   const calculatedTotalObtained = useMemo(() => {
-    return formSubjects.reduce((sum, s) => sum + s.obtainedMarks, 0);
+    return formSubjects.reduce((sum, s) => {
+      const v = Number(s.obtainedMarks);
+      return sum + (isNaN(v) ? 0 : v);
+    }, 0);
   }, [formSubjects]);
 
   const calculatedPercentage = useMemo(() => {
-    if (calculatedGrandTotal === 0) return 0;
+    if (calculatedGrandTotal === 0 || !hasAnyObtainedMarks) return 0;
     return Math.round((calculatedTotalObtained / calculatedGrandTotal) * 1000) / 10;
-  }, [calculatedGrandTotal, calculatedTotalObtained]);
+  }, [calculatedGrandTotal, calculatedTotalObtained, hasAnyObtainedMarks]);
 
   const calculatedGrade = useMemo(() => {
+    if (!hasAnyObtainedMarks || calculatedGrandTotal === 0) return '-';
     return calculateGrade(calculatedPercentage);
-  }, [calculatedPercentage]);
+  }, [calculatedPercentage, hasAnyObtainedMarks, calculatedGrandTotal]);
 
-  const calculatedStatus = useMemo<'Pass' | 'Fail'>(() => {
+  const calculatedStatus = useMemo<'Pass' | 'Fail' | 'Pending'>(() => {
+    if (!hasAnyObtainedMarks || calculatedGrandTotal === 0) return 'Pending';
     return calculatedPercentage >= 40 ? 'Pass' : 'Fail';
-  }, [calculatedPercentage]);
+  }, [calculatedPercentage, hasAnyObtainedMarks, calculatedGrandTotal]);
 
   // Save report
   const handleSaveReport = (publishImmediate: boolean) => {
@@ -300,10 +305,24 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
       alert('براہ کرم طالب علم کا انتخاب کریں!');
       return;
     }
-    if (formSubjects.length === 0) {
-      alert('براہ کرم کم از کم ایک مضمون (کتاب) کے نمبرات درج کریں!');
+    const hasTotal = formSubjects.some(s => Number(s.totalMarks) > 0);
+    if (!hasTotal) {
+      alert('براہ کرم تمام کتب کے کل نمبرات (Total Marks) درج کریں!');
       return;
     }
+
+    const cleanSubjects: SubjectMarkEntry[] = formSubjects.map(s => {
+      const t = Number(s.totalMarks) || 0;
+      const o = Number(s.obtainedMarks) || 0;
+      const pct = t > 0 ? Math.round((o / t) * 100) : 0;
+      return {
+        subject: s.subject,
+        totalMarks: t,
+        obtainedMarks: o,
+        grade: t > 0 && s.obtainedMarks !== '' ? calculateGrade(pct) : '-',
+        remarks: s.remarks || ''
+      };
+    });
 
     const report: StudentExamReport = {
       id: editingReportId || `exam-${Date.now()}-${selectedStudent.id}`,
@@ -315,13 +334,13 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
       className: selectedStudent.className,
       rollNo: selectedStudent.rollNo,
       admissionNo: selectedStudent.admissionNo,
-      subjects: formSubjects,
+      subjects: cleanSubjects,
       grandTotal: calculatedGrandTotal,
       totalObtained: calculatedTotalObtained,
       percentage: calculatedPercentage,
-      grade: calculatedGrade,
-      status: calculatedStatus,
-      generalRemarks: formRemarks.trim() || 'Good performance and ethical tarbiyat.',
+      grade: calculatedGrade === '-' ? 'N/A' : calculatedGrade,
+      status: calculatedStatus === 'Fail' ? 'Fail' : 'Pass',
+      generalRemarks: formRemarks.trim() || '',
       isPublished: publishImmediate,
       updatedAt: new Date().toISOString(),
       enteredByRole: role === 'admin' ? 'Admin' : 'Teacher',
@@ -581,8 +600,9 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {formSubjects.map((sub, idx) => {
-                    const pct = Math.round((sub.obtainedMarks / sub.totalMarks) * 100);
-                    const isFailing = pct < 40;
+                    const hasValidMarks = sub.totalMarks !== '' && sub.obtainedMarks !== '' && Number(sub.totalMarks) > 0;
+                    const pct = hasValidMarks ? Math.round((Number(sub.obtainedMarks) / Number(sub.totalMarks)) * 100) : null;
+                    const isFailing = pct !== null && pct < 40;
                     return (
                       <tr key={idx} className="hover:bg-slate-50 transition">
                         <td className="p-3 text-center text-slate-500 font-bold">{idx + 1}</td>
@@ -590,12 +610,15 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
                           <input
                             type="text"
                             value={sub.subject}
+                            disabled={role === 'teacher'}
                             onChange={(e) => {
                               const copy = [...formSubjects];
                               copy[idx].subject = e.target.value;
                               setFormSubjects(copy);
                             }}
-                            className="w-full px-2 py-1.5 border border-slate-300 rounded font-bold text-slate-800 text-xs"
+                            className={`w-full px-2 py-1.5 border rounded font-bold text-xs ${
+                              role === 'teacher' ? 'bg-slate-50 text-slate-700 border-slate-200' : 'border-slate-300 text-slate-800'
+                            }`}
                           />
                         </td>
                         <td className="p-3 text-center">
@@ -603,39 +626,57 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
                             type="number"
                             min={1}
                             value={sub.totalMarks}
-                            onChange={(e) => updateSubjectMarks(idx, sub.obtainedMarks, Number(e.target.value))}
-                            className="w-20 px-2 py-1.5 border border-slate-300 rounded text-center font-bold text-xs"
+                            disabled={role === 'teacher'}
+                            placeholder={role === 'admin' ? "کل نمبر" : "Admin"}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? '' : Number(e.target.value);
+                              updateSubjectMarks(idx, sub.obtainedMarks, val);
+                            }}
+                            className={`w-20 px-2 py-1.5 border rounded text-center font-bold text-xs ${
+                              role === 'teacher' ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed' : 'border-slate-300 bg-white'
+                            }`}
+                            title={role === 'teacher' ? 'کل نمبرات اسکول ایڈمن درج فرمائیں گے' : 'کل نمبر درج کریں'}
                           />
                         </td>
                         <td className="p-3 text-center">
                           <input
                             type="number"
                             min={0}
-                            max={sub.totalMarks}
+                            max={typeof sub.totalMarks === 'number' && sub.totalMarks > 0 ? sub.totalMarks : 100}
                             value={sub.obtainedMarks}
-                            onChange={(e) => updateSubjectMarks(idx, Number(e.target.value))}
+                            placeholder="نمبرات"
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? '' : Number(e.target.value);
+                              updateSubjectMarks(idx, val);
+                            }}
                             className={`w-24 px-2 py-1.5 border rounded text-center font-extrabold text-sm ${
-                              isFailing
+                              sub.obtainedMarks === ''
+                                ? 'border-slate-300 bg-white text-slate-700'
+                                : isFailing
                                 ? 'border-rose-400 bg-rose-50 text-rose-700'
                                 : 'border-emerald-400 bg-emerald-50 text-emerald-800'
                             }`}
                           />
                         </td>
                         <td className="p-3 text-center font-bold text-slate-700">
-                          {pct}%
+                          {pct !== null ? `${pct}%` : '-'}
                         </td>
                         <td className="p-3 text-center">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded text-[11px] font-extrabold ${
-                              isFailing
-                                ? 'bg-rose-100 text-rose-800'
-                                : pct >= 80
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-blue-100 text-blue-800'
-                            }`}
-                          >
-                            {sub.grade || calculateGrade(pct)}
-                          </span>
+                          {pct !== null ? (
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded text-[11px] font-extrabold ${
+                                isFailing
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : pct >= 80
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}
+                            >
+                              {sub.grade || calculateGrade(pct)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-bold">-</span>
+                          )}
                         </td>
                         <td className="p-3">
                           <input
@@ -646,7 +687,7 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
                               copy[idx].remarks = e.target.value;
                               setFormSubjects(copy);
                             }}
-                            placeholder="Optional remarks"
+                            placeholder="اختیاری رائے"
                             className="w-full px-2 py-1 border border-slate-200 rounded text-[11px]"
                           />
                         </td>
@@ -654,7 +695,8 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
                           <button
                             type="button"
                             onClick={() => handleRemoveSubject(idx)}
-                            className="text-slate-400 hover:text-rose-600 transition p-1"
+                            disabled={role === 'teacher'}
+                            className={`p-1 ${role === 'teacher' ? 'text-slate-300 cursor-not-allowed' : 'text-slate-400 hover:text-rose-600 transition'}`}
                             title="Remove subject"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -684,10 +726,12 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
                   className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border ${
                     calculatedStatus === 'Pass'
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400'
-                      : 'bg-rose-500/20 text-rose-300 border-rose-400'
+                      : calculatedStatus === 'Fail'
+                      ? 'bg-rose-500/20 text-rose-300 border-rose-400'
+                      : 'bg-slate-500/20 text-slate-300 border-slate-400'
                   }`}
                 >
-                  نتیجہ: {calculatedStatus === 'Pass' ? 'کامیاب (PASS)' : 'توجہ طلب (FAIL)'}
+                  نتیجہ: {calculatedStatus === 'Pending' ? 'نمبرات درج کریں (Pending)' : calculatedStatus === 'Pass' ? 'کامیاب (PASS)' : 'توجہ طلب (FAIL)'}
                 </span>
               </div>
             </div>
@@ -696,21 +740,21 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
               <div className="bg-white/10 p-3 rounded-xl border border-white/15">
                 <span className="text-[11px] text-slate-300 block">کل نمبر (Grand Total)</span>
                 <span className="text-2xl font-black text-white mt-1 block">
-                  {calculatedGrandTotal}
+                  {calculatedGrandTotal > 0 ? calculatedGrandTotal : '-'}
                 </span>
               </div>
 
               <div className="bg-white/10 p-3 rounded-xl border border-white/15">
                 <span className="text-[11px] text-amber-300 block">حاصل کردہ نمبرات (Obtained)</span>
                 <span className="text-2xl font-black text-amber-300 mt-1 block">
-                  {calculatedTotalObtained}
+                  {hasAnyObtainedMarks ? calculatedTotalObtained : '-'}
                 </span>
               </div>
 
               <div className="bg-white/10 p-3 rounded-xl border border-white/15">
                 <span className="text-[11px] text-emerald-300 block">مجموعی فیصد (Percentage)</span>
                 <span className="text-2xl font-black text-emerald-300 mt-1 block">
-                  {calculatedPercentage}%
+                  {hasAnyObtainedMarks && calculatedGrandTotal > 0 ? `${calculatedPercentage}%` : '-'}
                 </span>
               </div>
 
