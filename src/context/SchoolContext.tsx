@@ -245,30 +245,6 @@ function recoverAllLocalStudents(): Student[] {
 }
 
 
-// Immediate browser storage purification: purge old dummy seeds cached in previous versions
-if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
-  try {
-    const keysToRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && (
-        k.startsWith("bss_") ||
-        k.startsWith("school_") ||
-        k === "students" ||
-        k === "feeRecords"
-      )) {
-        // preserve settings, teacher login, and admin state if present
-        if (!k.includes("admin") && !k.includes("teacher") && !k.includes("settings")) {
-          keysToRemove.push(k);
-        }
-      }
-    }
-    keysToRemove.forEach(k => localStorage.removeItem(k));
-  } catch (e) {
-    console.warn("Storage purifier error:", e);
-  }
-}
-
 export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [students, setStudents] = useState<Student[]>(() => {
     const raw = loadFromStorage<Student[]>("students", []);
@@ -354,8 +330,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => saveToStorage('currentParentStudentId', currentParentStudentId), [currentParentStudentId]);
 
   // Real-Time Global Multi-Device Cloud Database Synchronization
-  const GLOBAL_CLOUD_ENDPOINT_1 = 'https://api.restful-api.dev/objects/ff808181a09d98f701a10b8b7b9a7c36';
-  const GLOBAL_CLOUD_ENDPOINT_2 = 'https://extendsclass.com/api/json-storage/bin/bbedaaf';
+  const GLOBAL_CLOUD_ENDPOINT_1 = 'https://extendsclass.com/api/json-storage/bin/bbedaaf';
+  const GLOBAL_CLOUD_ENDPOINT_2 = 'https://extendsclass.com/api/json-storage/bin/dbabccb';
   const [isCloudConnected, setIsCloudConnected] = useState<boolean>(true);
   const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
   const [lastCloudSyncTime, setLastCloudSyncTime] = useState<string | null>(null);
@@ -432,7 +408,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: 'BSS_DATA', data: payload })
+          body: JSON.stringify(payload)
         });
         if (cloudRes.ok) success = true;
       } catch (cloudErr) {
@@ -747,7 +723,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: 'BSS_DATA', data: payload })
+          body: JSON.stringify(payload)
         });
         if (cloudRes.ok) success = true;
       } catch (err) {
