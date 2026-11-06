@@ -167,7 +167,7 @@ const DUMMY_STUDENT_IDS = new Set([
 export function isDummyStudent(item: any): boolean {
   if (!item) return false;
   const id = String(item.id || item.studentId || '');
-  if (id && DUMMY_STUDENT_IDS.has(id)) return true;
+  if (id && (DUMMY_STUDENT_IDS.has(id) || id.startsWith("bss-") || id.startsWith("fee-rec-bss-") || id.startsWith("fee-bss-"))) return true;
   const name = String(item.name || item.studentName || '').toLowerCase().trim();
   const fName = String(item.fatherName || '').toLowerCase().trim();
   const cName = String(item.className || '').toLowerCase().trim();
@@ -187,7 +187,7 @@ export function isDummyStudent(item: any): boolean {
 
 function loadFromStorage<T>(key: string, defaultValue: T): T {
   try {
-    const item = localStorage.getItem(`bss_v9_${key}`);
+    const item = localStorage.getItem(`bss_v12_${key}`);
     return item ? JSON.parse(item) : defaultValue;
   } catch (e) {
     return defaultValue;
@@ -196,14 +196,15 @@ function loadFromStorage<T>(key: string, defaultValue: T): T {
 
 function saveToStorage<T>(key: string, value: T) {
   try {
-    localStorage.setItem(`bss_v9_${key}`, JSON.stringify(value));
+    localStorage.setItem(`bss_v12_${key}`, JSON.stringify(value));
   } catch (e) {
-    console.error(`Failed to save bss_v9_${key}`, e);
+    console.error(`Failed to save bss_v12_${key}`, e);
   }
 }
 
 // Deep recovery function to restore real students previously added in any storage version
 function recoverAllLocalStudents(): Student[] {
+  return []; // Clean slate requested by administrator
   const recoveredMap = new Map<string, Student>();
   const priorityKeys = [
     'bss_v8_students',
@@ -243,23 +244,37 @@ function recoverAllLocalStudents(): Student[] {
   return Array.from(recoveredMap.values());
 }
 
+
+// Immediate browser storage purification: purge old dummy seeds cached in previous versions
+if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (
+        k.startsWith("bss_") ||
+        k.startsWith("school_") ||
+        k === "students" ||
+        k === "feeRecords"
+      )) {
+        // preserve settings, teacher login, and admin state if present
+        if (!k.includes("admin") && !k.includes("teacher") && !k.includes("settings")) {
+          keysToRemove.push(k);
+        }
+      }
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k));
+  } catch (e) {
+    console.warn("Storage purifier error:", e);
+  }
+}
+
 export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [students, setStudents] = useState<Student[]>(() => {
-    const raw = loadFromStorage<Student[]>('students', []);
+    const raw = loadFromStorage<Student[]>("students", []);
     const cleanRaw = Array.isArray(raw) ? raw.filter(s => !isDummyStudent(s)) : [];
-
-    // Prioritize genuine base 50 school students, preserving any newly added or updated students
-    const map = new Map<string, Student>();
-    initialStudents.filter(s => !isDummyStudent(s)).forEach(s => map.set(s.id, s));
-    cleanRaw.forEach(s => {
-      if (s && s.id && !isDummyStudent(s)) {
-        map.set(s.id, s);
-      }
-    });
-
-    const list = Array.from(map.values());
-    saveToStorage('students', list);
-    return list;
+    saveToStorage("students", cleanRaw);
+    return cleanRaw;
   });
   const [teachers, setTeachers] = useState<Teacher[]>(() => {
     const raw = loadFromStorage<Teacher[]>('teachers', initialTeachers);
@@ -273,21 +288,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [teacherAttendance, setTeacherAttendance] = useState<TeacherAttendance[]>(() => loadFromStorage('teacherAttendance', initialTeacherAttendance));
   const [leaves, setLeaves] = useState<LeaveRequest[]>(() => loadFromStorage('leaves', initialLeaves));
   const [feeRecords, setFeeRecords] = useState<FeeRecord[]>(() => {
-    const raw = loadFromStorage<FeeRecord[]>('feeRecords', []);
+    const raw = loadFromStorage<FeeRecord[]>("feeRecords", []);
     const clean = Array.isArray(raw) ? raw.filter(f => !isDummyStudent(f)) : [];
-
-    // Seed 50 fee vouchers, overlaying stored fee records (which might contain payments)
-    const map = new Map<string, FeeRecord>();
-    initialFeeRecords.filter(f => !isDummyStudent(f)).forEach(f => map.set(f.id, f));
-    clean.forEach(f => {
-      if (f && f.id && !isDummyStudent(f)) {
-        map.set(f.id, f);
-      }
-    });
-
-    const list = Array.from(map.values());
-    saveToStorage('feeRecords', list);
-    return list;
+    saveToStorage("feeRecords", clean);
+    return clean;
   });
   const [dailyReports, setDailyReports] = useState<DailyReport[]>(() => {
     const raw = loadFromStorage<DailyReport[]>('dailyReports', initialDailyReports);
@@ -568,7 +572,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         const map = new Map<string, Student>();
         // Base 50 students first
-        initialStudents.filter(s => !isDummyStudent(s)).forEach(s => map.set(s.id, s));
+        // No initial students seed injection
         // Server students
         cleanServer.forEach(st => {
           if (st && st.id && !isDummyStudent(st)) map.set(st.id, st);
@@ -587,7 +591,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         const map = new Map<string, FeeRecord>();
         // Initial fee vouchers for all 50 students
-        initialFeeRecords.filter(f => !isDummyStudent(f)).forEach(f => map.set(f.id, f));
+        // No initial fee seed injection
         cleanServer.forEach(f => {
           if (f && f.id && !isDummyStudent(f)) map.set(f.id, f);
         });
