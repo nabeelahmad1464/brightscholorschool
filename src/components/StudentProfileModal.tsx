@@ -80,9 +80,9 @@ Admission No: ${student.admissionNo}
 
 *ATTENDANCE SUMMARY:*
 Working Days: ${report.totalWorkingDays}
-Present: ${report.presentDays} | Absent: ${report.absentDays}
+Present: ${report.presentDays} | Absent: ${report.absentDays} | Leave: ${report.leaveDays}
 Attendance: ${report.attendancePercentage}%
-Absence Fine (${report.absentDays} days x Rs. 30): Rs. ${report.totalFineAmount}
+Absence Fine (${report.absentDays} days x Rs. ${report.finePerAbsentDay}): Rs. ${report.totalFineAmount}
 
 *FEES SUMMARY:*
 Monthly Tuition Fee: Rs. ${report.monthlyFee.toLocaleString()}
@@ -226,7 +226,7 @@ Chak No. 47 GB, Samundri | Ph: 0302-5053993`;
                 Rs. {report.totalFineAmount}
               </span>
               <span className="text-[11px] text-red-600">
-                {report.absentDays} Absents (Rs. 30/day)
+                {report.absentDays} Absents (Rs. {report.finePerAbsentDay}/day){report.leaveDays > 0 ? ` • ${report.leaveDays} Leaves` : ''}
               </span>
             </div>
 
@@ -424,7 +424,7 @@ Chak No. 47 GB, Samundri | Ph: 0302-5053993`;
                       <th className="p-3">Month</th>
                       <th className="p-3">Tuition</th>
                       <th className="p-3">Absent Days</th>
-                      <th className="p-3">Fine (Rs.30/day)</th>
+                      <th className="p-3">Fine (Rs.{report.finePerAbsentDay}/day)</th>
                       <th className="p-3">Total Payable</th>
                       <th className="p-3">Paid</th>
                       <th className="p-3">Balance</th>

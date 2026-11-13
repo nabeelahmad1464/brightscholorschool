@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Printer, MessageCircle, CheckCircle, Clock, AlertCircle, Camera, Edit3, Save, RotateCcw } from 'lucide-react';
 import { FeeRecord, Student } from '../types';
 import { useSchool } from '../context/SchoolContext';
@@ -11,21 +11,32 @@ interface FeeReceiptModalProps {
 }
 
 export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onClose, initialEditMode }) => {
-  const { settings, openWhatsApp, students, updateFeeRecord, updateStudent } = useSchool();
+  const { settings, openWhatsApp, students, updateFeeRecord, updateStudent, getStudentFullReport } = useSchool();
+
+  const [isEditingCustomFee, setIsEditingCustomFee] = useState(initialEditMode || false);
+  const [customTuitionInput, setCustomTuitionInput] = useState<number>(feeRecord?.tuitionFee || 0);
+  const [customFineInput, setCustomFineInput] = useState<number>(feeRecord?.fineAmount || 0);
+  const [customPaidInput, setCustomPaidInput] = useState<number>(feeRecord?.paidAmount || 0);
+  const [manualFineFlag, setManualFineFlag] = useState<boolean>(Boolean(feeRecord?.manualFineOverride));
+  const [isDownloadingImage, setIsDownloadingImage] = useState(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState(false);
+
+  useEffect(() => {
+    if (feeRecord) {
+      setCustomTuitionInput(feeRecord.tuitionFee);
+      setCustomFineInput(feeRecord.fineAmount);
+      setCustomPaidInput(feeRecord.paidAmount);
+      setManualFineFlag(Boolean(feeRecord.manualFineOverride));
+    }
+    setIsEditingCustomFee(initialEditMode || false);
+  }, [feeRecord, initialEditMode]);
 
   if (!feeRecord) return null;
 
   const student = students.find(s => s.id === feeRecord.studentId);
   const contactNo = student?.whatsappNo || student?.contactNo || '';
   const finePerDay = settings.finePerAbsentDay || 50;
-
-  // Custom Fee Editing State (علیحدہ سے فیس درج کریں)
-  const [isEditingCustomFee, setIsEditingCustomFee] = useState(initialEditMode || false);
-  const [customTuitionInput, setCustomTuitionInput] = useState<number>(feeRecord.tuitionFee);
-  const [customFineInput, setCustomFineInput] = useState<number>(feeRecord.fineAmount);
-  const [customPaidInput, setCustomPaidInput] = useState<number>(feeRecord.paidAmount);
-  const [isDownloadingImage, setIsDownloadingImage] = useState(false);
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState(false);
+  const studentReport = getStudentFullReport(feeRecord.studentId);
 
   const handleSaveCustomFee = () => {
     const tuition = Math.max(0, Number(customTuitionInput) || 0);
@@ -39,6 +50,7 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
       ...feeRecord,
       tuitionFee: tuition,
       fineAmount: fine,
+      manualFineOverride: manualFineFlag,
       totalPayable: total,
       paidAmount: paid,
       balanceRemaining: balance,
@@ -47,7 +59,6 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
 
     updateFeeRecord(updated);
 
-    // Also update student's profile monthly fee so subsequent months/records reflect the adjustment
     if (student && student.monthlyFee !== tuition) {
       updateStudent({
         ...student,
@@ -232,14 +243,32 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-700 mb-1">
-                  غیر حاضری جرمانہ (Rs.)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[10px] font-bold text-slate-700">
+                    غیر حاضری جرمانہ (Rs.)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const autoDays = studentReport ? studentReport.absentDays : feeRecord.absentDays;
+                      setCustomFineInput(autoDays * finePerDay);
+                      setManualFineFlag(false);
+                    }}
+                    className="text-[10px] bg-white hover:bg-slate-100 text-[#0D285F] font-bold px-1.5 py-0.5 rounded border border-slate-300 flex items-center gap-0.5"
+                    title="حاضری ریکارڈ کے مطابق خودکار جرمانہ"
+                  >
+                    <RotateCcw className="w-2.5 h-2.5" />
+                    <span>آٹو فائن</span>
+                  </button>
+                </div>
                 <input
                   type="number"
                   min={0}
                   value={customFineInput}
-                  onChange={(e) => setCustomFineInput(Number(e.target.value))}
+                  onChange={(e) => {
+                    setCustomFineInput(Number(e.target.value));
+                    setManualFineFlag(true);
+                  }}
                   className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-bold text-red-700 outline-none focus:ring-2 focus:ring-[#0D285F]"
                 />
               </div>
@@ -386,6 +415,7 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
                   </div>
                   <div className="text-[10px] text-red-700">
                     {feeRecord.absentDays} دن غیر حاضر × Rs. {finePerDay} فی دن
+                    {(feeRecord.leaveDays || 0) > 0 ? ` (${feeRecord.leaveDays} منظور شدہ چھٹی - کوئی جرمانہ نہیں)` : ''}
                   </div>
                 </td>
                 <td className="p-2.5 text-right font-bold text-red-700">
@@ -422,7 +452,7 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
           {/* Notice & Signatures */}
           <div className="pt-4 border-t border-slate-200 text-[11px] text-slate-600 space-y-2">
             <p className="italic text-center text-slate-500">
-              * فیس ہر ماہ کی 10 تاریخ تک جمع کروانا لازمی ہے۔ غیر حاضری پر بغیر چھٹی کے Rs. 50 یومیہ جرمانہ لاگو ہوگا۔
+              * فیس ہر ماہ کی 10 تاریخ تک جمع کروانا لازمی ہے۔ غیر حاضری پر بغیر چھٹی کے Rs. {finePerDay} یومیہ جرمانہ لاگو ہوگا۔
             </p>
             <div className="flex justify-between items-end pt-6">
               <div className="text-center">

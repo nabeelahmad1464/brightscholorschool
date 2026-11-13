@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Search, User, Filter, Award, DollarSign, Calendar, ArrowRight } from 'lucide-react';
 import { useSchool, isDummyStudent } from '../context/SchoolContext';
 import { SCHOOL_CLASSES, Student } from '../types';
+import { normalizeDigits } from '../utils/schoolSync';
 
 interface StudentSearchPageProps {
   onSelectStudent: (student: Student) => void;
 }
 
 export const StudentSearchPage: React.FC<StudentSearchPageProps> = ({ onSelectStudent }) => {
-  const { students, getStudentFullReport, syncNowWithCloud } = useSchool();
+  const { students, settings, getStudentFullReport, syncNowWithCloud } = useSchool();
   const [query, setQuery] = useState('');
   const [selectedClass, setSelectedClass] = useState<string>('All');
 
@@ -19,18 +20,18 @@ export const StudentSearchPage: React.FC<StudentSearchPageProps> = ({ onSelectSt
   const filtered = students.filter(s => {
     if (isDummyStudent(s)) return false;
     const matchClass = selectedClass === 'All' || s.className === selectedClass;
-    const q = query.trim().toLowerCase();
+    const q = normalizeDigits(query).trim().toLowerCase();
     if (!q) return matchClass;
 
     const cleanNum = q.replace(/^0+/, '');
-    const rollClean = s.rollNo.trim().toLowerCase();
+    const rollClean = normalizeDigits(s.rollNo).trim().toLowerCase();
     const rollNum = rollClean.replace(/^0+/, '');
     const matchRoll = rollClean === q || (cleanNum !== '' && rollNum === cleanNum);
     const matchQuery =
       s.name.toLowerCase().includes(q) ||
       s.fatherName.toLowerCase().includes(q) ||
       matchRoll ||
-      s.admissionNo.toLowerCase().includes(q);
+      normalizeDigits(s.admissionNo).toLowerCase().includes(q);
     return matchClass && matchQuery;
   });
 
@@ -41,7 +42,7 @@ export const StudentSearchPage: React.FC<StudentSearchPageProps> = ({ onSelectSt
           Student Search & 360° Academic Profile
         </h2>
         <p className="text-xs sm:text-sm text-slate-500 mb-6">
-          Look up any enrolled student to review live attendance statistics, absence fine ledger (Rs. 50/day), fee clearance status, exam marks, and daily tarbiyat records.
+          Look up any enrolled student to review live attendance statistics, absence fine ledger (Rs. {settings.finePerAbsentDay}/day), fee clearance status, exam marks, and daily tarbiyat records.
         </p>
 
         {/* Filters */}

@@ -410,7 +410,7 @@ export const WebsiteHome: React.FC<WebsiteHomeProps> = ({
               </div>
               <div className="space-y-1">
                 <h4 className="font-extrabold text-base text-red-900">
-                  School Punctuality & Absence Fine Regulation (Rs. 30 per day)
+                  School Punctuality & Absence Fine Regulation (Rs. {settings.finePerAbsentDay} per day)
                 </h4>
                 <p className="text-xs sm:text-sm text-red-800 leading-relaxed">
                   Har unapproved chuti (unauthorized absence) ka fine <strong>Rs. {settings.finePerAbsentDay} per day</strong> hai. Yeh fine bachon ki pabandi, waqt ki qadar, aur mustaqil mizaji qaim rakhne ke liye nafiz kia gaya hai.

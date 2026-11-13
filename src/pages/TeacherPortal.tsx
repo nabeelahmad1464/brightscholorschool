@@ -21,6 +21,7 @@ import {
 import { useSchool } from '../context/SchoolContext';
 import { Student, ClassLevel, SCHOOL_CLASSES, SCHOOL_SUBJECTS } from '../types';
 import { StudentMarksAndResultsSection } from '../components/StudentMarksAndResultsSection';
+import { normalizeDigits } from '../utils/schoolSync';
 
 interface TeacherPortalProps {
   onSelectStudent: (student: Student) => void;
@@ -59,8 +60,13 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
 
   // Auto-sync freshest cloud data when teacher opens the portal
   useEffect(() => {
-    syncNowWithCloud();
+    syncNowWithCloud().catch(() => {});
   }, []);
+
+  // Reset temporary attendance edits whenever selectedClass or attDate changes
+  useEffect(() => {
+    setStatusMap({});
+  }, [selectedClass, attDate]);
 
   // Auto-switch to first class with students if selected class is empty
   useEffect(() => {
@@ -107,24 +113,27 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
 
   const filteredClassStudents = classStudents.filter(s => {
     if (!studentFilterQuery.trim()) return true;
-    const q = studentFilterQuery.toLowerCase().trim();
+    const q = normalizeDigits(studentFilterQuery).toLowerCase().trim();
     const cleanNum = q.replace(/^0+/, '');
-    const rollClean = s.rollNo.trim().toLowerCase();
+    const rollClean = normalizeDigits(s.rollNo).trim().toLowerCase();
     const rollNum = rollClean.replace(/^0+/, '');
     return (
       s.name.toLowerCase().includes(q) ||
       s.fatherName.toLowerCase().includes(q) ||
       rollClean === q ||
       (cleanNum !== '' && rollNum === cleanNum) ||
-      s.admissionNo.toLowerCase().includes(q) ||
+      normalizeDigits(s.admissionNo).toLowerCase().includes(q) ||
       s.className.toLowerCase().includes(q)
     );
   });
 
   const handleSaveAttendance = () => {
+    const existingByStudent = new Map(
+      attendance.filter(a => a.date === attDate).map(a => [a.studentId, a.status])
+    );
     const list = classStudents.map(s => ({
       studentId: s.id,
-      status: statusMap[s.id] || 'Present'
+      status: statusMap[s.id] || existingByStudent.get(s.id) || 'Present'
     }));
     markClassAttendance(selectedClass, attDate, list);
     alert(`حاضری برائے ${selectedClass} (${classStudents.length} طلباء) کامیابی سے کلاؤڈ پر محفوظ ہو گئی!`);

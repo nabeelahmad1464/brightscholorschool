@@ -36,6 +36,15 @@ import {
   initialSalaryTransactions,
   initialStudentExamReports
 } from '../data/initialData';
+import {
+  extractCleanJson,
+  normalizeDigits,
+  getCurrentMonthLabel,
+  monthLabelToYearMonth,
+  isDateCoveredByApprovedLeave,
+  deduplicateAttendance,
+  reconcileFeesWithAttendance
+} from '../utils/schoolSync';
 
 export interface StudentFullReport {
   student: Student;
@@ -119,6 +128,7 @@ interface SchoolContextType {
   deleteFeeRecord: (feeRecordId: string) => void;
   recordFeePayment: (feeRecordId: string, amount: number, receiptNo: string) => void;
   generateMonthlyFeeVouchers: (monthName: string) => number;
+  recalculateAllFeeFines: () => void;
 
   addTest: (test: Omit<Test, 'id'>) => Test;
   addTestResult: (result: Omit<TestResult, 'id'>) => void;
@@ -148,7 +158,7 @@ interface SchoolContextType {
   isCloudConnected: boolean;
   isCloudSyncing: boolean;
   lastCloudSyncTime: string | null;
-  syncNowWithCloud: () => Promise<void>;
+  syncNowWithCloud: () => Promise<Student[]>;
   forceSyncAllToCloud: () => Promise<{ success: boolean; studentCount: number; message: string }>;
 
   // Reporting
@@ -290,14 +300,21 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   });
   const [onlineAdmissions, setOnlineAdmissions] = useState<OnlineAdmission[]>(() => loadFromStorage('admissions', initialAdmissions));
   const [settings, setSettings] = useState<SystemSettings>(() => {
-    const raw = loadFromStorage('settings', initialSettings);
-    return { ...raw, adminPassword: 'Ahmad@1' };
+    const raw = loadFromStorage<Partial<SystemSettings>>('settings', initialSettings);
+    return {
+      ...initialSettings,
+      ...raw,
+      adminPassword: raw?.adminPassword || initialSettings.adminPassword || 'Ahmad@1'
+    };
   });
   const [salaryTransactions, setSalaryTransactions] = useState<SalaryTransaction[]>(() =>
     loadFromStorage('salaryTransactions', initialSalaryTransactions)
   );
   const [teacherSalaryPayments, setTeacherSalaryPayments] = useState<TeacherSalaryPayment[]>(() =>
     loadFromStorage('teacherSalaryPayments', [])
+  );
+  const [deletedIds, setDeletedIds] = useState<string[]>(() =>
+    loadFromStorage<string[]>('deletedIds', [])
   );
 
   // Portal & Auth State
@@ -325,6 +342,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => saveToStorage('settings', settings), [settings]);
   useEffect(() => saveToStorage('salaryTransactions', salaryTransactions), [salaryTransactions]);
   useEffect(() => saveToStorage('teacherSalaryPayments', teacherSalaryPayments), [teacherSalaryPayments]);
+  useEffect(() => saveToStorage('deletedIds', deletedIds), [deletedIds]);
   useEffect(() => saveToStorage('isAdminLoggedIn', isAdminLoggedIn), [isAdminLoggedIn]);
   useEffect(() => saveToStorage('currentTeacherId', currentTeacherId), [currentTeacherId]);
   useEffect(() => saveToStorage('currentParentStudentId', currentParentStudentId), [currentParentStudentId]);
@@ -339,6 +357,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const isApplyingRemoteUpdate = React.useRef(false);
   const lastKnownServerUpdatedAt = React.useRef<string | null>(null);
   const hasInitializedFromCloud = React.useRef(false);
+  const hasPendingLocalMutation = React.useRef(false);
 
   // Synchronous State Reference to avoid stale closure issues
   const stateRef = React.useRef({
@@ -356,7 +375,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     onlineAdmissions,
     settings,
     salaryTransactions,
-    teacherSalaryPayments
+    teacherSalaryPayments,
+    deletedIds
   });
 
   // Always keep stateRef strictly in sync with latest render state
@@ -375,57 +395,78 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     onlineAdmissions,
     settings,
     salaryTransactions,
-    teacherSalaryPayments
+    teacherSalaryPayments,
+    deletedIds
+  };
+
+  const recordDeletedIds = (ids: string[]): string[] => {
+    const merged = Array.from(new Set([...stateRef.current.deletedIds, ...ids])).slice(-500);
+    setDeletedIds(merged);
+    saveToStorage('deletedIds', merged);
+    return merged;
   };
 
   // Push current data to Global Cloud & Local Backup
-  const pushCurrentDataToCloud = async (override?: Partial<typeof stateRef.current>): Promise<boolean> => {
+  const pushCurrentDataToCloud = async (
+    override?: Partial<typeof stateRef.current> & { forceReset?: boolean }
+  ): Promise<boolean> => {
     try {
-      setIsCloudSyncing(true);
+      const isForceReset = override?.forceReset === true;
+      const cleanOverride = { ...(override || {}) };
+      delete cleanOverride.forceReset;
+
       const newTimestamp = new Date().toISOString();
-      const payload = {
+      const cloudPayload = {
         ...stateRef.current,
-        ...(override || {}),
+        ...cleanOverride,
         updatedAt: newTimestamp
       };
 
+      // Guard against uninitialized empty clients overwriting cloud data
+      if (!isForceReset && cloudPayload.students.length === 0 && !hasPendingLocalMutation.current) {
+        return false;
+      }
+
+      setIsCloudSyncing(true);
       let success = false;
 
-      // 1. Primary: Server API (/api/school-data) - same origin, works reliably from all mobile devices
+      // 1. Primary: Server API (/api/school-data)
       try {
+        const serverBody = isForceReset ? { ...cloudPayload, forceReset: true } : cloudPayload;
         const localRes = await fetch('/api/school-data', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(serverBody)
         });
         if (localRes.ok) success = true;
       } catch (localErr) {
         console.warn('Server API sync error:', localErr);
       }
 
-      // 2. Secondary: Global Cloud Bin (api.restful-api.dev - 0ms cache, instant cloud propagation)
+      // 2. Secondary: Global Cloud Bin 1
       try {
         const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(cloudPayload)
         });
         if (cloudRes.ok) success = true;
       } catch (cloudErr) {
         console.warn('Cloud API 1 sync error:', cloudErr);
       }
 
-      // 3. Tertiary backup: Global Cloud Bin (extendsclass.com)
+      // 3. Tertiary backup: Global Cloud Bin 2
       try {
         const extRes = await fetch(GLOBAL_CLOUD_ENDPOINT_2, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(cloudPayload)
         });
         if (extRes.ok) success = true;
       } catch (extErr) {}
 
       if (success) {
+        hasPendingLocalMutation.current = false;
         setIsCloudConnected(true);
         lastKnownServerUpdatedAt.current = newTimestamp;
         setLastCloudSyncTime(new Date().toLocaleTimeString('ur-PK'));
@@ -443,180 +484,164 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  // Pull data from Global Cloud Server with Two-Way Resilient Merge
-  const pullFromCloudDatabase = async () => {
+  // Pull data from Global Cloud Server with HTML-safe JSON extraction and tombstone-aware merge
+  const pullFromCloudDatabase = async (): Promise<Student[]> => {
     try {
-      let data: any = null;
       const candidates: any[] = [];
       const cacheBust = `t=${Date.now()}`;
 
-      // 1. Check local container API /api/school-data
-      try {
-        const localRes = await fetch(`/api/school-data?${cacheBust}`, {
-          headers: { 'Cache-Control': 'no-cache, no-store' }
+      const fetchCandidate = async (url: string) => {
+        const res = await fetch(url, {
+          headers: { Accept: 'application/json', 'Cache-Control': 'no-cache, no-store' }
         });
-        if (localRes.ok) {
-          const parsed = await localRes.json();
-          const d = parsed?.data || parsed;
-          if (d && Array.isArray(d.students)) {
-            candidates.push(d);
-          }
+        if (!res.ok) return null;
+        const rawText = await res.text();
+        const parsed = extractCleanJson<any>(rawText);
+        const d = parsed?.data || parsed;
+        if (d && Array.isArray(d.students)) {
+          return d;
         }
-      } catch (localErr) {}
+        return null;
+      };
 
-      // 2. Check Global Public Cloud API (api.restful-api.dev)
-      try {
-        const cloudRes = await fetch(`${GLOBAL_CLOUD_ENDPOINT_1}?${cacheBust}`, {
-          headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache, no-store' }
-        });
-        if (cloudRes.ok) {
-          const parsed = await cloudRes.json();
-          const d = parsed?.data || parsed;
-          if (d && Array.isArray(d.students)) {
-            candidates.push(d);
-          }
-        }
-      } catch (cloudErr) {}
+      const results = await Promise.allSettled([
+        fetchCandidate(`/api/school-data?${cacheBust}`),
+        fetchCandidate(`${GLOBAL_CLOUD_ENDPOINT_1}?${cacheBust}`),
+        fetchCandidate(`${GLOBAL_CLOUD_ENDPOINT_2}?${cacheBust}`)
+      ]);
 
-      // 3. Check Global Public Cloud Bin (extendsclass.com)
-      try {
-        const extRes = await fetch(`${GLOBAL_CLOUD_ENDPOINT_2}?${cacheBust}`, {
-          headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache, no-store' }
-        });
-        if (extRes.ok) {
-          const parsed = await extRes.json();
-          const d = parsed?.data || parsed;
-          if (d && Array.isArray(d.students)) {
-            candidates.push(d);
-          }
+      results.forEach(r => {
+        if (r.status === 'fulfilled' && r.value) {
+          candidates.push(r.value);
         }
-      } catch (extErr) {}
+      });
 
       if (candidates.length === 0) {
         setIsCloudConnected(false);
-        return;
+        return stateRef.current.students.filter(s => !isDummyStudent(s));
       }
 
       setIsCloudConnected(true);
 
-      // Sort candidates by updatedAt descending (freshest cloud state wins)
+      // Sort by updatedAt descending, preferring non-empty datasets on tie
       candidates.sort((a, b) => {
         const timeA = new Date(a.updatedAt || 0).getTime();
         const timeB = new Date(b.updatedAt || 0).getTime();
-        return timeB - timeA;
+        if (timeB !== timeA) return timeB - timeA;
+        return (b.students?.length || 0) - (a.students?.length || 0);
       });
 
       const best = { ...candidates[0] };
-
-      // Strictly filter out any dummy or template students from remote candidates
       best.students = Array.isArray(best.students) ? best.students.filter((s: any) => !isDummyStudent(s)) : [];
-      data = best;
+      const data = best;
 
-      setIsCloudConnected(true);
-
-      // Check if server data is older than or equal to local data
       const remoteTime = new Date(data.updatedAt || 0).getTime();
       const localTime = new Date(lastKnownServerUpdatedAt.current || 0).getTime();
       if (remoteTime <= localTime && hasInitializedFromCloud.current) {
-        return;
+        return stateRef.current.students.filter(s => !isDummyStudent(s));
       }
 
       const currentLocal = stateRef.current;
+      const mergedDeletedIds = Array.from(
+        new Set<string>([
+          ...(Array.isArray(data.deletedIds) ? data.deletedIds : []),
+          ...(Array.isArray(currentLocal.deletedIds) ? currentLocal.deletedIds : [])
+        ])
+      ).slice(-500);
+      const deletedSet = new Set(mergedDeletedIds);
 
-      // Two-Way Merge: Never drop local additions that aren't on server yet, and ALWAYS strip any dummy students!
-      const mergeEntities = <T extends { id: string }>(serverItems?: T[], localItems?: T[]): T[] => {
-        const cleanServer = Array.isArray(serverItems) ? serverItems.filter(item => !isDummyStudent(item)) : [];
-        const cleanLocal = Array.isArray(localItems) ? localItems.filter(item => !isDummyStudent(item)) : [];
-
-        if (cleanServer.length === 0) return cleanLocal;
-        if (cleanLocal.length === 0) return cleanServer;
+      const mergeEntities = <T extends { id: string }>(
+        serverItems?: T[],
+        localItems?: T[],
+        filterFn?: (item: T) => boolean
+      ): T[] => {
+        const cleanServer = Array.isArray(serverItems)
+          ? serverItems.filter(item => item && item.id && !deletedSet.has(item.id) && !isDummyStudent(item) && (!filterFn || filterFn(item)))
+          : [];
+        const cleanLocal = Array.isArray(localItems)
+          ? localItems.filter(item => item && item.id && !deletedSet.has(item.id) && !isDummyStudent(item) && (!filterFn || filterFn(item)))
+          : [];
 
         const map = new Map<string, T>();
         cleanServer.forEach(item => map.set(item.id, item));
+        // Keep local-only items when there is a pending local mutation or server didn't have them yet
         cleanLocal.forEach(item => {
           if (!map.has(item.id)) {
+            map.set(item.id, item);
+          } else if (hasPendingLocalMutation.current) {
             map.set(item.id, item);
           }
         });
         return Array.from(map.values());
       };
 
-      // Resilient Student Merge: Preserves all 50 enrolled school students and user additions
-      const mergeStudents = (serverStudents?: Student[], localStudents?: Student[]): Student[] => {
-        const cleanServer = Array.isArray(serverStudents) ? serverStudents.filter(s => !isDummyStudent(s)) : [];
-        const cleanLocal = Array.isArray(localStudents) ? localStudents.filter(s => !isDummyStudent(s)) : [];
-
-        const map = new Map<string, Student>();
-        // Base 50 students first
-        // No initial students seed injection
-        // Server students
-        cleanServer.forEach(st => {
-          if (st && st.id && !isDummyStudent(st)) map.set(st.id, st);
-        });
-        // Local students
-        cleanLocal.forEach(st => {
-          if (st && st.id && !isDummyStudent(st)) map.set(st.id, st);
-        });
-
-        return Array.from(map.values());
-      };
-
-      const mergeFees = (serverFees?: FeeRecord[], localFees?: FeeRecord[]): FeeRecord[] => {
-        const cleanServer = Array.isArray(serverFees) ? serverFees.filter(f => !isDummyStudent(f)) : [];
-        const cleanLocal = Array.isArray(localFees) ? localFees.filter(f => !isDummyStudent(f)) : [];
-
-        const map = new Map<string, FeeRecord>();
-        // Initial fee vouchers for all 50 students
-        // No initial fee seed injection
-        cleanServer.forEach(f => {
-          if (f && f.id && !isDummyStudent(f)) map.set(f.id, f);
-        });
-        cleanLocal.forEach(f => {
-          if (f && f.id && !isDummyStudent(f)) map.set(f.id, f);
-        });
-
-        return Array.from(map.values());
-      };
-
       const mergeTeachers = (serverTeachers?: Teacher[], localTeachers?: Teacher[]): Teacher[] => {
-        const cleanServer = Array.isArray(serverTeachers) ? serverTeachers : [];
-        const cleanLocal = Array.isArray(localTeachers) ? localTeachers : [];
+        const cleanServer = Array.isArray(serverTeachers) ? serverTeachers.filter(t => t && t.id && !deletedSet.has(t.id)) : [];
+        const cleanLocal = Array.isArray(localTeachers) ? localTeachers.filter(t => t && t.id && !deletedSet.has(t.id)) : [];
         const map = new Map<string, Teacher>();
-        initialTeachers.forEach(t => map.set(t.id, t));
-        cleanServer.forEach(t => { if (t && t.id) map.set(t.id, t); });
-        cleanLocal.forEach(t => { if (t && t.id) map.set(t.id, t); });
+        if (cleanServer.length === 0 && cleanLocal.length === 0) {
+          initialTeachers.forEach(t => { if (!deletedSet.has(t.id)) map.set(t.id, t); });
+        }
+        cleanServer.forEach(t => map.set(t.id, t));
+        cleanLocal.forEach(t => {
+          if (!map.has(t.id) || hasPendingLocalMutation.current) map.set(t.id, t);
+        });
         return Array.from(map.values());
       };
 
       const mergeNotices = (serverNotices?: Notice[], localNotices?: Notice[]): Notice[] => {
-        const cleanServer = Array.isArray(serverNotices) ? serverNotices : [];
-        const cleanLocal = Array.isArray(localNotices) ? localNotices : [];
+        const cleanServer = Array.isArray(serverNotices) ? serverNotices.filter(n => n && n.id && !deletedSet.has(n.id)) : [];
+        const cleanLocal = Array.isArray(localNotices) ? localNotices.filter(n => n && n.id && !deletedSet.has(n.id)) : [];
         const map = new Map<string, Notice>();
-        initialNotices.forEach(n => map.set(n.id, n));
-        cleanServer.forEach(n => { if (n && n.id) map.set(n.id, n); });
-        cleanLocal.forEach(n => { if (n && n.id) map.set(n.id, n); });
+        if (cleanServer.length === 0 && cleanLocal.length === 0) {
+          initialNotices.forEach(n => { if (!deletedSet.has(n.id)) map.set(n.id, n); });
+        }
+        cleanServer.forEach(n => map.set(n.id, n));
+        cleanLocal.forEach(n => {
+          if (!map.has(n.id) || hasPendingLocalMutation.current) map.set(n.id, n);
+        });
         return Array.from(map.values());
       };
 
-      const mergedStudents = mergeStudents(data.students, currentLocal.students);
+      const mergedStudents = mergeEntities<Student>(data.students, currentLocal.students);
       const mergedTeachers = mergeTeachers(data.teachers, currentLocal.teachers);
-      const mergedAttendance = mergeEntities(data.attendance, currentLocal.attendance);
-      const mergedTeacherAttendance = mergeEntities(data.teacherAttendance, currentLocal.teacherAttendance);
-      const mergedLeaves = mergeEntities(data.leaves, currentLocal.leaves);
-      const mergedFees = mergeFees(data.feeRecords, currentLocal.feeRecords);
-      const mergedReports = mergeEntities(data.dailyReports, currentLocal.dailyReports);
-      const mergedTests = mergeEntities(data.tests, currentLocal.tests);
-      const mergedTestResults = mergeEntities(data.testResults, currentLocal.testResults);
-      const mergedExamReports = mergeEntities(data.studentExamReports, currentLocal.studentExamReports);
+      const mergedAttendance = deduplicateAttendance(mergeEntities<StudentAttendance>(data.attendance, currentLocal.attendance));
+      const mergedTeacherAttendance = mergeEntities<TeacherAttendance>(data.teacherAttendance, currentLocal.teacherAttendance);
+      const mergedLeaves = mergeEntities<LeaveRequest>(data.leaves, currentLocal.leaves);
+      const rawMergedFees = mergeEntities<FeeRecord>(data.feeRecords, currentLocal.feeRecords);
+      const mergedReports = mergeEntities<DailyReport>(data.dailyReports, currentLocal.dailyReports);
+      const mergedTests = mergeEntities<Test>(data.tests, currentLocal.tests);
+      const mergedTestResults = mergeEntities<TestResult>(data.testResults, currentLocal.testResults);
+      const mergedExamReports = mergeEntities<StudentExamReport>(data.studentExamReports, currentLocal.studentExamReports);
       const mergedNotices = mergeNotices(data.notices, currentLocal.notices);
-      const mergedAdmissions = mergeEntities(data.onlineAdmissions, currentLocal.onlineAdmissions);
-      const mergedSalaryTx = mergeEntities(data.salaryTransactions, currentLocal.salaryTransactions);
-      const mergedSalaryPmts = mergeEntities(data.teacherSalaryPayments, currentLocal.teacherSalaryPayments);
+      const mergedAdmissions = mergeEntities<OnlineAdmission>(data.onlineAdmissions, currentLocal.onlineAdmissions);
+      const mergedSalaryTx = mergeEntities<SalaryTransaction>(data.salaryTransactions, currentLocal.salaryTransactions);
+      const mergedSalaryPmts = mergeEntities<TeacherSalaryPayment>(data.teacherSalaryPayments, currentLocal.teacherSalaryPayments);
+
+      const mergedSettings: SystemSettings =
+        data.settings && typeof data.settings === 'object'
+          ? {
+              ...initialSettings,
+              ...(hasPendingLocalMutation.current ? data.settings : {}),
+              ...(!hasPendingLocalMutation.current ? data.settings : currentLocal.settings)
+            }
+          : currentLocal.settings;
+
+      const mergedFees = reconcileFeesWithAttendance({
+        students: mergedStudents,
+        feeRecords: rawMergedFees,
+        attendance: mergedAttendance,
+        leaves: mergedLeaves,
+        settings: mergedSettings
+      });
 
       isApplyingRemoteUpdate.current = true;
       lastKnownServerUpdatedAt.current = data.updatedAt || new Date().toISOString();
       hasInitializedFromCloud.current = true;
       setLastCloudSyncTime(new Date().toLocaleTimeString('ur-PK'));
+
+      setDeletedIds(mergedDeletedIds);
+      saveToStorage('deletedIds', mergedDeletedIds);
 
       setStudents(mergedStudents);
       saveToStorage('students', mergedStudents);
@@ -660,14 +685,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setTeacherSalaryPayments(mergedSalaryPmts);
       saveToStorage('teacherSalaryPayments', mergedSalaryPmts);
 
-      if (data.settings && typeof data.settings === 'object') {
-        const mergedSettings = { ...data.settings, adminPassword: 'Ahmad@1' };
-        setSettings(mergedSettings);
-        saveToStorage('settings', mergedSettings);
-      }
+      setSettings(mergedSettings);
+      saveToStorage('settings', mergedSettings);
 
-      // If local had items not yet on the server, push merged list back to cloud server!
-      if (mergedStudents.length > (data.students?.length || 0) || mergedFees.length > (data.feeRecords?.length || 0)) {
+      if (mergedStudents.length > (data.students?.length || 0) || hasPendingLocalMutation.current) {
         pushCurrentDataToCloud({
           students: mergedStudents,
           teachers: mergedTeachers,
@@ -682,88 +703,54 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           notices: mergedNotices,
           onlineAdmissions: mergedAdmissions,
           salaryTransactions: mergedSalaryTx,
-          teacherSalaryPayments: mergedSalaryPmts
+          teacherSalaryPayments: mergedSalaryPmts,
+          settings: mergedSettings,
+          deletedIds: mergedDeletedIds
         });
       }
 
       setTimeout(() => {
         isApplyingRemoteUpdate.current = false;
       }, 300);
+
+      return mergedStudents;
     } catch (e) {
       console.warn('Could not sync with cloud server:', e);
       setIsCloudConnected(false);
+      return stateRef.current.students.filter(s => !isDummyStudent(s));
     }
   };
 
   // Force manual cloud sync action
   const forceSyncAllToCloud = async (): Promise<{ success: boolean; studentCount: number; message: string }> => {
-    try {
-      setIsCloudSyncing(true);
-      const newTimestamp = new Date().toISOString();
-      const payload = {
-        ...stateRef.current,
-        updatedAt: newTimestamp
-      };
-
-      let success = false;
-      // 1. Primary: Server API (/api/school-data)
-      try {
-        const localRes = await fetch('/api/school-data', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        if (localRes.ok) success = true;
-      } catch (err) {
-        // fallback
-      }
-
-      // 2. Secondary: Global Cloud Bin (api.restful-api.dev)
-      try {
-        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        if (cloudRes.ok) success = true;
-      } catch (err) {
-        // fallback
-      }
-
-      // 3. Tertiary backup: Global Cloud Bin (extendsclass.com)
-      try {
-        const extRes = await fetch(GLOBAL_CLOUD_ENDPOINT_2, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        if (extRes.ok) success = true;
-      } catch (err) {
-        // fallback
-      }
-
-      setIsCloudConnected(true);
-      lastKnownServerUpdatedAt.current = newTimestamp;
-      setLastCloudSyncTime(new Date().toLocaleTimeString('ur-PK'));
+    hasPendingLocalMutation.current = true;
+    const ok = await pushCurrentDataToCloud();
+    const count = stateRef.current.students.length;
+    if (ok) {
       return {
         success: true,
-        studentCount: payload.students.length,
-        message: `تمام ${payload.students.length} طلباء اور اسکول کا مکمل ریکارڈ لائیو کلاؤڈ پر محفوظ ہو گیا ہے! اب تمام دوسرے موبائلز اور ٹیچرز کو فوری شو ہوں گے۔`
+        studentCount: count,
+        message: `تمام ${count} طلباء اور اسکول کا مکمل ریکارڈ لائیو کلاؤڈ پر محفوظ ہو گیا ہے! اب تمام دوسرے موبائلز اور ٹیچرز کو فوری شو ہوں گے۔`
       };
-    } catch (e: any) {
-      return { success: false, studentCount: stateRef.current.students.length, message: e.message || 'Error syncing' };
-    } finally {
-      setIsCloudSyncing(false);
     }
+    return {
+      success: false,
+      studentCount: count,
+      message: 'کلاؤڈ سرور سے رابطہ نہیں ہو سکا، براہ کرم انٹرنیٹ چیک کر کے دوبارہ کوشش کریں۔'
+    };
   };
 
-  const syncNowWithCloud = async () => {
-    await forceSyncAllToCloud();
+  const syncNowWithCloud = async (): Promise<Student[]> => {
+    if (hasPendingLocalMutation.current) {
+      await pushCurrentDataToCloud();
+    }
+    return await pullFromCloudDatabase();
   };
 
-  // Sync to Cloud Server when local data changes (debounced backup)
+  // Sync to Cloud Server only after initial cloud pull and when an actual local mutation occurred
   useEffect(() => {
     if (isApplyingRemoteUpdate.current) return;
+    if (!hasInitializedFromCloud.current || !hasPendingLocalMutation.current) return;
 
     const timer = setTimeout(() => {
       pushCurrentDataToCloud();
@@ -780,6 +767,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     dailyReports,
     tests,
     testResults,
+    studentExamReports,
     notices,
     onlineAdmissions,
     settings,
@@ -789,10 +777,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Periodic polling & window focus pull
   useEffect(() => {
-    // 1. On mount, ALWAYS fetch freshest cloud database first so this device gets latest updates from all phones
     pullFromCloudDatabase();
 
-    // 2. Poll every 3 seconds to sync real-time changes made by other devices/phones
     const interval = setInterval(() => {
       pullFromCloudDatabase();
     }, 3000);
@@ -816,6 +802,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Manual hard reset only when administrator clicks 'resetAllDataToZero' in Settings
   const resetAllDataToZero = () => {
+    hasPendingLocalMutation.current = true;
     setStudents([]);
     setAttendance([]);
     setFeeRecords([]);
@@ -837,12 +824,16 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.error(e);
     }
     pushCurrentDataToCloud({
+      forceReset: true,
       students: [],
       attendance: [],
       feeRecords: [],
       dailyReports: [],
       tests: [],
-      testResults: []
+      testResults: [],
+      leaves: [],
+      onlineAdmissions: [],
+      salaryTransactions: []
     });
   };
 
@@ -850,8 +841,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const loginAdmin = (password: string): boolean => {
     const clean = (password || '').trim();
     if (!clean) return false;
-    // Strictly verify against confidential admin password Ahmad@1
-    if (clean === 'Ahmad@1' || clean === settings.adminPassword.trim()) {
+    const configured = (stateRef.current.settings.adminPassword || '').trim();
+    if (clean === configured || (!configured && clean === 'Ahmad@1')) {
       setIsAdminLoggedIn(true);
       setCurrentTeacherId(null);
       setCurrentParentStudentId(null);
@@ -890,7 +881,6 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const cleanPass = (password || '').trim();
     if (!cleanName || !cleanPass) return false;
 
-    // Only allow existing authorized faculty members
     const existing = teachers.find(t => t.name.toLowerCase() === cleanName);
     if (existing) {
       const personal = (existing.personalPassword || '').trim();
@@ -908,27 +898,25 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return false;
     }
 
-    return false; // Do not allow unauthorized users to create teacher accounts
+    return false;
   };
 
   const loginParent = (identifier: string, className?: string): Student | null => {
-    const clean = identifier.trim().toLowerCase();
+    const clean = normalizeDigits(identifier).trim().toLowerCase();
     if (!clean) return null;
-    const cleanNum = clean.replace(/^0+/, ''); // '01' -> '1'
+    const cleanNum = clean.replace(/^0+/, '');
 
-    const valid = students.filter(s => !isDummyStudent(s));
+    const valid = stateRef.current.students.filter(s => !isDummyStudent(s));
+    const isNumeric = /^\d+$/.test(clean);
 
     let student: Student | undefined;
 
-    const isNumeric = /^\d+$/.test(clean);
-
     if (className && className !== 'All') {
-      // 1. Strict Search in specified class
       student = valid.find(s => {
         if (s.className.toLowerCase().trim() !== className.toLowerCase().trim()) return false;
-        const rollClean = (s.rollNo || '').trim().toLowerCase();
+        const rollClean = normalizeDigits(s.rollNo || '').trim().toLowerCase();
         const rollNum = rollClean.replace(/^0+/, '');
-        const admClean = (s.admissionNo || '').trim().toLowerCase();
+        const admClean = normalizeDigits(s.admissionNo || '').trim().toLowerCase();
         if (isNumeric) {
           return rollClean === clean || (cleanNum !== '' && rollNum === cleanNum) || admClean === clean;
         } else {
@@ -936,11 +924,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       });
     } else {
-      // 2. Search across all classes
       student = valid.find(s => {
-        const rollClean = (s.rollNo || '').trim().toLowerCase();
+        const rollClean = normalizeDigits(s.rollNo || '').trim().toLowerCase();
         const rollNum = rollClean.replace(/^0+/, '');
-        const admClean = (s.admissionNo || '').trim().toLowerCase();
+        const admClean = normalizeDigits(s.admissionNo || '').trim().toLowerCase();
         if (isNumeric) {
           return rollClean === clean || (cleanNum !== '' && rollNum === cleanNum) || admClean === clean;
         } else {
@@ -968,25 +955,30 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Student CRUD with Immediate Cloud Sync
   const addStudent = (stData: Omit<Student, 'id'>): Student => {
+    hasPendingLocalMutation.current = true;
+    const cleanRoll = normalizeDigits(stData.rollNo).trim();
+    const feeAmount = stData.monthlyFee || getDefaultMonthlyFee(stData.className);
     const newStudent: Student = {
       ...stData,
+      rollNo: cleanRoll,
+      monthlyFee: feeAmount,
       id: `s-${Date.now()}`
     };
     const updatedStudents = [newStudent, ...stateRef.current.students];
     setStudents(updatedStudents);
     saveToStorage('students', updatedStudents);
 
-    // Automatically create initial fee voucher for current month
-    const feeAmount = stData.monthlyFee || getDefaultMonthlyFee(stData.className);
+    const activeMonth = stateRef.current.feeRecords[0]?.month || getCurrentMonthLabel();
     const newFeeRecord: FeeRecord = {
       id: `fee-${Date.now()}`,
       studentId: newStudent.id,
       studentName: newStudent.name,
       fatherName: newStudent.fatherName,
       className: newStudent.className,
-      month: 'October 2026',
+      month: activeMonth,
       tuitionFee: feeAmount,
       absentDays: 0,
+      leaveDays: 0,
       fineAmount: 0,
       totalPayable: feeAmount,
       paidAmount: 0,
@@ -998,7 +990,6 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setFeeRecords(updatedFees);
     saveToStorage('feeRecords', updatedFees);
 
-    // Push immediately to cloud database so other devices see it instantly
     pushCurrentDataToCloud({
       students: updatedStudents,
       feeRecords: updatedFees
@@ -1008,56 +999,90 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const updateStudent = (updated: Student) => {
+    hasPendingLocalMutation.current = true;
     const prev = stateRef.current.students.find(s => s.id === updated.id);
-    let finalStudent = { ...updated };
+    const normalizedRoll = normalizeDigits(updated.rollNo).trim();
+    let finalStudent: Student = { ...updated, rollNo: normalizedRoll };
     let updatedFees = [...stateRef.current.feeRecords];
 
-    // Automatically calculate and update fee according to the new class
-    if (prev && prev.className !== updated.className) {
+    const classChanged = prev && prev.className !== updated.className;
+    if (classChanged) {
       const newClassFee = getDefaultMonthlyFee(updated.className);
       finalStudent.monthlyFee = newClassFee;
-
-      // Update future/unpaid fee records for this student while strictly preserving payment history
-      updatedFees = updatedFees.map(f => {
-        if (f.studentId === updated.id) {
-          if (f.paidAmount === 0) {
-            const fine = f.fineAmount || 0;
-            return {
-              ...f,
-              className: updated.className,
-              tuitionFee: newClassFee,
-              totalPayable: newClassFee + fine,
-              balanceRemaining: newClassFee + fine
-            };
-          } else {
-            // Student has paid amount; update class name only, do not change existing fee payment history!
-            return {
-              ...f,
-              className: updated.className
-            };
-          }
-        }
-        return f;
-      });
-      setFeeRecords(updatedFees);
-      saveToStorage('feeRecords', updatedFees);
     }
 
-    const updatedList = stateRef.current.students.map(s => s.id === finalStudent.id ? finalStudent : s);
+    const effectiveTuition = finalStudent.monthlyFee || getDefaultMonthlyFee(finalStudent.className);
+
+    updatedFees = updatedFees.map(f => {
+      if (f.studentId !== updated.id) return f;
+      if (f.paidAmount === 0) {
+        const fine = f.fineAmount || 0;
+        const newTuition = classChanged || updated.monthlyFee !== prev?.monthlyFee ? effectiveTuition : f.tuitionFee;
+        const total = newTuition + fine;
+        return {
+          ...f,
+          studentName: finalStudent.name,
+          fatherName: finalStudent.fatherName,
+          className: finalStudent.className,
+          tuitionFee: newTuition,
+          totalPayable: total,
+          balanceRemaining: Math.max(0, total - f.paidAmount)
+        };
+      } else {
+        // Strictly preserve existing fee payment history & settled amounts
+        return {
+          ...f,
+          studentName: finalStudent.name,
+          fatherName: finalStudent.fatherName,
+          className: finalStudent.className
+        };
+      }
+    });
+
+    const updatedList = stateRef.current.students.map(s => (s.id === finalStudent.id ? finalStudent : s));
+    const reconciledFees = reconcileFeesWithAttendance({
+      students: updatedList,
+      feeRecords: updatedFees,
+      attendance: stateRef.current.attendance,
+      leaves: stateRef.current.leaves,
+      settings: stateRef.current.settings
+    });
+
     setStudents(updatedList);
     saveToStorage('students', updatedList);
-    pushCurrentDataToCloud({ students: updatedList, feeRecords: updatedFees });
+    setFeeRecords(reconciledFees);
+    saveToStorage('feeRecords', reconciledFees);
+    pushCurrentDataToCloud({ students: updatedList, feeRecords: reconciledFees });
   };
 
   const deleteStudent = (id: string) => {
+    hasPendingLocalMutation.current = true;
+    const removedFeeIds = stateRef.current.feeRecords.filter(f => f.studentId === id).map(f => f.id);
+    const removedAttIds = stateRef.current.attendance.filter(a => a.studentId === id).map(a => a.id);
+    const nextDeleted = recordDeletedIds([id, ...removedFeeIds, ...removedAttIds]);
+
     const updatedList = stateRef.current.students.filter(s => s.id !== id);
+    const updatedFees = stateRef.current.feeRecords.filter(f => f.studentId !== id);
+    const updatedAtt = stateRef.current.attendance.filter(a => a.studentId !== id);
+
     setStudents(updatedList);
     saveToStorage('students', updatedList);
-    pushCurrentDataToCloud({ students: updatedList });
+    setFeeRecords(updatedFees);
+    saveToStorage('feeRecords', updatedFees);
+    setAttendance(updatedAtt);
+    saveToStorage('attendance', updatedAtt);
+
+    pushCurrentDataToCloud({
+      students: updatedList,
+      feeRecords: updatedFees,
+      attendance: updatedAtt,
+      deletedIds: nextDeleted
+    });
   };
 
   const toggleStudentActive = (id: string) => {
-    const updatedList = stateRef.current.students.map(s => s.id === id ? { ...s, isActive: !s.isActive } : s);
+    hasPendingLocalMutation.current = true;
+    const updatedList = stateRef.current.students.map(s => (s.id === id ? { ...s, isActive: !s.isActive } : s));
     setStudents(updatedList);
     saveToStorage('students', updatedList);
     pushCurrentDataToCloud({ students: updatedList });
@@ -1087,11 +1112,12 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Teacher CRUD with immediate storage and cloud sync
   const addTeacher = (tData: Omit<Teacher, 'id' | 'allowances' | 'deductions'>): Teacher => {
+    hasPendingLocalMutation.current = true;
     const newTeacher: Teacher = {
       ...tData,
       id: `t-${Date.now()}`,
       allowances: 0,
-      deductions: 0,
+      deductions: 0
     };
     const updated = [...stateRef.current.teachers, newTeacher];
     setTeachers(updated);
@@ -1101,17 +1127,20 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const updateTeacher = (updated: Teacher) => {
-    const updatedList = stateRef.current.teachers.map(t => t.id === updated.id ? updated : t);
+    hasPendingLocalMutation.current = true;
+    const updatedList = stateRef.current.teachers.map(t => (t.id === updated.id ? updated : t));
     setTeachers(updatedList);
     saveToStorage('teachers', updatedList);
     pushCurrentDataToCloud({ teachers: updatedList });
   };
 
   const deleteTeacher = (id: string) => {
+    hasPendingLocalMutation.current = true;
+    const nextDeleted = recordDeletedIds([id]);
     const updatedList = stateRef.current.teachers.filter(t => t.id !== id);
     setTeachers(updatedList);
     saveToStorage('teachers', updatedList);
-    pushCurrentDataToCloud({ teachers: updatedList });
+    pushCurrentDataToCloud({ teachers: updatedList, deletedIds: nextDeleted });
   };
 
   const adjustTeacherSalary = (
@@ -1119,8 +1148,9 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     amount: number,
     type: 'Addition' | 'Deduction',
     reason: string,
-    month: string = 'October 2026'
+    month: string = getCurrentMonthLabel()
   ) => {
+    hasPendingLocalMutation.current = true;
     const teacher = stateRef.current.teachers.find(t => t.id === teacherId);
     if (!teacher) return;
 
@@ -1155,6 +1185,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const setTeacherPassword = (teacherId: string, newPassword: string) => {
+    hasPendingLocalMutation.current = true;
     const updated = stateRef.current.teachers.map(t =>
       t.id === teacherId ? { ...t, personalPassword: newPassword.trim() } : t
     );
@@ -1164,21 +1195,22 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const toggleTeacherSalaryPayment = (teacherId: string, month: string, amount: number) => {
+    hasPendingLocalMutation.current = true;
     const today = new Date().toISOString().split('T')[0];
-    setTeacherSalaryPayments(prev => {
-      const idx = prev.findIndex(p => p.teacherId === teacherId && p.month === month);
-      if (idx >= 0) {
-        const copy = [...prev];
-        const nextState = !copy[idx].isPaid;
-        copy[idx] = {
-          ...copy[idx],
-          isPaid: nextState,
-          paidDate: nextState ? today : undefined,
-          amount
-        };
-        return copy;
-      }
-      return [
+    const prev = [...stateRef.current.teacherSalaryPayments];
+    const idx = prev.findIndex(p => p.teacherId === teacherId && p.month === month);
+    let updated: TeacherSalaryPayment[];
+    if (idx >= 0) {
+      const nextState = !prev[idx].isPaid;
+      prev[idx] = {
+        ...prev[idx],
+        isPaid: nextState,
+        paidDate: nextState ? today : undefined,
+        amount
+      };
+      updated = prev;
+    } else {
+      updated = [
         ...prev,
         {
           id: `tsp-${Date.now()}-${teacherId}`,
@@ -1189,28 +1221,56 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           amount
         }
       ];
-    });
+    }
+    setTeacherSalaryPayments(updated);
+    saveToStorage('teacherSalaryPayments', updated);
+    pushCurrentDataToCloud({ teacherSalaryPayments: updated });
   };
 
-  // Attendance
+  // Attendance + automatic fee reconciliation
   const markStudentAttendance = (record: Omit<StudentAttendance, 'id'>) => {
-    const fineAmount = record.status === 'Absent' ? settings.finePerAbsentDay : 0;
-    const existingIndex = attendance.findIndex(a => a.studentId === record.studentId && a.date === record.date);
+    hasPendingLocalMutation.current = true;
+    const currentSettings = stateRef.current.settings;
+    const currentLeaves = stateRef.current.leaves;
+    const onApprovedLeave = isDateCoveredByApprovedLeave(record.studentId, record.date, currentLeaves);
+    const effectiveStatus = record.status === 'Absent' && onApprovedLeave ? 'Leave' : record.status;
+    const fineRate = Number(currentSettings.finePerAbsentDay ?? 50) || 0;
+    const chargeLeaveFine = Boolean(currentSettings.chargeFineOnApprovedLeave);
+    const fineAmount =
+      effectiveStatus === 'Absent' || (effectiveStatus === 'Leave' && chargeLeaveFine) ? fineRate : 0;
+
+    const deduped = deduplicateAttendance(stateRef.current.attendance);
+    const existingIndex = deduped.findIndex(a => a.studentId === record.studentId && a.date === record.date);
+    let updatedAtt: StudentAttendance[];
 
     if (existingIndex >= 0) {
-      setAttendance(prev => {
-        const copy = [...prev];
-        copy[existingIndex] = { ...copy[existingIndex], status: record.status, fineAmount };
-        return copy;
-      });
+      updatedAtt = [...deduped];
+      updatedAtt[existingIndex] = { ...updatedAtt[existingIndex], status: effectiveStatus, fineAmount };
     } else {
-      const newRecord: StudentAttendance = {
-        ...record,
-        id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        fineAmount
-      };
-      setAttendance(prev => [newRecord, ...prev]);
+      updatedAtt = [
+        {
+          ...record,
+          status: effectiveStatus,
+          id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          fineAmount
+        },
+        ...deduped
+      ];
     }
+
+    const reconciledFees = reconcileFeesWithAttendance({
+      students: stateRef.current.students,
+      feeRecords: stateRef.current.feeRecords,
+      attendance: updatedAtt,
+      leaves: currentLeaves,
+      settings: currentSettings
+    });
+
+    setAttendance(updatedAtt);
+    saveToStorage('attendance', updatedAtt);
+    setFeeRecords(reconciledFees);
+    saveToStorage('feeRecords', reconciledFees);
+    pushCurrentDataToCloud({ attendance: updatedAtt, feeRecords: reconciledFees });
   };
 
   const markClassAttendance = (
@@ -1218,15 +1278,24 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     date: string,
     records: { studentId: string; status: 'Present' | 'Absent' | 'Leave' | 'Late' }[]
   ) => {
+    hasPendingLocalMutation.current = true;
     const month = date.substring(0, 7);
-    const updated = [...stateRef.current.attendance];
+    const currentSettings = stateRef.current.settings;
+    const currentLeaves = stateRef.current.leaves;
+    const fineRate = Number(currentSettings.finePerAbsentDay ?? 50) || 0;
+    const chargeLeaveFine = Boolean(currentSettings.chargeFineOnApprovedLeave);
+    const updated = deduplicateAttendance(stateRef.current.attendance);
+
     records.forEach(r => {
       const st = stateRef.current.students.find(s => s.id === r.studentId);
       if (st) {
-        const fineAmount = r.status === 'Absent' ? settings.finePerAbsentDay : 0;
+        const onApprovedLeave = isDateCoveredByApprovedLeave(r.studentId, date, currentLeaves);
+        const effectiveStatus = r.status === 'Absent' && onApprovedLeave ? 'Leave' : r.status;
+        const fineAmount =
+          effectiveStatus === 'Absent' || (effectiveStatus === 'Leave' && chargeLeaveFine) ? fineRate : 0;
         const existingIndex = updated.findIndex(a => a.studentId === r.studentId && a.date === date);
         if (existingIndex >= 0) {
-          updated[existingIndex] = { ...updated[existingIndex], status: r.status, fineAmount };
+          updated[existingIndex] = { ...updated[existingIndex], status: effectiveStatus, fineAmount };
         } else {
           updated.unshift({
             id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -1235,18 +1304,30 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             className,
             date,
             month,
-            status: r.status,
+            status: effectiveStatus,
             fineAmount
           });
         }
       }
     });
+
+    const reconciledFees = reconcileFeesWithAttendance({
+      students: stateRef.current.students,
+      feeRecords: stateRef.current.feeRecords,
+      attendance: updated,
+      leaves: currentLeaves,
+      settings: currentSettings
+    });
+
     setAttendance(updated);
     saveToStorage('attendance', updated);
-    pushCurrentDataToCloud({ attendance: updated });
+    setFeeRecords(reconciledFees);
+    saveToStorage('feeRecords', reconciledFees);
+    pushCurrentDataToCloud({ attendance: updated, feeRecords: reconciledFees });
   };
 
   const markTeacherAttendance = (record: Omit<TeacherAttendance, 'id'>) => {
+    hasPendingLocalMutation.current = true;
     const existingIndex = stateRef.current.teacherAttendance.findIndex(a => a.teacherId === record.teacherId && a.date === record.date);
     let updated: TeacherAttendance[];
     if (existingIndex >= 0) {
@@ -1264,8 +1345,9 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     pushCurrentDataToCloud({ teacherAttendance: updated });
   };
 
-  // Leaves
+  // Leaves + automatic waiver reconciliation
   const submitLeave = (leaveData: Omit<LeaveRequest, 'id' | 'appliedDate'>) => {
+    hasPendingLocalMutation.current = true;
     const newLeave: LeaveRequest = {
       ...leaveData,
       id: `l-${Date.now()}`,
@@ -1278,14 +1360,51 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const updateLeaveStatus = (id: string, status: 'Approved' | 'Rejected') => {
-    const updated = stateRef.current.leaves.map(l => l.id === id ? { ...l, status } : l);
-    setLeaves(updated);
-    saveToStorage('leaves', updated);
-    pushCurrentDataToCloud({ leaves: updated });
+    hasPendingLocalMutation.current = true;
+    const updatedLeaves = stateRef.current.leaves.map(l => (l.id === id ? { ...l, status } : l));
+    const targetLeave = updatedLeaves.find(l => l.id === id);
+
+    let updatedAtt = deduplicateAttendance(stateRef.current.attendance);
+    if (targetLeave && targetLeave.role === 'student' && status === 'Approved') {
+      const chargeLeaveFine = Boolean(stateRef.current.settings.chargeFineOnApprovedLeave);
+      const fineRate = Number(stateRef.current.settings.finePerAbsentDay ?? 50) || 0;
+      updatedAtt = updatedAtt.map(a => {
+        if (
+          a.studentId === targetLeave.applicantId &&
+          a.status === 'Absent' &&
+          a.date >= targetLeave.fromDate &&
+          a.date <= targetLeave.toDate
+        ) {
+          return {
+            ...a,
+            status: 'Leave',
+            fineAmount: chargeLeaveFine ? fineRate : 0
+          };
+        }
+        return a;
+      });
+    }
+
+    const reconciledFees = reconcileFeesWithAttendance({
+      students: stateRef.current.students,
+      feeRecords: stateRef.current.feeRecords,
+      attendance: updatedAtt,
+      leaves: updatedLeaves,
+      settings: stateRef.current.settings
+    });
+
+    setLeaves(updatedLeaves);
+    saveToStorage('leaves', updatedLeaves);
+    setAttendance(updatedAtt);
+    saveToStorage('attendance', updatedAtt);
+    setFeeRecords(reconciledFees);
+    saveToStorage('feeRecords', reconciledFees);
+    pushCurrentDataToCloud({ leaves: updatedLeaves, attendance: updatedAtt, feeRecords: reconciledFees });
   };
 
   // Fees
   const addFeeRecord = (record: Omit<FeeRecord, 'id'>) => {
+    hasPendingLocalMutation.current = true;
     const newRecord: FeeRecord = {
       ...record,
       id: `fee-${Date.now()}`
@@ -1297,26 +1416,30 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const updateFeeRecord = (updated: FeeRecord) => {
-    const updatedList = stateRef.current.feeRecords.map(f => f.id === updated.id ? updated : f);
+    hasPendingLocalMutation.current = true;
+    const updatedList = stateRef.current.feeRecords.map(f => (f.id === updated.id ? updated : f));
     setFeeRecords(updatedList);
     saveToStorage('feeRecords', updatedList);
     pushCurrentDataToCloud({ feeRecords: updatedList });
   };
 
   const deleteFeeRecord = (feeRecordId: string) => {
+    hasPendingLocalMutation.current = true;
+    const nextDeleted = recordDeletedIds([feeRecordId]);
     const updatedList = stateRef.current.feeRecords.filter(f => f.id !== feeRecordId);
     setFeeRecords(updatedList);
     saveToStorage('feeRecords', updatedList);
-    pushCurrentDataToCloud({ feeRecords: updatedList });
+    pushCurrentDataToCloud({ feeRecords: updatedList, deletedIds: nextDeleted });
   };
 
   const recordFeePayment = (feeRecordId: string, amount: number, receiptNo: string) => {
+    hasPendingLocalMutation.current = true;
     const today = new Date().toISOString().split('T')[0];
     const updated = stateRef.current.feeRecords.map(f => {
       if (f.id === feeRecordId) {
         const newPaid = f.paidAmount + amount;
         const newBalance = Math.max(0, f.totalPayable - newPaid);
-        const status: 'Paid' | 'Partial' | 'Unpaid' = newBalance === 0 ? 'Paid' : (newPaid > 0 ? 'Partial' : 'Unpaid');
+        const status: 'Paid' | 'Partial' | 'Unpaid' = newBalance === 0 ? 'Paid' : newPaid > 0 ? 'Partial' : 'Unpaid';
         return {
           ...f,
           paidAmount: newPaid,
@@ -1334,15 +1457,34 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const generateMonthlyFeeVouchers = (monthName: string): number => {
+    hasPendingLocalMutation.current = true;
     let count = 0;
     const newRecords: FeeRecord[] = [];
+    const targetYm = monthLabelToYearMonth(monthName);
+    const fineRate = Number(stateRef.current.settings.finePerAbsentDay ?? 50) || 0;
+    const chargeLeaveFine = Boolean(stateRef.current.settings.chargeFineOnApprovedLeave);
+    const cleanAtt = deduplicateAttendance(stateRef.current.attendance);
 
     stateRef.current.students.forEach(st => {
       const exists = stateRef.current.feeRecords.some(f => f.studentId === st.id && f.month === monthName);
       if (!exists) {
-        // Calculate absents in this month
-        const absents = stateRef.current.attendance.filter(a => a.studentId === st.id && a.status === 'Absent').length;
-        const fine = absents * settings.finePerAbsentDay;
+        const relevantAtt = cleanAtt.filter(a => {
+          if (a.studentId !== st.id) return false;
+          if (targetYm) return (a.month || a.date.substring(0, 7)) === targetYm;
+          return true;
+        });
+        let absents = 0;
+        let leaveCount = 0;
+        relevantAtt.forEach(a => {
+          const onApprovedLeave = isDateCoveredByApprovedLeave(st.id, a.date, stateRef.current.leaves);
+          if (a.status === 'Leave' || (a.status === 'Absent' && onApprovedLeave)) {
+            leaveCount++;
+          } else if (a.status === 'Absent') {
+            absents++;
+          }
+        });
+        const billableDays = chargeLeaveFine ? absents + leaveCount : absents;
+        const fine = billableDays * fineRate;
         const tuition = st.monthlyFee || getDefaultMonthlyFee(st.className);
         const total = tuition + fine;
 
@@ -1355,11 +1497,13 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           month: monthName,
           tuitionFee: tuition,
           absentDays: absents,
+          leaveDays: leaveCount,
           fineAmount: fine,
           totalPayable: total,
           paidAmount: 0,
           balanceRemaining: total,
-          status: 'Unpaid'
+          status: 'Unpaid',
+          receiptNo: `REC-BSS-${st.id.slice(-4)}`
         });
         count++;
       }
@@ -1374,8 +1518,23 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return count;
   };
 
+  const recalculateAllFeeFines = () => {
+    hasPendingLocalMutation.current = true;
+    const reconciled = reconcileFeesWithAttendance({
+      students: stateRef.current.students,
+      feeRecords: stateRef.current.feeRecords,
+      attendance: stateRef.current.attendance,
+      leaves: stateRef.current.leaves,
+      settings: stateRef.current.settings
+    });
+    setFeeRecords(reconciled);
+    saveToStorage('feeRecords', reconciled);
+    pushCurrentDataToCloud({ feeRecords: reconciled });
+  };
+
   // Daily Reports
   const addDailyReport = (report: Omit<DailyReport, 'id'>) => {
+    hasPendingLocalMutation.current = true;
     const newReport: DailyReport = {
       ...report,
       id: `dr-${Date.now()}`
@@ -1388,6 +1547,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Tests
   const addTest = (testData: Omit<Test, 'id'>): Test => {
+    hasPendingLocalMutation.current = true;
     const newTest: Test = {
       ...testData,
       id: `tst-${Date.now()}`
@@ -1400,6 +1560,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const addTestResult = (resultData: Omit<TestResult, 'id'>) => {
+    hasPendingLocalMutation.current = true;
     const updated = [...stateRef.current.testResults];
     const idx = updated.findIndex(r => r.testId === resultData.testId && r.studentId === resultData.studentId);
     if (idx >= 0) {
@@ -1414,6 +1575,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Official Student Exam Reports (Tests & Results Section)
   const saveStudentExamReport = (report: StudentExamReport) => {
+    hasPendingLocalMutation.current = true;
     const updated = [...stateRef.current.studentExamReports];
     const idx = updated.findIndex(r => r.id === report.id);
     const enriched: StudentExamReport = {
@@ -1431,13 +1593,16 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const deleteStudentExamReport = (reportId: string) => {
+    hasPendingLocalMutation.current = true;
+    const nextDeleted = recordDeletedIds([reportId]);
     const updated = stateRef.current.studentExamReports.filter(r => r.id !== reportId);
     setStudentExamReports(updated);
     saveToStorage('studentExamReports', updated);
-    pushCurrentDataToCloud({ studentExamReports: updated });
+    pushCurrentDataToCloud({ studentExamReports: updated, deletedIds: nextDeleted });
   };
 
   const togglePublishExamReport = (reportId: string) => {
+    hasPendingLocalMutation.current = true;
     const updated = stateRef.current.studentExamReports.map(r =>
       r.id === reportId ? { ...r, isPublished: !r.isPublished, updatedAt: new Date().toISOString() } : r
     );
@@ -1448,6 +1613,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Notices
   const addNotice = (noticeData: Omit<Notice, 'id'>) => {
+    hasPendingLocalMutation.current = true;
     const newNotice: Notice = {
       ...noticeData,
       id: `not-${Date.now()}`
@@ -1459,33 +1625,42 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const deleteNotice = (id: string) => {
+    hasPendingLocalMutation.current = true;
+    const nextDeleted = recordDeletedIds([id]);
     const updated = stateRef.current.notices.filter(n => n.id !== id);
     setNotices(updated);
     saveToStorage('notices', updated);
-    pushCurrentDataToCloud({ notices: updated });
+    pushCurrentDataToCloud({ notices: updated, deletedIds: nextDeleted });
   };
 
   // Online Admissions
   const submitOnlineAdmission = (admData: Omit<OnlineAdmission, 'id' | 'applyDate' | 'status'>) => {
+    hasPendingLocalMutation.current = true;
     const newAdm: OnlineAdmission = {
       ...admData,
       id: `adm-${Date.now()}`,
       applyDate: new Date().toISOString().split('T')[0],
       status: 'Pending'
     };
-    setOnlineAdmissions(prev => [newAdm, ...prev]);
+    const updated = [newAdm, ...stateRef.current.onlineAdmissions];
+    setOnlineAdmissions(updated);
+    saveToStorage('admissions', updated);
+    pushCurrentDataToCloud({ onlineAdmissions: updated });
   };
 
   const updateAdmissionStatus = (id: string, status: 'Approved' | 'Rejected') => {
-    setOnlineAdmissions(prev => prev.map(a => a.id === id ? { ...a, status } : a));
+    hasPendingLocalMutation.current = true;
+    const updated = stateRef.current.onlineAdmissions.map(a => (a.id === id ? { ...a, status } : a));
+    setOnlineAdmissions(updated);
+    saveToStorage('admissions', updated);
+    pushCurrentDataToCloud({ onlineAdmissions: updated });
   };
 
   const approveAndEnrollAdmission = (admissionId: string): Student | null => {
-    const admission = onlineAdmissions.find(a => a.id === admissionId);
+    const admission = stateRef.current.onlineAdmissions.find(a => a.id === admissionId);
     if (!admission) return null;
 
-    // Check class count to assign roll no
-    const classCount = students.filter(s => s.className === admission.applyingClass).length + 1;
+    const classCount = stateRef.current.students.filter(s => s.className === admission.applyingClass).length + 1;
     const rollNo = classCount < 10 ? `0${classCount}` : `${classCount}`;
     const admissionNo = `BSS-${Date.now().toString().slice(-4)}`;
 
@@ -1502,7 +1677,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       admissionDate: new Date().toISOString().split('T')[0],
       gender: admission.gender,
       monthlyFee: getDefaultMonthlyFee(admission.applyingClass),
-      isActive: true,
+      isActive: true
     });
 
     updateAdmissionStatus(admissionId, 'Approved');
@@ -1510,36 +1685,66 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const updateSettings = (newSettings: Partial<SystemSettings>) => {
-    setSettings(prev => {
-      const updated = { ...prev, ...newSettings };
-      saveToStorage('settings', updated);
-      pushCurrentDataToCloud({ settings: updated });
-      return updated;
-    });
+    hasPendingLocalMutation.current = true;
+    const updatedSettings: SystemSettings = { ...stateRef.current.settings, ...newSettings };
+    const fineChanged =
+      newSettings.finePerAbsentDay !== undefined ||
+      newSettings.chargeFineOnApprovedLeave !== undefined;
+
+    let updatedFees = stateRef.current.feeRecords;
+    if (fineChanged) {
+      updatedFees = reconcileFeesWithAttendance({
+        students: stateRef.current.students,
+        feeRecords: stateRef.current.feeRecords,
+        attendance: stateRef.current.attendance,
+        leaves: stateRef.current.leaves,
+        settings: updatedSettings
+      });
+      setFeeRecords(updatedFees);
+      saveToStorage('feeRecords', updatedFees);
+    }
+
+    setSettings(updatedSettings);
+    saveToStorage('settings', updatedSettings);
+    pushCurrentDataToCloud({ settings: updatedSettings, feeRecords: updatedFees });
   };
 
   // Student 360 Full Report
   const getStudentFullReport = (studentId: string): StudentFullReport | null => {
-    const student = students.find(s => s.id === studentId);
+    const student = stateRef.current.students.find(s => s.id === studentId) || students.find(s => s.id === studentId);
     if (!student) return null;
 
-    const studentAtt = attendance.filter(a => a.studentId === studentId);
+    const studentAtt = deduplicateAttendance(attendance.filter(a => a.studentId === studentId));
     const totalWorkingDays = studentAtt.length;
     const presentDays = studentAtt.filter(a => a.status === 'Present').length;
-    const absentDays = studentAtt.filter(a => a.status === 'Absent').length;
-    const leaveDays = studentAtt.filter(a => a.status === 'Leave').length;
+    const leaveDays = studentAtt.filter(
+      a => a.status === 'Leave' || (a.status === 'Absent' && isDateCoveredByApprovedLeave(studentId, a.date, leaves))
+    ).length;
+    const absentDays = studentAtt.filter(
+      a => a.status === 'Absent' && !isDateCoveredByApprovedLeave(studentId, a.date, leaves)
+    ).length;
     const lateDays = studentAtt.filter(a => a.status === 'Late').length;
 
     const attendancePercentage = totalWorkingDays > 0
       ? Math.round((presentDays / totalWorkingDays) * 100)
       : 100;
 
-    const totalFineAmount = absentDays * settings.finePerAbsentDay;
+    const fineRate = Number(settings.finePerAbsentDay ?? 50) || 0;
+    const chargeLeaveFine = Boolean(settings.chargeFineOnApprovedLeave);
+    const computedFine = (chargeLeaveFine ? absentDays + leaveDays : absentDays) * fineRate;
 
     const studentFees = feeRecords.filter(f => f.studentId === studentId);
-    const totalPayable = studentFees.reduce((acc, curr) => acc + curr.totalPayable, 0);
+    const totalFineAmount = studentFees.length > 0
+      ? studentFees.reduce((acc, curr) => acc + curr.fineAmount, 0)
+      : computedFine;
+    const monthlyFee = studentFees.length > 0 ? studentFees[0].tuitionFee : student.monthlyFee;
+    const totalPayable = studentFees.length > 0
+      ? studentFees.reduce((acc, curr) => acc + curr.totalPayable, 0)
+      : student.monthlyFee + computedFine;
     const paidAmount = studentFees.reduce((acc, curr) => acc + curr.paidAmount, 0);
-    const balanceRemaining = studentFees.reduce((acc, curr) => acc + curr.balanceRemaining, 0);
+    const balanceRemaining = studentFees.length > 0
+      ? studentFees.reduce((acc, curr) => acc + curr.balanceRemaining, 0)
+      : Math.max(0, totalPayable - paidAmount);
     const feeStatus = balanceRemaining === 0 ? 'Clear (Paid)' : `Due Rs. ${balanceRemaining.toLocaleString()}`;
 
     const studentTestScores = testResults.filter(t => t.studentId === studentId);
@@ -1554,9 +1759,9 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       leaveDays,
       lateDays,
       attendancePercentage,
-      finePerAbsentDay: settings.finePerAbsentDay,
+      finePerAbsentDay: fineRate,
       totalFineAmount,
-      monthlyFee: student.monthlyFee,
+      monthlyFee,
       totalPayable,
       paidAmount,
       balanceRemaining,
@@ -1577,7 +1782,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const exportAllSchoolData = (): string => {
     const payload = {
-      version: 'bss_v7',
+      version: 'bss_v12',
       exportedAt: new Date().toISOString(),
       schoolName: 'Bright Scholar School',
       students,
@@ -1589,65 +1794,95 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       dailyReports,
       tests,
       testResults,
+      studentExamReports,
       notices,
       onlineAdmissions,
       settings,
-      salaryTransactions
+      salaryTransactions,
+      teacherSalaryPayments
     };
     return JSON.stringify(payload, null, 2);
   };
 
   const importSchoolData = (jsonString: string): { success: boolean; studentCount: number; message: string } => {
     try {
-      const data = JSON.parse(jsonString);
+      const data = extractCleanJson<any>(jsonString);
       if (!data) throw new Error('Empty data');
+      hasPendingLocalMutation.current = true;
 
       let count = 0;
+      const pushOverride: Partial<typeof stateRef.current> = {};
       if (Array.isArray(data.students)) {
-        setStudents(data.students);
-        saveToStorage('students', data.students);
-        count = data.students.length;
+        const cleanSt = data.students.filter((s: any) => !isDummyStudent(s));
+        setStudents(cleanSt);
+        saveToStorage('students', cleanSt);
+        count = cleanSt.length;
+        pushOverride.students = cleanSt;
       }
       if (Array.isArray(data.teachers)) {
         setTeachers(data.teachers);
         saveToStorage('teachers', data.teachers);
+        pushOverride.teachers = data.teachers;
       }
       if (Array.isArray(data.attendance)) {
-        setAttendance(data.attendance);
-        saveToStorage('attendance', data.attendance);
+        const deduped = deduplicateAttendance(data.attendance);
+        setAttendance(deduped);
+        saveToStorage('attendance', deduped);
+        pushOverride.attendance = deduped;
       }
       if (Array.isArray(data.teacherAttendance)) {
         setTeacherAttendance(data.teacherAttendance);
         saveToStorage('teacherAttendance', data.teacherAttendance);
+        pushOverride.teacherAttendance = data.teacherAttendance;
+      }
+      if (Array.isArray(data.leaves)) {
+        setLeaves(data.leaves);
+        saveToStorage('leaves', data.leaves);
+        pushOverride.leaves = data.leaves;
       }
       if (Array.isArray(data.feeRecords)) {
-        setFeeRecords(data.feeRecords);
-        saveToStorage('feeRecords', data.feeRecords);
+        const cleanFees = data.feeRecords.filter((f: any) => !isDummyStudent(f));
+        setFeeRecords(cleanFees);
+        saveToStorage('feeRecords', cleanFees);
+        pushOverride.feeRecords = cleanFees;
       }
       if (Array.isArray(data.dailyReports)) {
         setDailyReports(data.dailyReports);
         saveToStorage('dailyReports', data.dailyReports);
+        pushOverride.dailyReports = data.dailyReports;
       }
       if (Array.isArray(data.tests)) {
         setTests(data.tests);
         saveToStorage('tests', data.tests);
+        pushOverride.tests = data.tests;
       }
       if (Array.isArray(data.testResults)) {
         setTestResults(data.testResults);
         saveToStorage('testResults', data.testResults);
+        pushOverride.testResults = data.testResults;
+      }
+      if (Array.isArray(data.studentExamReports)) {
+        setStudentExamReports(data.studentExamReports);
+        saveToStorage('studentExamReports', data.studentExamReports);
+        pushOverride.studentExamReports = data.studentExamReports;
       }
       if (Array.isArray(data.notices)) {
         setNotices(data.notices);
         saveToStorage('notices', data.notices);
+        pushOverride.notices = data.notices;
       }
       if (data.settings && typeof data.settings === 'object') {
         setSettings(data.settings);
         saveToStorage('settings', data.settings);
+        pushOverride.settings = data.settings;
       }
       if (Array.isArray(data.salaryTransactions)) {
         setSalaryTransactions(data.salaryTransactions);
         saveToStorage('salaryTransactions', data.salaryTransactions);
+        pushOverride.salaryTransactions = data.salaryTransactions;
       }
+
+      pushCurrentDataToCloud(pushOverride);
 
       return {
         success: true,
@@ -1714,6 +1949,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         deleteFeeRecord,
         recordFeePayment,
         generateMonthlyFeeVouchers,
+        recalculateAllFeeFines,
         addDailyReport,
         addTest,
         addTestResult,

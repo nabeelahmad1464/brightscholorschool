@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   GraduationCap,
@@ -50,6 +50,7 @@ import {
 } from '../types';
 import { FeeReceiptModal } from '../components/FeeReceiptModal';
 import { StudentMarksAndResultsSection } from '../components/StudentMarksAndResultsSection';
+import { getCurrentMonthLabel, normalizeDigits } from '../utils/schoolSync';
 
 interface AdminDashboardProps {
   onSelectStudent: (student: Student) => void;
@@ -102,6 +103,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
     deleteFeeRecord,
     recordFeePayment,
     generateMonthlyFeeVouchers,
+    recalculateAllFeeFines,
     addTest,
     addTestResult,
     addDailyReport,
@@ -201,19 +203,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
 
   // Settings state
   const [fineInput, setFineInput] = useState(settings.finePerAbsentDay);
+  const [chargeFineOnLeaveInput, setChargeFineOnLeaveInput] = useState(Boolean(settings.chargeFineOnApprovedLeave));
   const [adminPassInput, setAdminPassInput] = useState(settings.adminPassword);
   const [teacherGeneralPassInput, setTeacherGeneralPassInput] = useState(settings.teacherPassword);
   const [showAdminPass, setShowAdminPass] = useState(false);
+  const [voucherMonth, setVoucherMonth] = useState(feeRecords[0]?.month || getCurrentMonthLabel());
 
-  // KPI Calculations (Auto-calculation for 50 students: PG-Class 4 = Rs. 2,000; Class 5-Class 8 = Rs. 3,000)
+  useEffect(() => {
+    setFineInput(settings.finePerAbsentDay);
+    setChargeFineOnLeaveInput(Boolean(settings.chargeFineOnApprovedLeave));
+    setAdminPassInput(settings.adminPassword);
+    setTeacherGeneralPassInput(settings.teacherPassword);
+  }, [settings]);
+
+  useEffect(() => {
+    setTempStatusMap({});
+  }, [attClass, attDate]);
+
+  // KPI Calculations (PG-Class 4 = Rs. 2,000; Class 5-Class 8 = Rs. 3,000; plus attendance-linked fines)
+  const validFeeRecords = feeRecords.filter(f => !isDummyStudent(f));
   const totalStudents = students.length;
   const activeStudents = students.filter(s => s.isActive).length;
   const totalTeachers = teachers.length;
   const pendingLeavesCount = leaves.filter(l => l.status === 'Pending').length;
   const pendingAdmissionsCount = onlineAdmissions.filter(a => a.status === 'Pending').length;
   const totalMonthlyFees = students.reduce((sum, s) => sum + (s.monthlyFee || getDefaultMonthlyFee(s.className)), 0);
-  const totalFeesCollected = feeRecords.reduce((acc, curr) => acc + (curr.paidAmount || 0), 0);
-  const totalFeesPending = Math.max(0, totalMonthlyFees - totalFeesCollected);
+  const totalFinesAmount = validFeeRecords.reduce((acc, curr) => acc + (curr.fineAmount || 0), 0);
+  const totalPayableWithFines = validFeeRecords.length > 0
+    ? validFeeRecords.reduce((acc, curr) => acc + (curr.totalPayable || 0), 0)
+    : totalMonthlyFees;
+  const totalFeesCollected = validFeeRecords.reduce((acc, curr) => acc + (curr.paidAmount || 0), 0);
+  const totalFeesPending = validFeeRecords.length > 0
+    ? validFeeRecords.reduce((acc, curr) => acc + (curr.balanceRemaining || 0), 0)
+    : Math.max(0, totalMonthlyFees - totalFeesCollected);
 
   // Class students for folder view
   const classStudents = students.filter(s => s.className === selectedClassFolder);
@@ -792,13 +814,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
             </div>
 
             {(() => {
-              const listToDisplay = studentSearchQuery.trim()
+              const normQuery = normalizeDigits(studentSearchQuery).trim().toLowerCase();
+              const listToDisplay = normQuery
                 ? students.filter(s =>
-                    s.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
-                    s.fatherName.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
-                    s.rollNo.includes(studentSearchQuery) ||
-                    s.admissionNo.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
-                    s.className.toLowerCase().includes(studentSearchQuery.toLowerCase())
+                    s.name.toLowerCase().includes(normQuery) ||
+                    s.fatherName.toLowerCase().includes(normQuery) ||
+                    normalizeDigits(s.rollNo).toLowerCase().includes(normQuery) ||
+                    normalizeDigits(s.admissionNo).toLowerCase().includes(normQuery) ||
+                    s.className.toLowerCase().includes(normQuery)
                   )
                 : classStudents;
 
@@ -1140,61 +1163,84 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
           )}
 
           {/* View 2: Monthly Register Matrix */}
-          {attendanceViewMode === 'monthlyRegister' && (
-            <div className="space-y-3">
-              <div className="text-xs text-slate-600">
-                Monthly Register for <strong>{attClass}</strong> (Month: {attDate.substring(0, 7)}):
-              </div>
-              <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#07193B] text-white">
-                    <tr>
-                      <th className="p-2.5">Roll</th>
-                      <th className="p-2.5">Name</th>
-                      {Array.from({ length: 15 }, (_, i) => i + 16).map(d => (
-                        <th key={d} className="p-1 text-center font-mono text-[10px] w-6">{d}</th>
-                      ))}
-                      <th className="p-2.5 text-center">Presents</th>
-                      <th className="p-2.5 text-center">Absents</th>
-                      <th className="p-2.5 text-right">Fine Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {classStudentsForAtt.map(st => {
-                      const stAtt = attendance.filter(a => a.studentId === st.id);
-                      const pCount = stAtt.filter(a => a.status === 'Present').length;
-                      const aCount = stAtt.filter(a => a.status === 'Absent').length;
-                      const fine = aCount * settings.finePerAbsentDay;
+          {attendanceViewMode === 'monthlyRegister' && (() => {
+            const selectedYm = attDate.substring(0, 7);
+            const [yrStr, moStr] = selectedYm.split('-');
+            const daysInMonth = new Date(Number(yrStr) || 2026, Number(moStr) || 11, 0).getDate();
+            const dayNumbers = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+            return (
+              <div className="space-y-3">
+                <div className="text-xs text-slate-600 flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    Monthly Register for <strong>{attClass}</strong> (Month: <strong>{selectedYm}</strong>)
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    P = Present • A = Absent • L = Leave • - = Unmarked
+                  </span>
+                </div>
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#07193B] text-white">
+                      <tr>
+                        <th className="p-2.5 sticky left-0 bg-[#07193B]">Roll</th>
+                        <th className="p-2.5">Name</th>
+                        {dayNumbers.map(d => (
+                          <th key={d} className="p-1 text-center font-mono text-[10px] min-w-[22px]">{d}</th>
+                        ))}
+                        <th className="p-2.5 text-center">P</th>
+                        <th className="p-2.5 text-center">L</th>
+                        <th className="p-2.5 text-center">A</th>
+                        <th className="p-2.5 text-right">Fine Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {classStudentsForAtt.map(st => {
+                        const stMonthAtt = attendance.filter(
+                          a => a.studentId === st.id && (a.month || a.date.substring(0, 7)) === selectedYm
+                        );
+                        const pCount = stMonthAtt.filter(a => a.status === 'Present').length;
+                        const lCount = stMonthAtt.filter(a => a.status === 'Leave').length;
+                        const aCount = stMonthAtt.filter(a => a.status === 'Absent').length;
+                        const fine = stMonthAtt.reduce((sum, a) => sum + (a.fineAmount || 0), 0);
 
-                      return (
-                        <tr key={st.id} className="hover:bg-slate-50">
-                          <td className="p-2.5 font-bold">{st.rollNo}</td>
-                          <td className="p-2.5 font-semibold text-slate-900">{st.name}</td>
-                          {Array.from({ length: 15 }, (_, i) => i + 16).map(d => {
-                            const dateStr = `2026-09-${d < 10 ? '0' + d : d}`;
-                            const rec = attendance.find(a => a.studentId === st.id && a.date === dateStr);
-                            const stLetter = rec ? rec.status.charAt(0) : 'P';
-                            const badgeColor = stLetter === 'P' ? 'text-emerald-700 bg-emerald-50' : stLetter === 'A' ? 'text-red-700 bg-red-100 font-bold' : 'text-amber-700 bg-amber-50';
+                        return (
+                          <tr key={st.id} className="hover:bg-slate-50">
+                            <td className="p-2.5 font-bold sticky left-0 bg-white">{st.rollNo}</td>
+                            <td className="p-2.5 font-semibold text-slate-900 whitespace-nowrap">{st.name}</td>
+                            {dayNumbers.map(d => {
+                              const dateStr = `${selectedYm}-${d < 10 ? '0' + d : d}`;
+                              const rec = stMonthAtt.find(a => a.date === dateStr);
+                              const stLetter = rec ? rec.status.charAt(0) : '-';
+                              const badgeColor =
+                                stLetter === 'P'
+                                  ? 'text-emerald-700 bg-emerald-50 font-bold'
+                                  : stLetter === 'A'
+                                  ? 'text-red-700 bg-red-100 font-bold'
+                                  : stLetter === 'L'
+                                  ? 'text-amber-700 bg-amber-100 font-bold'
+                                  : 'text-slate-400 bg-slate-50';
 
-                            return (
-                              <td key={d} className="p-1 text-center">
-                                <span className={`inline-block w-5 h-5 rounded text-[10px] leading-5 ${badgeColor}`}>
-                                  {stLetter}
-                                </span>
-                              </td>
-                            );
-                          })}
-                          <td className="p-2.5 text-center font-bold text-emerald-700">{pCount}</td>
-                          <td className="p-2.5 text-center font-bold text-red-700">{aCount}</td>
-                          <td className="p-2.5 text-right font-black text-red-800">Rs. {fine}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                              return (
+                                <td key={d} className="p-0.5 text-center">
+                                  <span className={`inline-block w-5 h-5 rounded text-[10px] leading-5 ${badgeColor}`}>
+                                    {stLetter}
+                                  </span>
+                                </td>
+                              );
+                            })}
+                            <td className="p-2.5 text-center font-bold text-emerald-700">{pCount}</td>
+                            <td className="p-2.5 text-center font-bold text-amber-700">{lCount}</td>
+                            <td className="p-2.5 text-center font-bold text-red-700">{aCount}</td>
+                            <td className="p-2.5 text-right font-black text-red-800 whitespace-nowrap">Rs. {fine}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
@@ -1498,6 +1544,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={() => {
+                  recalculateAllFeeFines();
+                  alert('تمام واؤچرز کے غیر حاضری جرمانے حاضری و رخصت ریکارڈ کے مطابق خودکار سنک ہو گئے!');
+                }}
+                className="bg-blue-50 hover:bg-blue-100 text-[#0D285F] font-bold text-xs px-3 py-2 rounded-xl border border-blue-200 transition flex items-center gap-1.5"
+                title="حاضری اور منظور شدہ چھٹیوں کے مطابق جرمانے دوبارہ شمار کریں"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>جرمانے سنک کریں (Sync Fines)</span>
+              </button>
+
+              <button
+                onClick={() => {
                   const dummies = feeRecords.filter(f => isDummyStudent(f));
                   if (dummies.length === 0) {
                     alert('تمام ڈمی اور غیر متعلقہ فیس واؤچرز پہلے سے صاف ہیں۔');
@@ -1513,19 +1571,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
                 <span>ڈمی واؤچرز صاف کریں</span>
               </button>
 
+              <select
+                value={voucherMonth}
+                onChange={(e) => setVoucherMonth(e.target.value)}
+                className="bg-white border border-slate-300 rounded-xl px-2.5 py-2 text-xs font-bold text-[#0D285F]"
+              >
+                {Array.from(
+                  new Set([
+                    voucherMonth,
+                    getCurrentMonthLabel(),
+                    'October 2026',
+                    'November 2026',
+                    'December 2026',
+                    'January 2027'
+                  ])
+                ).map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+
               <button
                 onClick={() => {
-                  const count = generateMonthlyFeeVouchers('September 2026');
-                  alert(`Generated ${count} monthly vouchers for September 2026!`);
+                  const count = generateMonthlyFeeVouchers(voucherMonth);
+                  alert(`Generated ${count} monthly vouchers for ${voucherMonth}!`);
                 }}
                 className="bg-amber-400 hover:bg-amber-300 text-[#07193B] font-bold text-xs px-4 py-2 rounded-xl transition"
               >
-                + Generate September Fee Vouchers
+                + Generate {voucherMonth} Vouchers
               </button>
             </div>
           </div>
 
-          {/* Fee Breakdown Summary for 50 Students */}
+          {/* Fee Breakdown Summary */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
               <span className="text-[11px] font-bold text-slate-500 block">کل رجسٹرڈ طلباء</span>
@@ -1534,11 +1611,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
             </div>
 
             <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
-              <span className="text-[11px] font-bold text-blue-900 block">کل ماہانہ فیس (Total Monthly)</span>
+              <span className="text-[11px] font-bold text-blue-900 block">کل قابل ادا رقم (Tuition + Fines)</span>
               <span className="text-xl font-black text-blue-950 mt-0.5 block">
-                Rs. {totalMonthlyFees.toLocaleString()}
+                Rs. {totalPayableWithFines.toLocaleString()}
               </span>
-              <span className="text-[10px] text-blue-700 font-medium">PG-C4: Rs. 2,000 | C5-C8: Rs. 3,000</span>
+              <span className="text-[10px] text-blue-700 font-medium">
+                فیس: Rs. {totalMonthlyFees.toLocaleString()} + جرمانہ: Rs. {totalFinesAmount.toLocaleString()}
+              </span>
             </div>
 
             <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
@@ -2030,11 +2109,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
             </div>
 
             {/* Absence Fine Rule Settings */}
-            <div className="bg-red-50 border border-red-200 p-4 rounded-xl space-y-2">
+            <div className="bg-red-50 border border-red-200 p-4 rounded-xl space-y-3">
               <label className="block text-xs font-bold text-red-950">
                 Absence Fine Policy (Rs. per unapproved day)
               </label>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <input
                   type="number"
                   value={fineInput}
@@ -2042,19 +2121,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
                   className="w-32 px-3 py-2 text-sm border border-red-300 rounded-lg font-bold bg-white text-red-900"
                 />
                 <span className="text-xs text-red-800">
-                  Current rate: <strong>Rs. {fineInput} per chuti</strong>. Automatically added to fee vouchers.
+                  Current rate: <strong>Rs. {fineInput} per chuti</strong>. Automatically recalculates unpaid fee vouchers.
                 </span>
               </div>
+              <label className="flex items-center gap-2 text-xs text-red-950 font-semibold cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={chargeFineOnLeaveInput}
+                  onChange={(e) => setChargeFineOnLeaveInput(e.target.checked)}
+                  className="rounded border-red-300 text-[#0D285F]"
+                />
+                <span>منظور شدہ چھٹی (Approved Leave) پر بھی جرمانہ عائد کریں (عام حالات میں بند رکھیں - Rs. 0)</span>
+              </label>
             </div>
 
             <button
               onClick={() => {
                 updateSettings({
                   finePerAbsentDay: fineInput,
+                  chargeFineOnApprovedLeave: chargeFineOnLeaveInput,
                   adminPassword: adminPassInput,
                   teacherPassword: teacherGeneralPassInput
                 });
-                alert('Master security settings and passwords updated successfully!');
+                alert('Master security settings, fine rate, and fee vouchers updated successfully!');
               }}
               className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 px-6 py-3 rounded-xl font-bold text-sm shadow transition"
             >
@@ -2628,7 +2717,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
 
       {/* MODAL 7: FEE RECEIPT MODAL */}
       <FeeReceiptModal
-        feeRecord={selectedFeeForReceipt}
+        feeRecord={
+          selectedFeeForReceipt
+            ? feeRecords.find(f => f.id === selectedFeeForReceipt.id) || selectedFeeForReceipt
+            : null
+        }
         onClose={() => {
           setSelectedFeeForReceipt(null);
           setFeeReceiptEditMode(false);

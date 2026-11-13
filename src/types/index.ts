@@ -153,7 +153,9 @@ export interface FeeRecord {
   month: string; // e.g. "September 2026"
   tuitionFee: number;
   absentDays: number;
+  leaveDays?: number;
   fineAmount: number; // absentDays * finePerDay
+  manualFineOverride?: boolean;
   totalPayable: number;
   paidAmount: number;
   balanceRemaining: number;
@@ -262,6 +264,7 @@ export interface SystemSettings {
   adminPassword: string;
   teacherPassword: string;
   finePerAbsentDay: number;
+  chargeFineOnApprovedLeave?: boolean;
   schoolName: string;
   schoolSlogan: string;
   schoolAddress: string;

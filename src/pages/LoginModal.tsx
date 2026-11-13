@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useSchool, isDummyStudent } from '../context/SchoolContext';
 import { SCHOOL_CLASSES } from '../types';
+import { normalizeDigits } from '../utils/schoolSync';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -19,7 +20,7 @@ interface LoginModalProps {
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, initialRole = 'admin' }) => {
-  const { loginAdmin, loginTeacher, loginOrCreateTeacherByName, loginParent, teachers, students, setPortal } = useSchool();
+  const { loginAdmin, loginTeacher, loginParent, teachers, setPortal, syncNowWithCloud } = useSchool();
 
   const [activeRole, setActiveRole] = useState<'admin' | 'teacher' | 'parent'>(initialRole);
   const [adminPassword, setAdminPassword] = useState('');
@@ -28,8 +29,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, initial
   const [parentIdentifier, setParentIdentifier] = useState('');
   const [parentClass, setParentClass] = useState('Play Group');
   const [error, setError] = useState('');
+  const [isCheckingCloud, setIsCheckingCloud] = useState(false);
 
-  // Reset fields when modal opens or initialRole changes
+  // Reset fields and pull latest cloud data when modal opens
   useEffect(() => {
     if (isOpen) {
       setActiveRole(initialRole);
@@ -37,6 +39,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, initial
       setTeacherPassword('');
       setParentIdentifier('');
       setError('');
+      syncNowWithCloud().catch(() => {});
     }
   }, [isOpen, initialRole]);
 
@@ -81,18 +84,43 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, initial
     }
   };
 
-  const handleParentSubmit = (e: React.FormEvent) => {
+  const handleParentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!parentIdentifier.trim()) {
+    const normalizedInput = normalizeDigits(parentIdentifier).trim().toLowerCase();
+    if (!normalizedInput) {
       setError('Please enter Student Roll Number or Admission ID.');
       return;
     }
-    const student = loginParent(parentIdentifier, parentClass);
-    if (student) {
-      onClose();
-    } else {
+
+    setIsCheckingCloud(true);
+    try {
+      const freshStudents = await syncNowWithCloud();
+      const student = loginParent(normalizedInput, parentClass);
+      if (student) {
+        onClose();
+        return;
+      }
+      // Fallback check directly against freshStudents in case state hasn't re-rendered yet
+      const cleanNum = normalizedInput.replace(/^0+/, '');
+      const targetClass = parentClass.trim().toLowerCase();
+      const freshMatch = (freshStudents || []).find(s => {
+        if (isDummyStudent(s)) return false;
+        if ((s.className || '').trim().toLowerCase() !== targetClass) return false;
+        const r = normalizeDigits(s.rollNo || '').trim().toLowerCase();
+        const rNum = r.replace(/^0+/, '');
+        const adm = normalizeDigits(s.admissionNo || '').trim().toLowerCase();
+        return r === normalizedInput || (cleanNum !== '' && rNum === cleanNum) || adm === normalizedInput;
+      });
+      if (freshMatch) {
+        loginParent(freshMatch.rollNo, freshMatch.className);
+        setPortal('PARENT_PORTAL');
+        onClose();
+        return;
+      }
       setError('Student not found. Please check the roll number and class. (طالب علم کا ریکارڈ نہیں ملا۔ براہ کرم کلاس اور رول نمبر درست درج کریں)');
+    } finally {
+      setIsCheckingCloud(false);
     }
   };
 
@@ -321,9 +349,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, initial
               <div className="pt-1">
                 <button
                   type="submit"
-                  className="w-full bg-[#0D285F] hover:bg-[#07193B] text-amber-300 py-3 rounded-xl font-extrabold text-sm shadow transition flex items-center justify-center gap-2 cursor-pointer"
+                  disabled={isCheckingCloud}
+                  className="w-full bg-[#0D285F] hover:bg-[#07193B] text-amber-300 py-3 rounded-xl font-extrabold text-sm shadow transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75"
                 >
-                  <span>بچے کا پورٹل اور فیس رسید دیکھیں (View Portal & Receipt)</span>
+                  <span>
+                    {isCheckingCloud
+                      ? 'ڈیٹا بیس سے ریکارڈ چیک ہو رہا ہے...'
+                      : 'بچے کا پورٹل اور فیس رسید دیکھیں (View Portal & Receipt)'}
+                  </span>
                 </button>
               </div>
             </form>

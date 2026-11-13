@@ -23,6 +23,7 @@ import { useSchool, isDummyStudent } from '../context/SchoolContext';
 import { Student, ClassLevel, SCHOOL_CLASSES, FeeRecord, StudentExamReport } from '../types';
 import { downloadReceiptElementAsImage, generateAndDownloadReceiptCanvas } from '../utils/downloadReceiptImage';
 import { downloadResultCardAsImage, printResultCard } from '../utils/resultCardExport';
+import { normalizeDigits } from '../utils/schoolSync';
 
 interface ParentPortalProps {
   onSelectStudent: (student: Student) => void;
@@ -57,17 +58,19 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
   const [inputRollNo, setInputRollNo] = useState<string>(
     loggedInStudent ? loggedInStudent.rollNo : ''
   );
-  const [searchedStudent, setSearchedStudent] = useState<Student | null>(loggedInStudent);
+  const [searchedStudentId, setSearchedStudentId] = useState<string | null>(
+    loggedInStudent ? loggedInStudent.id : null
+  );
   const [hasSearched, setHasSearched] = useState<boolean>(!!loggedInStudent);
   const [errorMessage, setErrorMessage] = useState<string>('');
 
   // Auto-sync freshest cloud data when Parent opens portal
   useEffect(() => {
-    syncNowWithCloud();
+    syncNowWithCloud().catch(() => {});
   }, []);
 
   const handleResetSearch = () => {
-    setSearchedStudent(null);
+    setSearchedStudentId(null);
     setHasSearched(false);
     setInputRollNo('');
     setErrorMessage('');
@@ -83,59 +86,65 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
 
   const [isSearching, setIsSearching] = useState(false);
 
-  // Handle Search: Searches strictly within selected class, NO unauthorized fallbacks
+  // Handle Search: Pull fresh cloud data directly and search strictly within selected class
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setErrorMessage('');
     setLeaveSubmitted(false);
 
-    const cleanRoll = inputRollNo.trim().toLowerCase();
+    const cleanRoll = normalizeDigits(inputRollNo).trim().toLowerCase();
     if (!cleanRoll) {
       setErrorMessage('Please enter student roll number (براہ کرم طالب علم کا رول نمبر درج فرمائیں)');
-      setSearchedStudent(null);
+      setSearchedStudentId(null);
       setCurrentParentStudentId(null);
       setHasSearched(true);
       return;
     }
 
     setIsSearching(true);
-    // Fetch freshest cloud data right before search to guarantee cross-device sync
+    let latestStudents = validStudents;
     try {
-      await syncNowWithCloud();
+      const pulled = await syncNowWithCloud();
+      if (Array.isArray(pulled) && pulled.length > 0) {
+        latestStudents = pulled.filter(s => !isDummyStudent(s));
+      }
     } catch (err) {}
     setIsSearching(false);
 
     const cleanNum = cleanRoll.replace(/^0+/, '');
     const targetClass = inputClass.trim().toLowerCase();
 
-    // STRICT SEARCH: ONLY in selected class! Never switch to another child in another class!
-    const match = validStudents.find(s => {
+    // STRICT SEARCH: ONLY in selected class using freshly fetched central database
+    const match = latestStudents.find(s => {
       const sClass = (s.className || '').trim().toLowerCase();
       if (sClass !== targetClass) return false;
-      const rollClean = (s.rollNo || '').trim().toLowerCase();
+      const rollClean = normalizeDigits(s.rollNo || '').trim().toLowerCase();
       const rollNum = rollClean.replace(/^0+/, '');
-      const admClean = (s.admissionNo || '').trim().toLowerCase();
+      const admClean = normalizeDigits(s.admissionNo || '').trim().toLowerCase();
       const matchRoll = rollClean === cleanRoll || (cleanNum !== '' && rollNum === cleanNum);
       const matchAdm = admClean === cleanRoll;
       return matchRoll || matchAdm;
     }) || null;
 
     if (match) {
-      setSearchedStudent(match);
+      setSearchedStudentId(match.id);
       setInputClass(match.className);
       setInputRollNo(match.rollNo);
       setCurrentParentStudentId(match.id);
       setHasSearched(true);
       setErrorMessage('');
     } else {
-      setErrorMessage('Student not found. Please check the roll number and class. (طالب علم کا ریکارڈ نہیں ملا۔ براہ کرم کلاس اور رول نمبر درست درج کریں)');
-      setSearchedStudent(null);
+      setErrorMessage('Student not found. Please check the roll number and class.');
+      setSearchedStudentId(null);
       setCurrentParentStudentId(null);
       setHasSearched(true);
     }
   };
 
-  const activeStudent = searchedStudent;
+  // Always derive activeStudent from live context students so edits/payments/attendance reflect immediately
+  const activeStudent = (searchedStudentId
+    ? validStudents.find(s => s.id === searchedStudentId)
+    : loggedInStudent) || null;
   const report = activeStudent ? getStudentFullReport(activeStudent.id) : null;
 
   // Fee Record for Receipt
@@ -148,8 +157,9 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
     month: 'October 2026',
     tuitionFee: activeStudent.monthlyFee,
     absentDays: report.absentDays,
+    leaveDays: report.leaveDays,
     fineAmount: report.totalFineAmount,
-    totalPayable: activeStudent.monthlyFee + report.totalFineAmount,
+    totalPayable: report.totalPayable,
     paidAmount: report.paidAmount,
     balanceRemaining: report.balanceRemaining,
     status: report.balanceRemaining === 0 ? 'Paid' : 'Unpaid',
@@ -231,9 +241,10 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
       `مہینہ: *${studentFeeRecord.month}*\n` +
       `رسید نمبر: *${studentFeeRecord.receiptNo || 'BSS-REC-01'}*\n` +
       `--------------------------------\n` +
-      `ماہانہ ٹیوشن فیس: Rs. ${report.monthlyFee}\n` +
+      `ماہانہ ٹیوشن فیس: Rs. ${studentFeeRecord.tuitionFee}\n` +
+      `منظور شدہ چھٹیاں (Leaves): ${report.leaveDays} دن (کوئی جرمانہ نہیں)\n` +
       `غیر حاضری فائن (${report.absentDays} دن @ Rs. ${finePerDay}): Rs. ${report.totalFineAmount}\n` +
-      `کل واجب الادا فیس: *Rs. ${report.monthlyFee + report.totalFineAmount}*\n` +
+      `کل واجب الادا فیس: *Rs. ${report.totalPayable}*\n` +
       `ادا شدہ رقم: *Rs. ${report.paidAmount}*\n` +
       `بقیہ واجبات: *Rs. ${report.balanceRemaining}*\n` +
       `اسٹیٹس: *${report.balanceRemaining === 0 ? 'ادا شدہ (Paid)' : 'واجب الادا (Unpaid)'}*\n` +
@@ -295,7 +306,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                 value={inputClass}
                 onChange={(e) => {
                   setInputClass(e.target.value);
-                  setSearchedStudent(null);
+                  setSearchedStudentId(null);
                   setCurrentParentStudentId(null);
                   setErrorMessage('');
                   setHasSearched(false);
@@ -319,7 +330,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                 value={inputRollNo}
                 onChange={(e) => {
                   setInputRollNo(e.target.value);
-                  setSearchedStudent(null);
+                  setSearchedStudentId(null);
                   setCurrentParentStudentId(null);
                   setErrorMessage('');
                   setHasSearched(false);
@@ -471,7 +482,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                       <td className="p-3.5 font-bold text-slate-800">ماہانہ ٹیوشن فیس (Monthly Tuition Fee)</td>
                       <td className="p-3.5 text-center text-slate-500 font-medium">ماہ {studentFeeRecord.month}</td>
                       <td className="p-3.5 text-right font-black text-slate-900">
-                        Rs. {report.monthlyFee.toLocaleString()}
+                        Rs. {studentFeeRecord.tuitionFee.toLocaleString()}
                       </td>
                     </tr>
                     <tr>
@@ -480,6 +491,11 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                       </td>
                       <td className="p-3.5 text-center text-slate-500 font-medium">
                         {report.absentDays} دن غیر حاضر (@ Rs. {settings.finePerAbsentDay || 50}/day)
+                        {report.leaveDays > 0 && (
+                          <span className="block text-[11px] text-amber-700 font-semibold mt-0.5">
+                            {report.leaveDays} منظور شدہ چھٹی (No Fine)
+                          </span>
+                        )}
                       </td>
                       <td className="p-3.5 text-right font-black text-red-600">
                         Rs. {report.totalFineAmount.toLocaleString()}
@@ -490,7 +506,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                         کل واجب الادا رقم (Total Payable Fee):
                       </td>
                       <td className="p-3.5 text-right text-base text-[#0D285F]">
-                        Rs. {(report.monthlyFee + report.totalFineAmount).toLocaleString()}
+                        Rs. {report.totalPayable.toLocaleString()}
                       </td>
                     </tr>
                     <tr className="bg-emerald-50/50">
@@ -572,7 +588,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                 {report.attendancePercentage}%
               </span>
               <span className="text-[11px] text-slate-500 font-semibold">
-                {report.presentDays} حاضری / {report.totalWorkingDays} کل دن
+                {report.presentDays} حاضری / {report.leaveDays} رخصت / {report.totalWorkingDays} کل دن
               </span>
             </div>
 
@@ -583,7 +599,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                 Rs. {report.totalFineAmount}
               </span>
               <span className="text-[11px] text-slate-500 font-semibold">
-                {report.absentDays} دن غیر حاضر (@ Rs. {settings.finePerAbsentDay || 50})
+                {report.absentDays} دن غیر حاضر (@ Rs. {settings.finePerAbsentDay || 50}) • {report.leaveDays} چھٹی
               </span>
             </div>
 
@@ -596,7 +612,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                 {report.balanceRemaining === 0 ? '✓ ادا شدہ (Paid)' : `Rs. ${report.balanceRemaining} واجب`}
               </span>
               <span className="text-[11px] text-slate-500 font-semibold">
-                ماہانہ فیس: Rs. {report.monthlyFee}
+                ماہانہ فیس: Rs. {studentFeeRecord.tuitionFee}
               </span>
             </div>
 
