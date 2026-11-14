@@ -16,7 +16,10 @@ import {
   RefreshCw,
   Search,
   Eye,
-  Camera
+  Camera,
+  Wifi,
+  WifiOff,
+  Clock
 } from 'lucide-react';
 import { useSchool } from '../context/SchoolContext';
 import { Student, ClassLevel, SCHOOL_CLASSES, SCHOOL_SUBJECTS } from '../types';
@@ -33,7 +36,9 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
     currentTeacherId,
     students,
     attendance,
-    markClassAttendance,
+    teacherAttendance,
+    markClassAttendanceAsync,
+    markTeacherAttendanceAsync,
     addDailyReport,
     tests,
     addTest,
@@ -44,7 +49,12 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
     setTeacherPassword,
     notices,
     syncNowWithCloud,
-    isCloudSyncing
+    isOnline,
+    isCloudConnected,
+    isCloudSyncing,
+    hasPendingOfflineSync,
+    pendingOfflineCount,
+    lastCloudSyncTime
   } = useSchool();
 
   const teacher = teachers.find(t => t.id === currentTeacherId) || teachers[0];
@@ -57,6 +67,9 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
   const [attDate, setAttDate] = useState(new Date().toISOString().split('T')[0]);
   const [statusMap, setStatusMap] = useState<Record<string, 'Present' | 'Absent' | 'Leave' | 'Late'>>({});
   const [studentFilterQuery, setStudentFilterQuery] = useState('');
+  const [isSavingAttendance, setIsSavingAttendance] = useState(false);
+  const [isSavingTeacherAtt, setIsSavingTeacherAtt] = useState(false);
+  const [attSyncBanner, setAttSyncBanner] = useState<{ type: 'online' | 'offline'; text: string } | null>(null);
 
   // Auto-sync freshest cloud data when teacher opens the portal
   useEffect(() => {
@@ -127,16 +140,55 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
     );
   });
 
-  const handleSaveAttendance = () => {
-    const existingByStudent = new Map(
-      attendance.filter(a => a.date === attDate).map(a => [a.studentId, a.status])
-    );
-    const list = classStudents.map(s => ({
-      studentId: s.id,
-      status: statusMap[s.id] || existingByStudent.get(s.id) || 'Present'
-    }));
-    markClassAttendance(selectedClass, attDate, list);
-    alert(`حاضری برائے ${selectedClass} (${classStudents.length} طلباء) کامیابی سے کلاؤڈ پر محفوظ ہو گئی!`);
+  const handleSaveAttendance = async () => {
+    if (isSavingAttendance || classStudents.length === 0) return;
+    setIsSavingAttendance(true);
+    try {
+      const existingByStudent = new Map(
+        attendance.filter(a => a.date === attDate).map(a => [a.studentId, a.status])
+      );
+      const list = classStudents.map(s => ({
+        studentId: s.id,
+        status: statusMap[s.id] || existingByStudent.get(s.id) || 'Present'
+      }));
+      const res = await markClassAttendanceAsync(selectedClass, attDate, list, {
+        teacherId: teacher?.id,
+        teacherName: teacher?.name || 'Teacher'
+      });
+      if (res.syncedOnline) {
+        const msg = `حاضری برائے ${selectedClass} (${classStudents.length} طلباء) براہِ راست مرکزی آن لائن سرور پر محفوظ ہو گئی! ایڈمن پورٹل پر اب فوری نظر آ رہی ہے۔`;
+        setAttSyncBanner({ type: 'online', text: msg });
+        alert(msg);
+      } else {
+        const msg = `انٹرنیٹ عارضی طور پر بند ہے! ${selectedClass} (${classStudents.length} طلباء) کی حاضری محفوظ کر لی گئی ہے — انٹرنیٹ بحال ہوتے ہی خودکار آن لائن سرور پر اپ لوڈ ہو جائے گی۔`;
+        setAttSyncBanner({ type: 'offline', text: msg });
+        alert(msg);
+      }
+    } finally {
+      setIsSavingAttendance(false);
+    }
+  };
+
+  const handleMarkOwnTeacherAttendance = async (status: 'Present' | 'Leave') => {
+    if (!teacher || isSavingTeacherAtt) return;
+    setIsSavingTeacherAtt(true);
+    try {
+      const res = await markTeacherAttendanceAsync({
+        teacherId: teacher.id,
+        teacherName: teacher.name,
+        date: attDate,
+        month: attDate.substring(0, 7),
+        status
+      });
+      setAttSyncBanner({
+        type: res.syncedOnline ? 'online' : 'offline',
+        text: res.syncedOnline
+          ? `آپ کی (${teacher.name}) تاریخ ${attDate} کی حاضری (${status}) لائیو سرور پر محفوظ ہو گئی۔`
+          : `آپ کی حاضری (${status}) عارضی طور پر محفوظ ہو گئی — انٹرنیٹ آتے ہی سرور پر سنک ہو جائے گی۔`
+      });
+    } finally {
+      setIsSavingTeacherAtt(false);
+    }
   };
 
   const handleSaveDailyReport = (e: React.FormEvent) => {
@@ -296,13 +348,42 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
         </button>
       </div>
 
-      {/* Live Cloud Status Banner */}
-      <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs shadow-sm">
+      {/* Live Cloud & Offline Queue Status Banner */}
+      <div
+        className={`rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs shadow-sm border ${
+          !isOnline || !isCloudConnected
+            ? 'bg-amber-50 border-amber-300'
+            : hasPendingOfflineSync
+            ? 'bg-blue-50 border-blue-300'
+            : 'bg-emerald-50 border-emerald-300'
+        }`}
+      >
         <div className="flex items-center gap-2.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span className="font-extrabold text-emerald-900">
-            کلاؤڈ لائیو منسلک ہے: اسکول میں کل <strong>{students.length}</strong> طلباء درج ہیں۔ تمام ڈیٹا خودکار سنک ہو رہا ہے۔
-          </span>
+          {!isOnline || !isCloudConnected ? (
+            <WifiOff className="w-4 h-4 text-amber-700 flex-shrink-0" />
+          ) : (
+            <Wifi className="w-4 h-4 text-emerald-700 flex-shrink-0" />
+          )}
+          <div>
+            <span
+              className={`font-extrabold block ${
+                !isOnline || !isCloudConnected
+                  ? 'text-amber-900'
+                  : hasPendingOfflineSync
+                  ? 'text-blue-900'
+                  : 'text-emerald-900'
+              }`}
+            >
+              {!isOnline || !isCloudConnected
+                ? `آف لائن موڈ: انٹرنیٹ دستیاب نہیں — حاضری محفوظ رہے گی اور انٹرنیٹ آتے ہی خودکار سرور پر سنک ہو گی${
+                    pendingOfflineCount > 0 ? ` (${pendingOfflineCount} ریکارڈز قطار میں)` : ''
+                  }`
+                : hasPendingOfflineSync
+                ? `انٹرنیٹ بحال — ${pendingOfflineCount > 0 ? `${pendingOfflineCount} ` : ''}زیرِ التواء حاضری کلاؤڈ پر سنک ہو رہی ہے...`
+                : `کلاؤڈ لائیو منسلک ہے: اسکول میں کل ${students.length} طلباء درج ہیں۔ حاضری فوری مرکزی سرور پر محفوظ ہوتی ہے` +
+                  (lastCloudSyncTime ? ` • آخری سنک: ${lastCloudSyncTime}` : '')}
+            </span>
+          </div>
         </div>
         <button
           type="button"
@@ -311,7 +392,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
           className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 font-bold px-3 py-1.5 rounded-lg text-xs transition flex items-center gap-1.5 shadow cursor-pointer active:scale-95 disabled:opacity-70"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-spin' : ''}`} />
-          <span>{isCloudSyncing ? 'ریفریش ہو رہا ہے...' : 'نیا ڈیٹا ریفریش کریں (Refresh)'}</span>
+          <span>{isCloudSyncing ? 'سنک ہو رہا ہے...' : 'ابھی سنک / ریفریش کریں'}</span>
         </button>
       </div>
 
@@ -341,8 +422,97 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
       </div>
 
       {/* 1: ATTENDANCE */}
-      {activeTab === 'attendance' && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-6">
+      {activeTab === 'attendance' && (() => {
+        const myTodayAtt = teacher
+          ? teacherAttendance.find(a => a.teacherId === teacher.id && a.date === attDate)
+          : undefined;
+        const classDayMarkers = attendance.filter(
+          a => a.className === selectedClass && a.date === attDate && a.markedBy
+        );
+        const lastMarker = classDayMarkers[0];
+
+        return (
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-5">
+          {/* Compact Teacher Self-Attendance Check-In Strip */}
+          {teacher && (
+            <div className="bg-gradient-to-r from-[#0D285F]/5 to-amber-50 border border-[#0D285F]/20 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 text-xs">
+                <User className="w-4 h-4 text-[#0D285F] flex-shrink-0" />
+                <div>
+                  <span className="font-bold text-[#0D285F]">
+                    استاد کی اپنی حاضری ({teacher.name} • {attDate}):
+                  </span>{' '}
+                  <span
+                    className={`inline-block ml-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                      myTodayAtt?.status === 'Present'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : myTodayAtt?.status === 'Leave'
+                        ? 'bg-amber-100 text-amber-800'
+                        : myTodayAtt?.status === 'Absent'
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {myTodayAtt ? myTodayAtt.status : 'Not Marked Yet (ابھی نہیں لگی)'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isSavingTeacherAtt}
+                  onClick={() => handleMarkOwnTeacherAttendance('Present')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm disabled:opacity-60 ${
+                    myTodayAtt?.status === 'Present'
+                      ? 'bg-emerald-700 text-white ring-2 ring-emerald-300'
+                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  }`}
+                >
+                  ✓ میں حاضر ہوں (Present)
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingTeacherAtt}
+                  onClick={() => handleMarkOwnTeacherAttendance('Leave')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm disabled:opacity-60 ${
+                    myTodayAtt?.status === 'Leave'
+                      ? 'bg-amber-600 text-white ring-2 ring-amber-300'
+                      : 'bg-amber-500 hover:bg-amber-600 text-white'
+                  }`}
+                >
+                  رخصت (Leave)
+                </button>
+              </div>
+            </div>
+          )}
+
+          {attSyncBanner && (
+            <div
+              className={`rounded-xl p-3 text-xs font-bold flex items-center justify-between gap-2 border ${
+                attSyncBanner.type === 'online'
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                  : 'bg-amber-50 border-amber-300 text-amber-900'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {attSyncBanner.type === 'online' ? (
+                  <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                ) : (
+                  <Clock className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                )}
+                <span>{attSyncBanner.text}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAttSyncBanner(null)}
+                className="text-slate-500 hover:text-slate-800"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* Class Selection Tabs */}
           <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -350,9 +520,16 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
                 <GraduationCap className="w-4 h-4 text-amber-500" />
                 <span>کلاس منتخب کریں (Select Class for Attendance):</span>
               </span>
-              <span className="text-xs text-slate-600 font-semibold">
-                حاضری برائے کلاس: <strong className="text-[#0D285F] text-sm">{selectedClass}</strong> ({classStudents.length} طلباء)
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {lastMarker?.markedBy && (
+                  <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
+                    ✓ Marked by {lastMarker.markedBy}
+                  </span>
+                )}
+                <span className="text-xs text-slate-600 font-semibold">
+                  حاضری برائے کلاس: <strong className="text-[#0D285F] text-sm">{selectedClass}</strong> ({classStudents.length} طلباء)
+                </span>
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-2 pt-1">
@@ -588,19 +765,27 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
             </div>
           )}
 
-          <div className="flex justify-between items-center pt-2">
+          <div className="flex flex-wrap justify-between items-center gap-3 pt-2">
             <span className="text-xs text-slate-500">
-              حاضری لگانے کے بعد بٹن پر کلک کرنا لازمی ہے۔
+              حاضری لگانے کے بعد بٹن پر کلک کریں — آن لائن ہونے پر فوری ایڈمن پورٹل پر اپ ڈیٹ ہو گی اور آف لائن ہونے پر خودکار محفوظ رہ کر بعد میں سنک ہو گی۔
             </span>
             <button
+              type="button"
+              disabled={isSavingAttendance || classStudents.length === 0}
               onClick={handleSaveAttendance}
-              className="bg-[#0D285F] hover:bg-[#07193B] text-white px-7 py-2.5 rounded-xl font-bold text-sm shadow transition"
+              className="bg-[#0D285F] hover:bg-[#07193B] disabled:opacity-60 text-white px-7 py-2.5 rounded-xl font-bold text-sm shadow transition flex items-center gap-2"
             >
-              Save Attendance (حاضری محفوظ کریں)
+              {isSavingAttendance && <RefreshCw className="w-4 h-4 animate-spin" />}
+              <span>
+                {isSavingAttendance
+                  ? 'کلاؤڈ پر محفوظ ہو رہا ہے...'
+                  : 'Save Attendance Online (حاضری محفوظ کریں)'}
+              </span>
             </button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* REGISTERED STUDENTS LIST */}
       {activeTab === 'students_list' && (

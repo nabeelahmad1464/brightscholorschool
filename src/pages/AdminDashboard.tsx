@@ -97,7 +97,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
     teacherSalaryPayments,
     toggleTeacherSalaryPayment,
     markClassAttendance,
+    markClassAttendanceAsync,
     markTeacherAttendance,
+    markTeacherAttendanceAsync,
     updateLeaveStatus,
     addFeeRecord,
     deleteFeeRecord,
@@ -114,9 +116,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
     updateSettings,
     resetAllDataToZero,
     getStudentFullReport,
+    syncNowWithCloud,
     forceSyncAllToCloud,
+    isOnline,
     isCloudConnected,
     isCloudSyncing,
+    hasPendingOfflineSync,
+    pendingOfflineCount,
     lastCloudSyncTime,
     exportAllSchoolData,
     importSchoolData
@@ -177,8 +183,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
   // Class-wise Attendance Marker state
   const [attDate, setAttDate] = useState(new Date().toISOString().split('T')[0]);
   const [attClass, setAttClass] = useState<ClassLevel>('Class 5');
-  const [attendanceViewMode, setAttendanceViewMode] = useState<'daily' | 'monthlyRegister'>('daily');
+  const [attendanceViewMode, setAttendanceViewMode] = useState<'daily' | 'monthlyRegister' | 'liveOverview'>('liveOverview');
   const [tempStatusMap, setTempStatusMap] = useState<Record<string, 'Present' | 'Absent' | 'Leave' | 'Late'>>({});
+  const [isSavingAttendance, setIsSavingAttendance] = useState(false);
 
   // Fee payment modal & Receipt
   const [paymentFeeId, setPaymentFeeId] = useState<string | null>(null);
@@ -423,16 +430,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
   };
 
   // Handlers for Attendance
-  const handleSaveAttendance = () => {
-    const list = classStudentsForAtt.map(s => ({
-      studentId: s.id,
-      status: tempStatusMap[s.id] ||
-        attendance.find(a => a.studentId === s.id && a.date === attDate)?.status ||
-        'Present'
-    }));
+  const handleSaveAttendance = async () => {
+    if (isSavingAttendance) return;
+    setIsSavingAttendance(true);
+    try {
+      const list = classStudentsForAtt.map(s => ({
+        studentId: s.id,
+        status: tempStatusMap[s.id] ||
+          attendance.find(a => a.studentId === s.id && a.date === attDate)?.status ||
+          'Present'
+      }));
 
-    markClassAttendance(attClass, attDate, list);
-    alert(`Class ${attClass} attendance on ${attDate} successfully recorded! Absence fine (Rs. ${settings.finePerAbsentDay}/day) calculated.`);
+      const res = await markClassAttendanceAsync(attClass, attDate, list, {
+        teacherId: 'admin',
+        teacherName: 'Principal / Admin'
+      });
+      if (res.syncedOnline) {
+        alert(`Class ${attClass} attendance on ${attDate} saved to the online database! Absence fine (Rs. ${settings.finePerAbsentDay}/day) calculated.`);
+      } else {
+        alert(`Offline mode: Class ${attClass} attendance on ${attDate} was saved locally and queued to sync automatically as soon as internet reconnects.`);
+      }
+    } finally {
+      setIsSavingAttendance(false);
+    }
   };
 
   const handleMarkAll = (status: 'Present' | 'Absent' | 'Leave') => {
@@ -1018,14 +1038,64 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h3 className="font-bold text-slate-900 text-base">Class-Wise Attendance Register</h3>
-              <p className="text-xs text-slate-500">
-                Complete class attendance sheet with unapproved absence fines (Rs. {settings.finePerAbsentDay}/day).
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-bold text-slate-900 text-base">Class-Wise &amp; Teacher Attendance Register</h3>
+                <span
+                  className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                    !isOnline || !isCloudConnected
+                      ? 'bg-amber-50 text-amber-800 border-amber-300'
+                      : hasPendingOfflineSync
+                      ? 'bg-blue-50 text-blue-800 border-blue-300'
+                      : 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                  }`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      !isOnline || !isCloudConnected
+                        ? 'bg-amber-500'
+                        : 'bg-emerald-500 animate-pulse'
+                    }`}
+                  ></span>
+                  <span>
+                    {!isOnline || !isCloudConnected
+                      ? `Offline Queue (${pendingOfflineCount})`
+                      : 'Live Auto-Sync (3s)'}
+                  </span>
+                </span>
+                {lastCloudSyncTime && (
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    Last sync: {lastCloudSyncTime}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Live updates from all Teacher mobile portals • Absence fine: Rs. {settings.finePerAbsentDay}/day.
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
+                type="button"
+                onClick={() => syncNowWithCloud()}
+                disabled={isCloudSyncing}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-sm disabled:opacity-70"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-spin' : ''}`} />
+                <span>Refresh Live</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAttendanceViewMode('liveOverview')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  attendanceViewMode === 'liveOverview'
+                    ? 'bg-[#0D285F] text-amber-300 shadow-sm'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                Live Class &amp; Teacher Overview (اساتذہ و کلاس حاضری)
+              </button>
+              <button
+                type="button"
                 onClick={() => setAttendanceViewMode('daily')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
                   attendanceViewMode === 'daily'
@@ -1036,6 +1106,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
                 Daily Marking Sheet
               </button>
               <button
+                type="button"
                 onClick={() => setAttendanceViewMode('monthlyRegister')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
                   attendanceViewMode === 'monthlyRegister'
@@ -1048,73 +1119,107 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
             </div>
           </div>
 
-          {/* Controls: Class Picker & Date Picker */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Select Class</label>
-              <select
-                value={attClass}
-                onChange={(e) => setAttClass(e.target.value as ClassLevel)}
-                className="w-full px-3 py-2 text-sm border rounded-lg bg-white font-medium outline-none"
-              >
-                {SCHOOL_CLASSES.map(cls => (
-                  <option key={cls} value={cls}>{cls}</option>
-                ))}
-              </select>
+          {/* Controls: Date Picker (Live Overview) vs Class + Date + Bulk Actions */}
+          {attendanceViewMode === 'liveOverview' ? (
+            <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-bold text-slate-700">Attendance Date (تاریخ):</label>
+                <input
+                  type="date"
+                  value={attDate}
+                  onChange={(e) => setAttDate(e.target.value)}
+                  className="px-3 py-1.5 text-sm border rounded-lg bg-white outline-none font-medium"
+                />
+              </div>
+              <span className="text-xs text-slate-600">
+                Showing live teacher &amp; class-wise attendance across all classes for <strong>{attDate}</strong>
+              </span>
             </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Select Class</label>
+                  <select
+                    value={attClass}
+                    onChange={(e) => setAttClass(e.target.value as ClassLevel)}
+                    className="w-full px-3 py-2 text-sm border rounded-lg bg-white font-medium outline-none"
+                  >
+                    {SCHOOL_CLASSES.map(cls => (
+                      <option key={cls} value={cls}>{cls}</option>
+                    ))}
+                  </select>
+                </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Date</label>
-              <input
-                type="date"
-                value={attDate}
-                onChange={(e) => setAttDate(e.target.value)}
-                className="w-full px-3 py-2 text-sm border rounded-lg bg-white outline-none"
-              />
-            </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={attDate}
+                    onChange={(e) => setAttDate(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border rounded-lg bg-white outline-none"
+                  />
+                </div>
 
-            <div className="flex items-end gap-2">
-              <button
-                type="button"
-                onClick={() => handleMarkAll('Present')}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-2 rounded-lg transition"
-              >
-                All Present
-              </button>
-              <button
-                type="button"
-                onClick={() => handleMarkAll('Absent')}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2 px-2 rounded-lg transition"
-              >
-                All Absent
-              </button>
-            </div>
-          </div>
+                <div className="flex items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleMarkAll('Present')}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-2 rounded-lg transition"
+                  >
+                    All Present
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleMarkAll('Absent')}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2 px-2 rounded-lg transition"
+                  >
+                    All Absent
+                  </button>
+                </div>
+              </div>
 
-          {/* Metrics summary banner for this class & date */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl text-center">
-              <span className="text-[11px] text-blue-700 font-bold block">Class Strength</span>
-              <span className="text-xl font-black text-blue-900">{classStudentsForAtt.length}</span>
-            </div>
-            <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl text-center">
-              <span className="text-[11px] text-emerald-700 font-bold block">Present</span>
-              <span className="text-xl font-black text-emerald-900">{presentCount}</span>
-            </div>
-            <div className="bg-red-50 border border-red-200 p-3 rounded-xl text-center">
-              <span className="text-[11px] text-red-700 font-bold block">Absent</span>
-              <span className="text-xl font-black text-red-900">{absentCount}</span>
-              <span className="text-[10px] text-red-600 block">(Fine: Rs. {absentCount * settings.finePerAbsentDay})</span>
-            </div>
-            <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-center">
-              <span className="text-[11px] text-amber-700 font-bold block">On Leave</span>
-              <span className="text-xl font-black text-amber-900">{leaveCount}</span>
-            </div>
-          </div>
+              {/* Metrics summary banner for this class & date */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl text-center">
+                  <span className="text-[11px] text-blue-700 font-bold block">Class Strength</span>
+                  <span className="text-xl font-black text-blue-900">{classStudentsForAtt.length}</span>
+                </div>
+                <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl text-center">
+                  <span className="text-[11px] text-emerald-700 font-bold block">Present</span>
+                  <span className="text-xl font-black text-emerald-900">{presentCount}</span>
+                </div>
+                <div className="bg-red-50 border border-red-200 p-3 rounded-xl text-center">
+                  <span className="text-[11px] text-red-700 font-bold block">Absent</span>
+                  <span className="text-xl font-black text-red-900">{absentCount}</span>
+                  <span className="text-[10px] text-red-600 block">(Fine: Rs. {absentCount * settings.finePerAbsentDay})</span>
+                </div>
+                <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-center">
+                  <span className="text-[11px] text-amber-700 font-bold block">On Leave</span>
+                  <span className="text-xl font-black text-amber-900">{leaveCount}</span>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* View 1: Daily Sheet */}
-          {attendanceViewMode === 'daily' && (
+          {attendanceViewMode === 'daily' && (() => {
+            const markedEntry = dayRecords.find(r => r.markedBy);
+            return (
             <div className="space-y-4">
+              {markedEntry?.markedBy && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2 text-xs text-emerald-900 font-semibold flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    ✓ {attClass} attendance on {attDate} recorded by <strong>{markedEntry.markedBy}</strong>
+                  </span>
+                  {markedEntry.markedAt && (
+                    <span className="text-[11px] text-emerald-700 font-mono">
+                      Synced at {new Date(markedEntry.markedAt).toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
+              )}
+
               <div className="border border-slate-200 rounded-xl overflow-hidden">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-[#07193B] text-white">
@@ -1181,14 +1286,244 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
 
               <div className="flex justify-end">
                 <button
+                  type="button"
+                  disabled={isSavingAttendance || classStudentsForAtt.length === 0}
                   onClick={handleSaveAttendance}
-                  className="bg-[#0D285F] hover:bg-[#07193B] text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow transition"
+                  className="bg-[#0D285F] hover:bg-[#07193B] disabled:opacity-60 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow transition flex items-center gap-2"
                 >
-                  Save Class Attendance & Record Fines
+                  {isSavingAttendance && <RefreshCw className="w-4 h-4 animate-spin" />}
+                  <span>
+                    {isSavingAttendance
+                      ? 'Saving to Online Server...'
+                      : 'Save Class Attendance & Record Fines'}
+                  </span>
                 </button>
               </div>
             </div>
-          )}
+            );
+          })()}
+
+          {/* View 3: Live Teacher & Class-Wise Attendance Overview */}
+          {attendanceViewMode === 'liveOverview' && (() => {
+            const activeClasses = SCHOOL_CLASSES.filter(cls =>
+              students.some(s => s.className === cls && s.isActive)
+            );
+            const allDayAtt = attendance.filter(a => a.date === attDate);
+            const allDayByStudent = new Map(allDayAtt.map(a => [a.studentId, a]));
+
+            let schoolMarkedClasses = 0;
+            let schoolPresent = 0;
+            let schoolAbsent = 0;
+            let schoolLeave = 0;
+
+            const classSummaries = activeClasses.map(cls => {
+              const clsStudents = students.filter(s => s.className === cls && s.isActive);
+              const clsAtt = clsStudents.map(st => ({ st, rec: allDayByStudent.get(st.id) }));
+              const markedCount = clsAtt.filter(x => Boolean(x.rec)).length;
+              if (markedCount > 0) schoolMarkedClasses++;
+
+              const presentList = clsAtt.filter(x => x.rec?.status === 'Present');
+              const absentList = clsAtt.filter(x => x.rec?.status === 'Absent');
+              const leaveList = clsAtt.filter(x => x.rec?.status === 'Leave');
+              schoolPresent += presentList.length;
+              schoolAbsent += absentList.length;
+              schoolLeave += leaveList.length;
+
+              const markerRec = clsAtt.find(x => x.rec?.markedBy)?.rec;
+              return {
+                cls,
+                total: clsStudents.length,
+                markedCount,
+                presentCount: presentList.length,
+                absentCount: absentList.length,
+                leaveCount: leaveList.length,
+                absentStudents: absentList.map(x => `${x.st.name} (#${x.st.rollNo})`),
+                markedBy: markerRec?.markedBy || (markedCount > 0 ? 'Staff' : null),
+                markedAt: markerRec?.markedAt
+              };
+            });
+
+            const teachersPresentCount = teachers.filter(
+              t => teacherAttendance.find(a => a.teacherId === t.id && a.date === attDate)?.status === 'Present'
+            ).length;
+
+            return (
+              <div className="space-y-6">
+                {/* School-wide live date stats */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl text-center">
+                    <span className="text-[11px] text-blue-700 font-bold block">Classes Marked ({attDate})</span>
+                    <span className="text-xl font-black text-blue-900">
+                      {schoolMarkedClasses} / {activeClasses.length}
+                    </span>
+                  </div>
+                  <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl text-center">
+                    <span className="text-[11px] text-emerald-700 font-bold block">Total Present Students</span>
+                    <span className="text-xl font-black text-emerald-900">{schoolPresent}</span>
+                  </div>
+                  <div className="bg-red-50 border border-red-200 p-3 rounded-xl text-center">
+                    <span className="text-[11px] text-red-700 font-bold block">Total Absent Students</span>
+                    <span className="text-xl font-black text-red-900">{schoolAbsent}</span>
+                  </div>
+                  <div className="bg-indigo-50 border border-indigo-200 p-3 rounded-xl text-center">
+                    <span className="text-[11px] text-indigo-700 font-bold block">Teachers Present</span>
+                    <span className="text-xl font-black text-indigo-900">
+                      {teachersPresentCount} / {teachers.length}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Section A: Each Teacher's Attendance */}
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                      <UserCheck className="w-4 h-4 text-[#0D285F]" />
+                      <span>Each Teacher&apos;s Attendance ({attDate})</span>
+                    </h4>
+                    <span className="text-[11px] text-slate-500">
+                      Synced directly from Teacher Portal &amp; Admin actions
+                    </span>
+                  </div>
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#07193B] text-white">
+                      <tr>
+                        <th className="p-3">Teacher Name</th>
+                        <th className="p-3">Assigned Classes</th>
+                        <th className="p-3">Current Status</th>
+                        <th className="p-3">Time</th>
+                        <th className="p-3 text-center">Quick Mark</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {teachers.map(t => {
+                        const rec = teacherAttendance.find(a => a.teacherId === t.id && a.date === attDate);
+                        const status = rec?.status;
+                        return (
+                          <tr key={t.id} className="hover:bg-slate-50">
+                            <td className="p-3 font-bold text-slate-900">{t.name}</td>
+                            <td className="p-3 text-slate-600">{t.assignedClasses}</td>
+                            <td className="p-3">
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                                  status === 'Present'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : status === 'Absent'
+                                    ? 'bg-red-100 text-red-800'
+                                    : status === 'Leave'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-slate-100 text-slate-500'
+                                }`}
+                              >
+                                {status || 'Not Marked'}
+                              </span>
+                            </td>
+                            <td className="p-3 text-[11px] text-slate-500 font-mono">
+                              {rec?.markedAt ? new Date(rec.markedAt).toLocaleTimeString() : '—'}
+                            </td>
+                            <td className="p-3">
+                              <div className="flex justify-center gap-1.5">
+                                {(['Present', 'Absent', 'Leave'] as const).map(stOpt => (
+                                  <button
+                                    key={stOpt}
+                                    type="button"
+                                    onClick={() =>
+                                      markTeacherAttendanceAsync({
+                                        teacherId: t.id,
+                                        teacherName: t.name,
+                                        date: attDate,
+                                        month: attDate.substring(0, 7),
+                                        status: stOpt
+                                      })
+                                    }
+                                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition ${
+                                      status === stOpt
+                                        ? stOpt === 'Present'
+                                          ? 'bg-emerald-600 text-white'
+                                          : stOpt === 'Absent'
+                                          ? 'bg-red-600 text-white'
+                                          : 'bg-amber-500 text-white'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    }`}
+                                  >
+                                    {stOpt}
+                                  </button>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Section B: Class-Wise Present & Absent Breakdown */}
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="font-bold text-slate-900 text-sm">
+                      Class-Wise Attendance Overview ({attDate})
+                    </h4>
+                    <span className="text-[11px] text-slate-500">
+                      Present, Absent &amp; Leave students across all classes
+                    </span>
+                  </div>
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#07193B] text-white">
+                      <tr>
+                        <th className="p-3">Class</th>
+                        <th className="p-3 text-center">Students</th>
+                        <th className="p-3 text-center">Present</th>
+                        <th className="p-3 text-center">Absent</th>
+                        <th className="p-3 text-center">Leave</th>
+                        <th className="p-3">Absent Students / Marked By</th>
+                        <th className="p-3 text-right">Sheet</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {classSummaries.map(row => (
+                        <tr key={row.cls} className="hover:bg-slate-50">
+                          <td className="p-3 font-bold text-[#0D285F]">{row.cls}</td>
+                          <td className="p-3 text-center font-semibold">{row.total}</td>
+                          <td className="p-3 text-center font-bold text-emerald-700">{row.presentCount}</td>
+                          <td className="p-3 text-center font-bold text-red-700">{row.absentCount}</td>
+                          <td className="p-3 text-center font-bold text-amber-700">{row.leaveCount}</td>
+                          <td className="p-3">
+                            {row.markedCount === 0 ? (
+                              <span className="text-[11px] text-slate-400 italic">Pending today</span>
+                            ) : (
+                              <div className="space-y-0.5">
+                                <div className="text-[11px] font-semibold text-emerald-800">
+                                  ✓ Marked by {row.markedBy}
+                                  {row.markedAt ? ` (${new Date(row.markedAt).toLocaleTimeString()})` : ''}
+                                </div>
+                                {row.absentStudents.length > 0 && (
+                                  <div className="text-[11px] text-red-700 font-semibold">
+                                    Absent: {row.absentStudents.join(', ')}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAttClass(row.cls);
+                                setAttendanceViewMode('daily');
+                              }}
+                              className="bg-[#0D285F] hover:bg-[#07193B] text-amber-300 px-2.5 py-1 rounded-lg text-[11px] font-bold"
+                            >
+                              Open Sheet
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* View 2: Monthly Register Matrix */}
           {attendanceViewMode === 'monthlyRegister' && (() => {

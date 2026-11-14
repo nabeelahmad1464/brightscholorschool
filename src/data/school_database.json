@@ -1,22 +1,6 @@
 {
   "students": [
     {
-      "admissionNo": "BSS-0338",
-      "rollNo": "01",
-      "name": "Maryam",
-      "fatherName": "Qaiser",
-      "className": "Class 4",
-      "dob": "2016-04-10",
-      "contactNo": "0302-5053993",
-      "whatsappNo": "0302-5053993",
-      "address": "Chak No. 47 GB, Samundri",
-      "admissionDate": "2026-11-14",
-      "gender": "Male",
-      "monthlyFee": 2000,
-      "isActive": true,
-      "id": "s-1794675390356"
-    },
-    {
       "admissionNo": "BSS-9348",
       "rollNo": "04",
       "name": "Mehak",
@@ -847,6 +831,22 @@
       "monthlyFee": 2000,
       "isActive": true,
       "id": "s-1793961260492"
+    },
+    {
+      "admissionNo": "BSS-5740",
+      "rollNo": "01",
+      "name": "Maryam",
+      "fatherName": "Qaiser mehmood",
+      "className": "Class 4",
+      "dob": "2016-04-10",
+      "contactNo": "0302-5053993",
+      "whatsappNo": "0302-5053993",
+      "address": "Chak No. 47 GB, Samundri",
+      "admissionDate": "2026-11-14",
+      "gender": "Male",
+      "monthlyFee": 2000,
+      "isActive": true,
+      "id": "s-1794677175743-tjw4"
     }
   ],
   "teachers": [
@@ -938,23 +938,6 @@
   "teacherAttendance": [],
   "leaves": [],
   "feeRecords": [
-    {
-      "id": "fee-1794675390360",
-      "studentId": "s-1794675390356",
-      "studentName": "Maryam",
-      "fatherName": "Qaiser",
-      "className": "Class 4",
-      "month": "October 2026",
-      "tuitionFee": 2000,
-      "absentDays": 0,
-      "leaveDays": 0,
-      "fineAmount": 0,
-      "totalPayable": 2000,
-      "paidAmount": 0,
-      "balanceRemaining": 2000,
-      "status": "Unpaid",
-      "receiptNo": "REC-BSS-0360"
-    },
     {
       "id": "fee-1794562666399-54023",
       "studentId": "s-1793963654023",
@@ -1856,6 +1839,23 @@
       "status": "Unpaid",
       "receiptNo": "REC-BSS-4028",
       "leaveDays": 0
+    },
+    {
+      "id": "fee-1794677175743-2esu",
+      "studentId": "s-1794677175743-tjw4",
+      "studentName": "Maryam",
+      "fatherName": "Qaiser mehmood",
+      "className": "Class 4",
+      "month": "October 2026",
+      "tuitionFee": 2000,
+      "absentDays": 0,
+      "leaveDays": 0,
+      "fineAmount": 0,
+      "totalPayable": 2000,
+      "paidAmount": 0,
+      "balanceRemaining": 2000,
+      "status": "Unpaid",
+      "receiptNo": "REC-BSS-5743"
     }
   ],
   "dailyReports": [],
@@ -1910,5 +1910,5 @@
   "salaryTransactions": [],
   "teacherSalaryPayments": [],
   "deletedIds": [],
-  "updatedAt": "2026-11-14T16:57:37.008Z"
+  "updatedAt": "2026-11-14T17:26:16.902Z"
 }

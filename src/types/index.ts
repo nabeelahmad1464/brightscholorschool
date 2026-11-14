@@ -119,6 +119,9 @@ export interface StudentAttendance {
   month: string; // YYYY-MM
   status: AttendanceStatus;
   fineAmount: number;
+  markedBy?: string;
+  markedByTeacherId?: string;
+  markedAt?: string;
 }
 
 export interface TeacherAttendance {
@@ -128,6 +131,7 @@ export interface TeacherAttendance {
   date: string;
   month: string;
   status: AttendanceStatus;
+  markedAt?: string;
 }
 
 export interface LeaveRequest {

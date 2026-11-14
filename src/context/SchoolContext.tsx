@@ -119,8 +119,22 @@ interface SchoolContextType {
   toggleTeacherSalaryPayment: (teacherId: string, month: string, amount: number) => void;
 
   markStudentAttendance: (record: Omit<StudentAttendance, 'id'>) => void;
-  markClassAttendance: (className: string, date: string, records: { studentId: string; status: 'Present' | 'Absent' | 'Leave' | 'Late' }[]) => void;
+  markClassAttendance: (
+    className: string,
+    date: string,
+    records: { studentId: string; status: 'Present' | 'Absent' | 'Leave' | 'Late' }[],
+    markedBy?: { teacherId?: string; teacherName?: string }
+  ) => void;
+  markClassAttendanceAsync: (
+    className: string,
+    date: string,
+    records: { studentId: string; status: 'Present' | 'Absent' | 'Leave' | 'Late' }[],
+    markedBy?: { teacherId?: string; teacherName?: string }
+  ) => Promise<{ success: boolean; syncedOnline: boolean }>;
   markTeacherAttendance: (record: Omit<TeacherAttendance, 'id'>) => void;
+  markTeacherAttendanceAsync: (
+    record: Omit<TeacherAttendance, 'id'>
+  ) => Promise<{ success: boolean; syncedOnline: boolean }>;
 
   submitLeave: (leave: Omit<LeaveRequest, 'id' | 'appliedDate'>) => void;
   updateLeaveStatus: (id: string, status: 'Approved' | 'Rejected') => void;
@@ -158,8 +172,11 @@ interface SchoolContextType {
   importSchoolData: (jsonString: string) => { success: boolean; studentCount: number; message: string };
 
   // Real-Time Cloud Database Status
+  isOnline: boolean;
   isCloudConnected: boolean;
   isCloudSyncing: boolean;
+  hasPendingOfflineSync: boolean;
+  pendingOfflineCount: number;
   lastCloudSyncTime: string | null;
   syncNowWithCloud: () => Promise<Student[]>;
   forceSyncAllToCloud: () => Promise<{ success: boolean; studentCount: number; message: string }>;
@@ -348,14 +365,58 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Real-Time Global Multi-Device Cloud Database Synchronization
   const GLOBAL_CLOUD_ENDPOINT_1 = 'https://extendsclass.com/api/json-storage/bin/bbedaaf';
   const GLOBAL_CLOUD_ENDPOINT_2 = 'https://extendsclass.com/api/json-storage/bin/dbabccb';
+  const [isOnline, setIsOnline] = useState<boolean>(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
   const [isCloudConnected, setIsCloudConnected] = useState<boolean>(true);
   const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
   const [lastCloudSyncTime, setLastCloudSyncTime] = useState<string | null>(null);
 
+  // Persistent Offline Queue (survives browser reloads/logouts if connectivity drops mid-marking)
+  const [pendingAttQueue, setPendingAttQueue] = useState<StudentAttendance[]>(() =>
+    loadFromStorage<StudentAttendance[]>('pending_att_queue', [])
+  );
+  const [pendingTeacherAttQueue, setPendingTeacherAttQueue] = useState<TeacherAttendance[]>(() =>
+    loadFromStorage<TeacherAttendance[]>('pending_teacher_att_queue', [])
+  );
+  const [pendingGeneralSync, setPendingGeneralSync] = useState<boolean>(() =>
+    loadFromStorage<boolean>('pending_sync', false)
+  );
+
+  const pendingAttQueueRef = React.useRef<StudentAttendance[]>(pendingAttQueue);
+  const pendingTeacherAttQueueRef = React.useRef<TeacherAttendance[]>(pendingTeacherAttQueue);
+  const pendingGeneralSyncRef = React.useRef<boolean>(pendingGeneralSync);
+  pendingAttQueueRef.current = pendingAttQueue;
+  pendingTeacherAttQueueRef.current = pendingTeacherAttQueue;
+  pendingGeneralSyncRef.current = pendingGeneralSync;
+
+  const hasPendingOfflineSync =
+    pendingGeneralSync || pendingAttQueue.length > 0 || pendingTeacherAttQueue.length > 0;
+  const pendingOfflineCount = pendingAttQueue.length + pendingTeacherAttQueue.length;
+
   const isApplyingRemoteUpdate = React.useRef(false);
   const lastKnownServerUpdatedAt = React.useRef<string | null>(null);
   const hasInitializedFromCloud = React.useRef(false);
-  const hasPendingLocalMutation = React.useRef(false);
+  const hasPendingLocalMutation = React.useRef(
+    pendingGeneralSync || pendingAttQueue.length > 0 || pendingTeacherAttQueue.length > 0
+  );
+  const isFlushingOfflineRef = React.useRef(false);
+
+  const persistPendingQueues = (
+    nextAttQ: StudentAttendance[],
+    nextTeacherAttQ: TeacherAttendance[],
+    nextGenSync: boolean
+  ) => {
+    pendingAttQueueRef.current = nextAttQ;
+    pendingTeacherAttQueueRef.current = nextTeacherAttQ;
+    pendingGeneralSyncRef.current = nextGenSync;
+    setPendingAttQueue(nextAttQ);
+    setPendingTeacherAttQueue(nextTeacherAttQ);
+    setPendingGeneralSync(nextGenSync);
+    saveToStorage('pending_att_queue', nextAttQ);
+    saveToStorage('pending_teacher_att_queue', nextTeacherAttQ);
+    saveToStorage('pending_sync', nextGenSync);
+  };
 
   // Synchronous State Reference to avoid stale closure issues
   const stateRef = React.useRef({
@@ -404,11 +465,79 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return merged;
   };
 
+  const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 4000) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const fetchFreshestCloudSnapshot = async (
+    timeoutMs = 3500
+  ): Promise<{ best: any | null; reachable: boolean }> => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return { best: null, reachable: false };
+    }
+    const cacheBust = `t=${Date.now()}`;
+    const fetchCandidate = async (url: string) => {
+      const res = await fetchWithTimeout(
+        url,
+        { headers: { Accept: 'application/json', 'Cache-Control': 'no-cache, no-store' } },
+        timeoutMs
+      );
+      if (!res.ok) return null;
+      const rawText = await res.text();
+      const parsed = extractCleanJson<any>(rawText);
+      const d = parsed?.data || parsed;
+      if (d && Array.isArray(d.students)) {
+        return d;
+      }
+      return null;
+    };
+
+    const results = await Promise.allSettled([
+      fetchCandidate(`/api/school-data?${cacheBust}`),
+      fetchCandidate(`${GLOBAL_CLOUD_ENDPOINT_1}?${cacheBust}`),
+      fetchCandidate(`${GLOBAL_CLOUD_ENDPOINT_2}?${cacheBust}`)
+    ]);
+
+    const candidates: any[] = [];
+    results.forEach(r => {
+      if (r.status === 'fulfilled' && r.value) {
+        candidates.push(r.value);
+      }
+    });
+
+    if (candidates.length === 0) {
+      return { best: null, reachable: false };
+    }
+
+    candidates.sort((a, b) => {
+      const timeA = new Date(a.updatedAt || 0).getTime();
+      const timeB = new Date(b.updatedAt || 0).getTime();
+      if (timeB !== timeA) return timeB - timeA;
+      return (b.students?.length || 0) - (a.students?.length || 0);
+    });
+
+    const best = { ...candidates[0] };
+    best.students = Array.isArray(best.students) ? best.students.filter((s: any) => !isDummyStudent(s)) : [];
+    return { best, reachable: true };
+  };
+
   // Push current data to Global Cloud & Local Backup
   const pushCurrentDataToCloud = async (
     override?: Partial<typeof stateRef.current> & { forceReset?: boolean }
   ): Promise<boolean> => {
     try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        setIsOnline(false);
+        setIsCloudConnected(false);
+        return false;
+      }
+
       const isForceReset = override?.forceReset === true;
       const cleanOverride = { ...(override || {}) };
       delete cleanOverride.forceReset;
@@ -427,20 +556,28 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       setIsCloudSyncing(true);
       let success = false;
+      let serverUpdatedAt = newTimestamp;
 
       // 1. Primary: Server API (/api/school-data) — verify JSON response (ignore static SPA HTML fallback)
       try {
         const serverBody = isForceReset ? { ...cloudPayload, forceReset: true } : cloudPayload;
-        const localRes = await fetch('/api/school-data', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(serverBody)
-        });
+        const localRes = await fetchWithTimeout(
+          '/api/school-data',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(serverBody)
+          },
+          5500
+        );
         if (localRes.ok) {
           const text = await localRes.text();
           const parsedLocal = extractCleanJson<any>(text);
           if (parsedLocal?.success === true && !parsedLocal?.preservedExisting) {
             success = true;
+            if (parsedLocal.updatedAt) {
+              serverUpdatedAt = parsedLocal.updatedAt;
+            }
           }
         }
       } catch (localErr) {
@@ -449,16 +586,24 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       // 2. Global Cloud Bins (must save permanently online so all devices receive updates)
       const cloudResults = await Promise.allSettled([
-        fetch(GLOBAL_CLOUD_ENDPOINT_1, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(cloudPayload)
-        }),
-        fetch(GLOBAL_CLOUD_ENDPOINT_2, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(cloudPayload)
-        })
+        fetchWithTimeout(
+          GLOBAL_CLOUD_ENDPOINT_1,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cloudPayload)
+          },
+          5000
+        ),
+        fetchWithTimeout(
+          GLOBAL_CLOUD_ENDPOINT_2,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cloudPayload)
+          },
+          5000
+        )
       ]);
 
       cloudResults.forEach(r => {
@@ -469,8 +614,9 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       if (success) {
         hasPendingLocalMutation.current = false;
+        setIsOnline(true);
         setIsCloudConnected(true);
-        lastKnownServerUpdatedAt.current = newTimestamp;
+        lastKnownServerUpdatedAt.current = serverUpdatedAt;
         setLastCloudSyncTime(new Date().toLocaleTimeString('ur-PK'));
         return true;
       } else {
@@ -486,65 +632,188 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  // Overlay queued attendance records onto a base attendance list cleanly by (studentId, date)
+  const overlayStudentAttendance = (
+    baseList: StudentAttendance[],
+    incomingRecords: StudentAttendance[]
+  ): StudentAttendance[] => {
+    const map = new Map<string, StudentAttendance>();
+    deduplicateAttendance(baseList).forEach(rec => {
+      if (rec && rec.studentId && rec.date) {
+        map.set(`${rec.studentId}__${rec.date}`, rec);
+      }
+    });
+    incomingRecords.forEach(rec => {
+      if (rec && rec.studentId && rec.date) {
+        const key = `${rec.studentId}__${rec.date}`;
+        const existing = map.get(key);
+        map.set(key, {
+          ...rec,
+          id: existing?.id || rec.id
+        });
+      }
+    });
+    return Array.from(map.values());
+  };
+
+  const overlayTeacherAttendance = (
+    baseList: TeacherAttendance[],
+    incomingRecords: TeacherAttendance[]
+  ): TeacherAttendance[] => {
+    const map = new Map<string, TeacherAttendance>();
+    (Array.isArray(baseList) ? baseList : []).forEach(rec => {
+      if (rec && rec.teacherId && rec.date) {
+        map.set(`${rec.teacherId}__${rec.date}`, rec);
+      }
+    });
+    incomingRecords.forEach(rec => {
+      if (rec && rec.teacherId && rec.date) {
+        const key = `${rec.teacherId}__${rec.date}`;
+        const existing = map.get(key);
+        map.set(key, {
+          ...rec,
+          id: existing?.id || rec.id
+        });
+      }
+    });
+    return Array.from(map.values());
+  };
+
+  // Flush offline queued attendance cleanly onto freshest cloud state without overwriting other teachers
+  const flushPendingOfflineSync = async (): Promise<boolean> => {
+    const queuedAtt = pendingAttQueueRef.current;
+    const queuedTeacherAtt = pendingTeacherAttQueueRef.current;
+    const hasGen = pendingGeneralSyncRef.current;
+    if (queuedAtt.length === 0 && queuedTeacherAtt.length === 0 && !hasGen) {
+      return true;
+    }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return false;
+    }
+    if (isFlushingOfflineRef.current) return false;
+    isFlushingOfflineRef.current = true;
+    try {
+      const { best, reachable } = await fetchFreshestCloudSnapshot(3500);
+      if (!reachable) {
+        setIsCloudConnected(false);
+        return false;
+      }
+
+      const baseStudents =
+        best && Array.isArray(best.students) && best.students.length > 0
+          ? best.students.filter((s: any) => !isDummyStudent(s))
+          : stateRef.current.students;
+      const baseTeachers =
+        best && Array.isArray(best.teachers) && best.teachers.length > 0
+          ? best.teachers
+          : stateRef.current.teachers;
+      const baseLeaves =
+        best && Array.isArray(best.leaves) ? best.leaves : stateRef.current.leaves;
+      const baseSettings: SystemSettings =
+        best && best.settings && typeof best.settings === 'object'
+          ? { ...initialSettings, ...best.settings }
+          : stateRef.current.settings;
+      const baseAtt =
+        best && Array.isArray(best.attendance)
+          ? best.attendance.filter((a: any) => !isDummyStudent(a))
+          : stateRef.current.attendance;
+      const baseTeacherAtt =
+        best && Array.isArray(best.teacherAttendance)
+          ? best.teacherAttendance
+          : stateRef.current.teacherAttendance;
+      const baseFees =
+        best && Array.isArray(best.feeRecords)
+          ? best.feeRecords.filter((f: any) => !isDummyStudent(f))
+          : stateRef.current.feeRecords;
+
+      const mergedAtt = overlayStudentAttendance(baseAtt, queuedAtt);
+      const mergedTeacherAtt = overlayTeacherAttendance(baseTeacherAtt, queuedTeacherAtt);
+      const reconciledFees = reconcileFeesWithAttendance({
+        students: baseStudents,
+        feeRecords: baseFees,
+        attendance: mergedAtt,
+        leaves: baseLeaves,
+        settings: baseSettings
+      });
+
+      const pushed = await pushCurrentDataToCloud({
+        students: baseStudents,
+        teachers: baseTeachers,
+        leaves: baseLeaves,
+        settings: baseSettings,
+        attendance: mergedAtt,
+        teacherAttendance: mergedTeacherAtt,
+        feeRecords: reconciledFees
+      });
+
+      if (pushed) {
+        isApplyingRemoteUpdate.current = true;
+        stateRef.current = {
+          ...stateRef.current,
+          attendance: mergedAtt,
+          teacherAttendance: mergedTeacherAtt,
+          feeRecords: reconciledFees
+        };
+        setAttendance(mergedAtt);
+        saveToStorage('attendance', mergedAtt);
+        setTeacherAttendance(mergedTeacherAtt);
+        saveToStorage('teacherAttendance', mergedTeacherAtt);
+        setFeeRecords(reconciledFees);
+        saveToStorage('feeRecords', reconciledFees);
+        persistPendingQueues([], [], false);
+        setTimeout(() => {
+          isApplyingRemoteUpdate.current = false;
+        }, 200);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.warn('Offline queue flush failed:', err);
+      return false;
+    } finally {
+      isFlushingOfflineRef.current = false;
+    }
+  };
+
   // Pull data from Global Cloud Server with HTML-safe JSON extraction and tombstone-aware merge
   const pullFromCloudDatabase = async (): Promise<Student[]> => {
     try {
-      const candidates: any[] = [];
-      const cacheBust = `t=${Date.now()}`;
-
-      const fetchCandidate = async (url: string) => {
-        const res = await fetch(url, {
-          headers: { Accept: 'application/json', 'Cache-Control': 'no-cache, no-store' }
-        });
-        if (!res.ok) return null;
-        const rawText = await res.text();
-        const parsed = extractCleanJson<any>(rawText);
-        const d = parsed?.data || parsed;
-        if (d && Array.isArray(d.students)) {
-          return d;
-        }
-        return null;
-      };
-
-      const results = await Promise.allSettled([
-        fetchCandidate(`/api/school-data?${cacheBust}`),
-        fetchCandidate(`${GLOBAL_CLOUD_ENDPOINT_1}?${cacheBust}`),
-        fetchCandidate(`${GLOBAL_CLOUD_ENDPOINT_2}?${cacheBust}`)
-      ]);
-
-      results.forEach(r => {
-        if (r.status === 'fulfilled' && r.value) {
-          candidates.push(r.value);
-        }
-      });
-
-      if (candidates.length === 0) {
+      const { best, reachable } = await fetchFreshestCloudSnapshot(4000);
+      if (!reachable || !best) {
         setIsCloudConnected(false);
         return stateRef.current.students.filter(s => !isDummyStudent(s));
       }
 
+      setIsOnline(true);
       setIsCloudConnected(true);
-
-      // Sort by updatedAt descending, preferring non-empty datasets on tie
-      candidates.sort((a, b) => {
-        const timeA = new Date(a.updatedAt || 0).getTime();
-        const timeB = new Date(b.updatedAt || 0).getTime();
-        if (timeB !== timeA) return timeB - timeA;
-        return (b.students?.length || 0) - (a.students?.length || 0);
-      });
-
-      const best = { ...candidates[0] };
-      best.students = Array.isArray(best.students) ? best.students.filter((s: any) => !isDummyStudent(s)) : [];
       const data = best;
 
       const currentLocal = stateRef.current;
-      const remoteTime = new Date(data.updatedAt || 0).getTime();
-      const localTime = new Date(lastKnownServerUpdatedAt.current || 0).getTime();
+      const sameServerTimestamp =
+        Boolean(data.updatedAt) &&
+        Boolean(lastKnownServerUpdatedAt.current) &&
+        data.updatedAt === lastKnownServerUpdatedAt.current;
       const countsMatch =
         data.students.length === currentLocal.students.length &&
         (Array.isArray(data.feeRecords) ? data.feeRecords.length : 0) === currentLocal.feeRecords.length &&
-        (Array.isArray(data.studentExamReports) ? data.studentExamReports.length : 0) === currentLocal.studentExamReports.length;
-      if (remoteTime <= localTime && countsMatch && hasInitializedFromCloud.current) {
+        (Array.isArray(data.attendance) ? data.attendance.length : 0) === currentLocal.attendance.length &&
+        (Array.isArray(data.teacherAttendance) ? data.teacherAttendance.length : 0) === currentLocal.teacherAttendance.length &&
+        (Array.isArray(data.studentExamReports) ? data.studentExamReports.length : 0) === currentLocal.studentExamReports.length &&
+        (Array.isArray(data.leaves) ? data.leaves.length : 0) === currentLocal.leaves.length &&
+        (Array.isArray(data.dailyReports) ? data.dailyReports.length : 0) === currentLocal.dailyReports.length &&
+        (Array.isArray(data.tests) ? data.tests.length : 0) === currentLocal.tests.length &&
+        (Array.isArray(data.testResults) ? data.testResults.length : 0) === currentLocal.testResults.length &&
+        (Array.isArray(data.notices) ? data.notices.length : 0) === currentLocal.notices.length &&
+        (Array.isArray(data.onlineAdmissions) ? data.onlineAdmissions.length : 0) === currentLocal.onlineAdmissions.length;
+
+      if (
+        sameServerTimestamp &&
+        countsMatch &&
+        hasInitializedFromCloud.current &&
+        !hasPendingLocalMutation.current &&
+        pendingAttQueueRef.current.length === 0 &&
+        pendingTeacherAttQueueRef.current.length === 0
+      ) {
         return stateRef.current.students.filter(s => !isDummyStudent(s));
       }
       const mergedDeletedIds = Array.from(
@@ -610,8 +879,16 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       const mergedStudents = mergeEntities<Student>(data.students, currentLocal.students);
       const mergedTeachers = mergeTeachers(data.teachers, currentLocal.teachers);
-      const mergedAttendance = deduplicateAttendance(mergeEntities<StudentAttendance>(data.attendance, currentLocal.attendance));
-      const mergedTeacherAttendance = mergeEntities<TeacherAttendance>(data.teacherAttendance, currentLocal.teacherAttendance);
+      let mergedAttendance = deduplicateAttendance(mergeEntities<StudentAttendance>(data.attendance, currentLocal.attendance));
+      let mergedTeacherAttendance = mergeEntities<TeacherAttendance>(data.teacherAttendance, currentLocal.teacherAttendance);
+
+      if (pendingAttQueueRef.current.length > 0) {
+        mergedAttendance = overlayStudentAttendance(mergedAttendance, pendingAttQueueRef.current);
+      }
+      if (pendingTeacherAttQueueRef.current.length > 0) {
+        mergedTeacherAttendance = overlayTeacherAttendance(mergedTeacherAttendance, pendingTeacherAttQueueRef.current);
+      }
+
       const mergedLeaves = mergeEntities<LeaveRequest>(data.leaves, currentLocal.leaves);
       const rawMergedFees = mergeEntities<FeeRecord>(data.feeRecords, currentLocal.feeRecords);
       const mergedReports = mergeEntities<DailyReport>(data.dailyReports, currentLocal.dailyReports);
@@ -644,6 +921,26 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       lastKnownServerUpdatedAt.current = data.updatedAt || new Date().toISOString();
       hasInitializedFromCloud.current = true;
       setLastCloudSyncTime(new Date().toLocaleTimeString('ur-PK'));
+
+      stateRef.current = {
+        ...stateRef.current,
+        deletedIds: mergedDeletedIds,
+        students: mergedStudents,
+        teachers: mergedTeachers,
+        attendance: mergedAttendance,
+        teacherAttendance: mergedTeacherAttendance,
+        leaves: mergedLeaves,
+        feeRecords: mergedFees,
+        dailyReports: mergedReports,
+        tests: mergedTests,
+        testResults: mergedTestResults,
+        studentExamReports: mergedExamReports,
+        notices: mergedNotices,
+        onlineAdmissions: mergedAdmissions,
+        salaryTransactions: mergedSalaryTx,
+        teacherSalaryPayments: mergedSalaryPmts,
+        settings: mergedSettings
+      };
 
       setDeletedIds(mergedDeletedIds);
       saveToStorage('deletedIds', mergedDeletedIds);
@@ -746,7 +1043,13 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const syncNowWithCloud = async (): Promise<Student[]> => {
-    if (hasPendingLocalMutation.current) {
+    if (
+      pendingAttQueueRef.current.length > 0 ||
+      pendingTeacherAttQueueRef.current.length > 0 ||
+      pendingGeneralSyncRef.current
+    ) {
+      await flushPendingOfflineSync();
+    } else if (hasPendingLocalMutation.current) {
       await pushCurrentDataToCloud();
     }
     return await pullFromCloudDatabase();
@@ -780,26 +1083,49 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     teacherSalaryPayments
   ]);
 
-  // Periodic polling & window focus pull
+  // Periodic real-time polling, focus pull & automatic offline-to-online recovery sync
   useEffect(() => {
-    pullFromCloudDatabase();
+    const runCycle = async () => {
+      if (
+        pendingAttQueueRef.current.length > 0 ||
+        pendingTeacherAttQueueRef.current.length > 0 ||
+        pendingGeneralSyncRef.current
+      ) {
+        await flushPendingOfflineSync();
+      }
+      await pullFromCloudDatabase();
+    };
+
+    runCycle();
 
     const interval = setInterval(() => {
-      pullFromCloudDatabase();
+      runCycle();
     }, 3000);
 
-    const onFocus = () => pullFromCloudDatabase();
+    const onOnline = () => {
+      setIsOnline(true);
+      flushPendingOfflineSync().then(() => pullFromCloudDatabase());
+    };
+    const onOffline = () => {
+      setIsOnline(false);
+      setIsCloudConnected(false);
+    };
+    const onFocus = () => runCycle();
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
-        pullFromCloudDatabase();
+        runCycle();
       }
     };
 
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
     window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
       clearInterval(interval);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
     };
@@ -1370,18 +1696,22 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     pushCurrentDataToCloud({ attendance: updatedAtt, feeRecords: reconciledFees });
   };
 
-  const markClassAttendance = (
+  const buildClassAttendanceChange = (
+    baseAttendance: StudentAttendance[],
+    baseFees: FeeRecord[],
     className: string,
     date: string,
-    records: { studentId: string; status: 'Present' | 'Absent' | 'Leave' | 'Late' }[]
+    records: { studentId: string; status: 'Present' | 'Absent' | 'Leave' | 'Late' }[],
+    markedBy?: { teacherId?: string; teacherName?: string }
   ) => {
-    hasPendingLocalMutation.current = true;
+    const nowIso = new Date().toISOString();
     const month = date.substring(0, 7);
     const currentSettings = stateRef.current.settings;
     const currentLeaves = stateRef.current.leaves;
     const fineRate = Number(currentSettings.finePerAbsentDay ?? 50) || 0;
     const chargeLeaveFine = Boolean(currentSettings.chargeFineOnApprovedLeave);
-    const updated = deduplicateAttendance(stateRef.current.attendance);
+    const updated = deduplicateAttendance(baseAttendance);
+    const changedRecords: StudentAttendance[] = [];
 
     records.forEach(r => {
       const st = stateRef.current.students.find(s => s.id === r.studentId);
@@ -1392,9 +1722,21 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           effectiveStatus === 'Absent' || (effectiveStatus === 'Leave' && chargeLeaveFine) ? fineRate : 0;
         const existingIndex = updated.findIndex(a => a.studentId === r.studentId && a.date === date);
         if (existingIndex >= 0) {
-          updated[existingIndex] = { ...updated[existingIndex], status: effectiveStatus, fineAmount };
+          const updatedRec: StudentAttendance = {
+            ...updated[existingIndex],
+            studentName: st.name,
+            className,
+            month,
+            status: effectiveStatus,
+            fineAmount,
+            markedBy: markedBy?.teacherName || updated[existingIndex].markedBy,
+            markedByTeacherId: markedBy?.teacherId || updated[existingIndex].markedByTeacherId,
+            markedAt: nowIso
+          };
+          updated[existingIndex] = updatedRec;
+          changedRecords.push(updatedRec);
         } else {
-          updated.unshift({
+          const createdRec: StudentAttendance = {
             id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
             studentId: r.studentId,
             studentName: st.name,
@@ -1402,44 +1744,187 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             date,
             month,
             status: effectiveStatus,
-            fineAmount
-          });
+            fineAmount,
+            markedBy: markedBy?.teacherName || 'Staff',
+            markedByTeacherId: markedBy?.teacherId,
+            markedAt: nowIso
+          };
+          updated.unshift(createdRec);
+          changedRecords.push(createdRec);
         }
       }
     });
 
     const reconciledFees = reconcileFeesWithAttendance({
       students: stateRef.current.students,
-      feeRecords: stateRef.current.feeRecords,
+      feeRecords: baseFees,
       attendance: updated,
       leaves: currentLeaves,
       settings: currentSettings
     });
 
+    return { updated, reconciledFees, changedRecords };
+  };
+
+  const markClassAttendanceAsync = async (
+    className: string,
+    date: string,
+    records: { studentId: string; status: 'Present' | 'Absent' | 'Leave' | 'Late' }[],
+    markedBy?: { teacherId?: string; teacherName?: string }
+  ): Promise<{ success: boolean; syncedOnline: boolean }> => {
+    hasPendingLocalMutation.current = true;
+    const { updated, reconciledFees, changedRecords } = buildClassAttendanceChange(
+      stateRef.current.attendance,
+      stateRef.current.feeRecords,
+      className,
+      date,
+      records,
+      markedBy
+    );
+
+    // Update UI, stateRef, and localStorage + offline queue immediately
+    stateRef.current = { ...stateRef.current, attendance: updated, feeRecords: reconciledFees };
     setAttendance(updated);
     saveToStorage('attendance', updated);
     setFeeRecords(reconciledFees);
     saveToStorage('feeRecords', reconciledFees);
-    pushCurrentDataToCloud({ attendance: updated, feeRecords: reconciledFees });
+
+    const nextQueuedAtt = overlayStudentAttendance(pendingAttQueueRef.current, changedRecords);
+    persistPendingQueues(nextQueuedAtt, pendingTeacherAttQueueRef.current, true);
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      setIsOnline(false);
+      setIsCloudConnected(false);
+      return { success: true, syncedOnline: false };
+    }
+
+    try {
+      // Merge onto freshest cloud snapshot so concurrent marking by multiple teachers never overwrites another class
+      const { best, reachable } = await fetchFreshestCloudSnapshot(2800);
+      const baseAtt =
+        reachable && best && Array.isArray(best.attendance)
+          ? best.attendance.filter((a: any) => !isDummyStudent(a))
+          : updated;
+      const baseFees =
+        reachable && best && Array.isArray(best.feeRecords)
+          ? best.feeRecords.filter((f: any) => !isDummyStudent(f))
+          : reconciledFees;
+      const baseStudents =
+        reachable && best && Array.isArray(best.students) && best.students.length > 0
+          ? best.students.filter((s: any) => !isDummyStudent(s))
+          : stateRef.current.students;
+      const baseLeaves =
+        reachable && best && Array.isArray(best.leaves) ? best.leaves : stateRef.current.leaves;
+      const baseSettings: SystemSettings =
+        reachable && best?.settings ? { ...initialSettings, ...best.settings } : stateRef.current.settings;
+
+      const mergedAtt = overlayStudentAttendance(baseAtt, nextQueuedAtt);
+      const mergedFees = reconcileFeesWithAttendance({
+        students: baseStudents,
+        feeRecords: baseFees,
+        attendance: mergedAtt,
+        leaves: baseLeaves,
+        settings: baseSettings
+      });
+
+      const synced = await pushCurrentDataToCloud({
+        students: baseStudents,
+        leaves: baseLeaves,
+        settings: baseSettings,
+        attendance: mergedAtt,
+        feeRecords: mergedFees
+      });
+
+      if (synced) {
+        stateRef.current = { ...stateRef.current, attendance: mergedAtt, feeRecords: mergedFees };
+        setAttendance(mergedAtt);
+        saveToStorage('attendance', mergedAtt);
+        setFeeRecords(mergedFees);
+        saveToStorage('feeRecords', mergedFees);
+
+        // If a teacher attendance queue still exists, keep only teacher queue; otherwise clear all pending flags
+        const syncedKeys = new Set(changedRecords.map(r => `${r.studentId}__${r.date}`));
+        const remainingAttQ = pendingAttQueueRef.current.filter(
+          q => !syncedKeys.has(`${q.studentId}__${q.date}`)
+        );
+        persistPendingQueues(remainingAttQ, pendingTeacherAttQueueRef.current, remainingAttQ.length > 0 || pendingTeacherAttQueueRef.current.length > 0);
+        return { success: true, syncedOnline: true };
+      }
+      return { success: true, syncedOnline: false };
+    } catch (err) {
+      console.warn('Online attendance push failed, queued offline:', err);
+      return { success: true, syncedOnline: false };
+    }
+  };
+
+  const markClassAttendance = (
+    className: string,
+    date: string,
+    records: { studentId: string; status: 'Present' | 'Absent' | 'Leave' | 'Late' }[],
+    markedBy?: { teacherId?: string; teacherName?: string }
+  ) => {
+    void markClassAttendanceAsync(className, date, records, markedBy);
+  };
+
+  const markTeacherAttendanceAsync = async (
+    record: Omit<TeacherAttendance, 'id'>
+  ): Promise<{ success: boolean; syncedOnline: boolean }> => {
+    hasPendingLocalMutation.current = true;
+    const nowIso = new Date().toISOString();
+    const existing = stateRef.current.teacherAttendance.find(
+      a => a.teacherId === record.teacherId && a.date === record.date
+    );
+    const savedRecord: TeacherAttendance = {
+      ...record,
+      id: existing?.id || `ta-${Date.now()}-${record.teacherId}`,
+      markedAt: nowIso
+    };
+    const updated = overlayTeacherAttendance(stateRef.current.teacherAttendance, [savedRecord]);
+
+    stateRef.current = { ...stateRef.current, teacherAttendance: updated };
+    setTeacherAttendance(updated);
+    saveToStorage('teacherAttendance', updated);
+
+    const nextTeacherQ = overlayTeacherAttendance(pendingTeacherAttQueueRef.current, [savedRecord]);
+    persistPendingQueues(pendingAttQueueRef.current, nextTeacherQ, true);
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      setIsOnline(false);
+      setIsCloudConnected(false);
+      return { success: true, syncedOnline: false };
+    }
+
+    try {
+      const { best, reachable } = await fetchFreshestCloudSnapshot(2800);
+      const baseTeacherAtt =
+        reachable && best && Array.isArray(best.teacherAttendance)
+          ? best.teacherAttendance
+          : updated;
+      const mergedTeacherAtt = overlayTeacherAttendance(baseTeacherAtt, nextTeacherQ);
+
+      const synced = await pushCurrentDataToCloud({
+        teacherAttendance: mergedTeacherAtt
+      });
+
+      if (synced) {
+        stateRef.current = { ...stateRef.current, teacherAttendance: mergedTeacherAtt };
+        setTeacherAttendance(mergedTeacherAtt);
+        saveToStorage('teacherAttendance', mergedTeacherAtt);
+        const remainingTQ = pendingTeacherAttQueueRef.current.filter(
+          q => !(q.teacherId === record.teacherId && q.date === record.date)
+        );
+        persistPendingQueues(pendingAttQueueRef.current, remainingTQ, pendingAttQueueRef.current.length > 0 || remainingTQ.length > 0);
+        return { success: true, syncedOnline: true };
+      }
+      return { success: true, syncedOnline: false };
+    } catch (err) {
+      console.warn('Teacher attendance push failed, queued offline:', err);
+      return { success: true, syncedOnline: false };
+    }
   };
 
   const markTeacherAttendance = (record: Omit<TeacherAttendance, 'id'>) => {
-    hasPendingLocalMutation.current = true;
-    const existingIndex = stateRef.current.teacherAttendance.findIndex(a => a.teacherId === record.teacherId && a.date === record.date);
-    let updated: TeacherAttendance[];
-    if (existingIndex >= 0) {
-      updated = [...stateRef.current.teacherAttendance];
-      updated[existingIndex] = { ...updated[existingIndex], status: record.status };
-    } else {
-      const newRecord: TeacherAttendance = {
-        ...record,
-        id: `ta-${Date.now()}`
-      };
-      updated = [newRecord, ...stateRef.current.teacherAttendance];
-    }
-    setTeacherAttendance(updated);
-    saveToStorage('teacherAttendance', updated);
-    pushCurrentDataToCloud({ teacherAttendance: updated });
+    void markTeacherAttendanceAsync(record);
   };
 
   // Leaves + automatic waiver reconciliation
@@ -2063,7 +2548,9 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         toggleTeacherSalaryPayment,
         markStudentAttendance,
         markClassAttendance,
+        markClassAttendanceAsync,
         markTeacherAttendance,
+        markTeacherAttendanceAsync,
         submitLeave,
         updateLeaveStatus,
         addFeeRecord,
@@ -2089,8 +2576,11 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         resetAllDataToZero,
         exportAllSchoolData,
         importSchoolData,
+        isOnline,
         isCloudConnected,
         isCloudSyncing,
+        hasPendingOfflineSync,
+        pendingOfflineCount,
         lastCloudSyncTime,
         syncNowWithCloud,
         forceSyncAllToCloud,
