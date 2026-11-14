@@ -95,61 +95,72 @@ function schoolDatabasePlugin(): Plugin {
     if (!force && now - lastCloudPullMs < 4000) return;
     lastCloudPullMs = now;
     const localDb = readLocalDb();
-    const localTime = localDb?.updatedAt ? new Date(localDb.updatedAt).getTime() : 0;
+    let bestTime = localDb?.updatedAt ? new Date(localDb.updatedAt).getTime() : 0;
+    const localCount = Array.isArray(localDb?.students) ? localDb.students.length : 0;
+    let bestRemote: any | null = null;
 
-    for (const binUrl of CLOUD_BINS) {
-      try {
-        const res = await fetch(`${binUrl}?t=${now}`, {
-          headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' }
-        });
-        if (!res.ok) continue;
-        const raw = await res.text();
-        const remote = extractCleanJsonFromText(raw);
-        if (remote && Array.isArray(remote.students)) {
-          const remoteTime = remote.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
-          const localCount = Array.isArray(localDb?.students) ? localDb.students.length : 0;
-          if (remoteTime > localTime || (localCount === 0 && remote.students.length > 0)) {
-            writeLocalDb(remote);
-            break;
+    await Promise.allSettled(
+      CLOUD_BINS.map(async binUrl => {
+        try {
+          const res = await fetch(`${binUrl}?t=${now}`, {
+            headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' }
+          });
+          if (!res.ok) return;
+          const raw = await res.text();
+          const remote = extractCleanJsonFromText(raw);
+          if (remote && Array.isArray(remote.students)) {
+            const remoteTime = remote.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
+            const bestCount = Array.isArray(bestRemote?.students) ? bestRemote.students.length : localCount;
+            if (remoteTime > bestTime || (remoteTime === bestTime && remote.students.length > bestCount) || (bestCount === 0 && remote.students.length > 0)) {
+              bestTime = remoteTime;
+              bestRemote = remote;
+            }
           }
+        } catch {
+          // ignore failing bin
         }
-      } catch {
-        // continue to next bin
-      }
+      })
+    );
+
+    if (bestRemote) {
+      writeLocalDb(bestRemote);
     }
   };
 
   let pendingCloudBody: string | null = null;
   let isReplicatingToCloud = false;
+  let lastCloudReplicationOk = false;
 
-  const flushCloudQueue = async () => {
-    if (isReplicatingToCloud) return;
+  const flushCloudQueue = async (): Promise<boolean> => {
+    if (isReplicatingToCloud) return lastCloudReplicationOk;
     isReplicatingToCloud = true;
     try {
       while (pendingCloudBody !== null) {
         const body = pendingCloudBody;
         pendingCloudBody = null;
         lastCloudPullMs = Date.now();
-        await Promise.allSettled(
+        const results = await Promise.allSettled(
           CLOUD_BINS.map(binUrl =>
             fetch(binUrl, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body
-            })
+            }).then(r => r.ok)
           )
         );
+        lastCloudReplicationOk = results.some(r => r.status === 'fulfilled' && r.value === true);
         lastCloudPullMs = Date.now();
       }
+      return lastCloudReplicationOk;
     } finally {
       isReplicatingToCloud = false;
     }
   };
 
-  const replicateToCloudAsync = (data: any) => {
+  const replicateToCloudAsync = (data: any): Promise<boolean> => {
     pendingCloudBody = JSON.stringify(data);
     lastCloudPullMs = Date.now();
-    flushCloudQueue().catch(() => {});
+    return flushCloudQueue().catch(() => false);
   };
 
   ensureDbExists();
@@ -186,7 +197,7 @@ function schoolDatabasePlugin(): Plugin {
         req.on('data', (chunk: any) => {
           body += chunk;
         });
-        req.on('end', () => {
+        req.on('end', async () => {
           try {
             const parsed = JSON.parse(body);
             if (!parsed || !Array.isArray(parsed.students)) {
@@ -220,13 +231,17 @@ function schoolDatabasePlugin(): Plugin {
             cleanPayload.updatedAt = new Date().toISOString();
 
             writeLocalDb(cleanPayload);
-            replicateToCloudAsync(cleanPayload);
+            const cloudSynced = await Promise.race([
+              replicateToCloudAsync(cleanPayload),
+              new Promise<boolean>(resolve => setTimeout(() => resolve(false), 4500))
+            ]);
 
             res.setHeader('Content-Type', 'application/json');
             res.statusCode = 200;
             res.end(
               JSON.stringify({
                 success: true,
+                cloudSynced,
                 timestamp: Date.now(),
                 updatedAt: cleanPayload.updatedAt,
                 studentCount: cleanPayload.students.length

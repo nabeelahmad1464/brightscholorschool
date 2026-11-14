@@ -1,6 +1,22 @@
 {
   "students": [
     {
+      "admissionNo": "BSS-0338",
+      "rollNo": "01",
+      "name": "Maryam",
+      "fatherName": "Qaiser",
+      "className": "Class 4",
+      "dob": "2016-04-10",
+      "contactNo": "0302-5053993",
+      "whatsappNo": "0302-5053993",
+      "address": "Chak No. 47 GB, Samundri",
+      "admissionDate": "2026-11-14",
+      "gender": "Male",
+      "monthlyFee": 2000,
+      "isActive": true,
+      "id": "s-1794675390356"
+    },
+    {
       "admissionNo": "BSS-9348",
       "rollNo": "04",
       "name": "Mehak",
@@ -923,6 +939,23 @@
   "leaves": [],
   "feeRecords": [
     {
+      "id": "fee-1794675390360",
+      "studentId": "s-1794675390356",
+      "studentName": "Maryam",
+      "fatherName": "Qaiser",
+      "className": "Class 4",
+      "month": "October 2026",
+      "tuitionFee": 2000,
+      "absentDays": 0,
+      "leaveDays": 0,
+      "fineAmount": 0,
+      "totalPayable": 2000,
+      "paidAmount": 0,
+      "balanceRemaining": 2000,
+      "status": "Unpaid",
+      "receiptNo": "REC-BSS-0360"
+    },
+    {
       "id": "fee-1794562666399-54023",
       "studentId": "s-1793963654023",
       "studentName": "Samra",
@@ -930,12 +963,12 @@
       "className": "Class 7",
       "month": "October 2026",
       "tuitionFee": 3000,
-      "absentDays": 1,
+      "absentDays": 0,
       "leaveDays": 0,
-      "fineAmount": 50,
-      "totalPayable": 3050,
+      "fineAmount": 0,
+      "totalPayable": 3000,
       "paidAmount": 0,
-      "balanceRemaining": 3050,
+      "balanceRemaining": 3000,
       "status": "Unpaid",
       "receiptNo": "REC-BSS-4023"
     },
@@ -1806,6 +1839,23 @@
       "status": "Unpaid",
       "receiptNo": "REC-BSS-0513",
       "leaveDays": 0
+    },
+    {
+      "id": "fee-1793963654028",
+      "studentId": "s-1793963654023",
+      "studentName": "Samra",
+      "fatherName": "Shehzad ali",
+      "className": "Class 7",
+      "month": "October 2026",
+      "tuitionFee": 3000,
+      "absentDays": 0,
+      "fineAmount": 0,
+      "totalPayable": 3000,
+      "paidAmount": 0,
+      "balanceRemaining": 3000,
+      "status": "Unpaid",
+      "receiptNo": "REC-BSS-4028",
+      "leaveDays": 0
     }
   ],
   "dailyReports": [],
@@ -1859,5 +1909,6 @@
   },
   "salaryTransactions": [],
   "teacherSalaryPayments": [],
-  "updatedAt": "2026-11-13T09:54:13.223Z"
+  "deletedIds": [],
+  "updatedAt": "2026-11-14T16:57:37.008Z"
 }

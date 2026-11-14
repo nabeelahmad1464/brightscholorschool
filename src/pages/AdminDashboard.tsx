@@ -84,8 +84,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
     onlineAdmissions,
     settings,
     salaryTransactions,
-    addStudent,
-    updateStudent,
+    addStudentAsync,
+    updateStudentAsync,
     deleteStudent,
     toggleStudentActive,
     purgePlaceholderStudents,
@@ -139,6 +139,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
+  const [isSavingStudent, setIsSavingStudent] = useState(false);
 
   const [stFormName, setStFormName] = useState('');
   const [stFormFather, setStFormFather] = useState('');
@@ -281,46 +282,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
     setShowAddStudentModal(true);
   };
 
-  const handleSaveStudent = (e: React.FormEvent) => {
+  const handleSaveStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!stFormName.trim() || !stFormFather.trim()) return;
+    if (isSavingStudent || !stFormName.trim() || !stFormFather.trim()) return;
 
-    if (editingStudent) {
-      updateStudent({
-        ...editingStudent,
-        name: stFormName.trim(),
-        fatherName: stFormFather.trim(),
-        className: stFormClass,
-        rollNo: stFormRoll.trim() || editingStudent.rollNo,
-        monthlyFee: Number(stFormFee),
-        contactNo: stFormPhone.trim(),
-        address: stFormAddress.trim(),
-      });
-      alert(`Student ${stFormName} updated successfully!`);
-    } else {
-      const count = students.filter(s => s.className === stFormClass).length + 1;
-      const rollNo = stFormRoll.trim() || (count < 10 ? `0${count}` : `${count}`);
-      const admNo = `BSS-${Date.now().toString().slice(-4)}`;
+    setIsSavingStudent(true);
+    try {
+      if (editingStudent) {
+        const res = await updateStudentAsync({
+          ...editingStudent,
+          name: stFormName.trim(),
+          fatherName: stFormFather.trim(),
+          className: stFormClass,
+          rollNo: stFormRoll.trim() || editingStudent.rollNo,
+          monthlyFee: Number(stFormFee),
+          contactNo: stFormPhone.trim(),
+          address: stFormAddress.trim(),
+        });
+        if (!res.success) {
+          alert(res.error || 'خرابی: طالب علم کی معلومات آن لائن سرور پر محفوظ نہیں ہو سکیں۔');
+          return;
+        }
+        alert(`Student ${stFormName.trim()} updated and saved to online database successfully!`);
+      } else {
+        const count = students.filter(s => s.className === stFormClass).length + 1;
+        let rollNo = normalizeDigits(stFormRoll).trim();
+        if (!rollNo) {
+          let nextNum = count;
+          const usedRolls = new Set(
+            students
+              .filter(s => s.className === stFormClass)
+              .map(s => normalizeDigits(s.rollNo || '').trim().replace(/^0+/, ''))
+          );
+          while (usedRolls.has(String(nextNum))) nextNum++;
+          rollNo = nextNum < 10 ? `0${nextNum}` : `${nextNum}`;
+        }
+        const admNo = `BSS-${Date.now().toString().slice(-4)}`;
 
-      addStudent({
-        admissionNo: admNo,
-        rollNo,
-        name: stFormName.trim(),
-        fatherName: stFormFather.trim(),
-        className: stFormClass,
-        dob: '2016-04-10',
-        contactNo: stFormPhone.trim(),
-        whatsappNo: stFormPhone.trim(),
-        address: stFormAddress.trim(),
-        admissionDate: new Date().toISOString().split('T')[0],
-        gender: 'Male',
-        monthlyFee: Number(stFormFee),
-        isActive: true,
-      });
-      alert(`طالب علم ${stFormName} کلاس ${stFormClass} رول نمبر ${rollNo} میں کامیابی سے شامل ہو گیا اور کلاؤڈ سرور پر محفوظ ہو گیا!\nاب یہ بچہ ٹیچرز پورٹل اور پیرنٹس پورٹل دونوں پر فوری لائیو نظر آئے گا۔`);
+        const res = await addStudentAsync({
+          admissionNo: admNo,
+          rollNo,
+          name: stFormName.trim(),
+          fatherName: stFormFather.trim(),
+          className: stFormClass,
+          dob: '2016-04-10',
+          contactNo: stFormPhone.trim(),
+          whatsappNo: stFormPhone.trim(),
+          address: stFormAddress.trim(),
+          admissionDate: new Date().toISOString().split('T')[0],
+          gender: 'Male',
+          monthlyFee: Number(stFormFee),
+          isActive: true,
+        });
+
+        if (!res.success) {
+          alert(res.error || 'خرابی: نیا طالب علم آن لائن سرور پر محفوظ نہیں ہو سکا! براہ کرم انٹرنیٹ چیک کریں۔');
+          return;
+        }
+
+        alert(
+          `طالب علم ${stFormName.trim()} کلاس ${stFormClass} رول نمبر ${rollNo} میں کامیابی سے شامل ہو گیا اور مستقل آن لائن کلاؤڈ سرور پر محفوظ ہو گیا!\nاب یہ بچہ تمام موبائلز، ٹیچرز پورٹل اور پیرنٹس پورٹل پر مستقل موجود رہے گا۔`
+        );
+      }
+
+      setShowAddStudentModal(false);
+    } finally {
+      setIsSavingStudent(false);
     }
-
-    setShowAddStudentModal(false);
   };
 
   const confirmDeleteStudent = () => {
@@ -2293,9 +2321,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
                 </button>
                 <button
                   type="submit"
-                  className="bg-[#0D285F] text-white px-5 py-2 rounded-xl text-xs font-bold hover:bg-[#07193B]"
+                  disabled={isSavingStudent}
+                  className="bg-[#0D285F] disabled:opacity-60 text-white px-5 py-2 rounded-xl text-xs font-bold hover:bg-[#07193B] cursor-pointer"
                 >
-                  {editingStudent ? 'Save Changes' : 'Enroll Student'}
+                  {isSavingStudent
+                    ? 'سرور پر محفوظ ہو رہا ہے...'
+                    : editingStudent
+                    ? 'Save Changes'
+                    : 'Enroll Student'}
                 </button>
               </div>
             </form>

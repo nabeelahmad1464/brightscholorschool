@@ -103,7 +103,9 @@ interface SchoolContextType {
 
   // CRUD & Operations
   addStudent: (student: Omit<Student, 'id'>) => Student;
+  addStudentAsync: (student: Omit<Student, 'id'>) => Promise<{ success: boolean; student?: Student; error?: string }>;
   updateStudent: (student: Student) => void;
+  updateStudentAsync: (student: Student) => Promise<{ success: boolean; error?: string }>;
   deleteStudent: (id: string) => void;
   toggleStudentActive: (id: string) => void;
   purgePlaceholderStudents: () => number;
@@ -137,6 +139,7 @@ interface SchoolContextType {
   // Official Student Exam Reports (Tests & Results Section)
   studentExamReports: StudentExamReport[];
   saveStudentExamReport: (report: StudentExamReport) => void;
+  saveStudentExamReportAsync: (report: StudentExamReport) => Promise<boolean>;
   deleteStudentExamReport: (reportId: string) => void;
   togglePublishExamReport: (reportId: string) => void;
 
@@ -168,7 +171,8 @@ interface SchoolContextType {
 
 const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
 
-// Strict filter to permanently eliminate all fake/dummy seed students across all devices & storage
+// Strict filter to eliminate ONLY legacy fake/dummy seed records by known seed IDs.
+// Never match by common student first names (e.g., Maryam, Abdullah) or class names.
 const DUMMY_STUDENT_IDS = new Set([
   's-101', 's-102', 's-103', 's-104', 's-105', 's-106', 's-107',
   's-108', 's-109', 's-110', 's-111', 's-112', 's-113'
@@ -177,18 +181,12 @@ const DUMMY_STUDENT_IDS = new Set([
 export function isDummyStudent(item: any): boolean {
   if (!item) return false;
   const id = String(item.id || item.studentId || '');
-  if (id && (DUMMY_STUDENT_IDS.has(id) || id.startsWith("bss-") || id.startsWith("fee-rec-bss-") || id.startsWith("fee-bss-"))) return true;
-  const name = String(item.name || item.studentName || '').toLowerCase().trim();
-  const fName = String(item.fatherName || '').toLowerCase().trim();
-  const cName = String(item.className || '').toLowerCase().trim();
   if (
-    (id === 'bss-c7-02' && (name.includes('abdullah') || fName.includes('aslam'))) ||
-    name.includes('maryam shabbir') ||
-    name.includes('مریم شبیر') ||
-    (name.includes('maryam') && (cName === 'class 4' || item.rollNo === '02' || fName.includes('shabbir'))) ||
-    (name.includes('مریم') && (cName === 'class 4' || item.rollNo === '02' || fName.includes('شبیر'))) ||
-    (name.includes('abdullah') && cName.includes('7') && fName.includes('aslam')) ||
-    (name.includes('عبداللہ') && cName.includes('7') && fName.includes('اسلم'))
+    id &&
+    (DUMMY_STUDENT_IDS.has(id) ||
+      id.startsWith('bss-') ||
+      id.startsWith('fee-rec-bss-') ||
+      id.startsWith('fee-bss-'))
   ) {
     return true;
   }
@@ -430,7 +428,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setIsCloudSyncing(true);
       let success = false;
 
-      // 1. Primary: Server API (/api/school-data)
+      // 1. Primary: Server API (/api/school-data) — verify JSON response (ignore static SPA HTML fallback)
       try {
         const serverBody = isForceReset ? { ...cloudPayload, forceReset: true } : cloudPayload;
         const localRes = await fetch('/api/school-data', {
@@ -438,32 +436,36 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(serverBody)
         });
-        if (localRes.ok) success = true;
+        if (localRes.ok) {
+          const text = await localRes.text();
+          const parsedLocal = extractCleanJson<any>(text);
+          if (parsedLocal?.success === true && !parsedLocal?.preservedExisting) {
+            success = true;
+          }
+        }
       } catch (localErr) {
         console.warn('Server API sync error:', localErr);
       }
 
-      // 2. Secondary: Global Cloud Bin 1
-      try {
-        const cloudRes = await fetch(GLOBAL_CLOUD_ENDPOINT_1, {
+      // 2. Global Cloud Bins (must save permanently online so all devices receive updates)
+      const cloudResults = await Promise.allSettled([
+        fetch(GLOBAL_CLOUD_ENDPOINT_1, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(cloudPayload)
-        });
-        if (cloudRes.ok) success = true;
-      } catch (cloudErr) {
-        console.warn('Cloud API 1 sync error:', cloudErr);
-      }
+        }),
+        fetch(GLOBAL_CLOUD_ENDPOINT_2, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cloudPayload)
+        })
+      ]);
 
-      // 3. Tertiary backup: Global Cloud Bin 2
-      try {
-        const extRes = await fetch(GLOBAL_CLOUD_ENDPOINT_2, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(cloudPayload)
-        });
-        if (extRes.ok) success = true;
-      } catch (extErr) {}
+      cloudResults.forEach(r => {
+        if (r.status === 'fulfilled' && r.value.ok) {
+          success = true;
+        }
+      });
 
       if (success) {
         hasPendingLocalMutation.current = false;
@@ -535,13 +537,16 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       best.students = Array.isArray(best.students) ? best.students.filter((s: any) => !isDummyStudent(s)) : [];
       const data = best;
 
+      const currentLocal = stateRef.current;
       const remoteTime = new Date(data.updatedAt || 0).getTime();
       const localTime = new Date(lastKnownServerUpdatedAt.current || 0).getTime();
-      if (remoteTime <= localTime && hasInitializedFromCloud.current) {
+      const countsMatch =
+        data.students.length === currentLocal.students.length &&
+        (Array.isArray(data.feeRecords) ? data.feeRecords.length : 0) === currentLocal.feeRecords.length &&
+        (Array.isArray(data.studentExamReports) ? data.studentExamReports.length : 0) === currentLocal.studentExamReports.length;
+      if (remoteTime <= localTime && countsMatch && hasInitializedFromCloud.current) {
         return stateRef.current.students.filter(s => !isDummyStudent(s));
       }
-
-      const currentLocal = stateRef.current;
       const mergedDeletedIds = Array.from(
         new Set<string>([
           ...(Array.isArray(data.deletedIds) ? data.deletedIds : []),
@@ -953,24 +958,36 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setCurrentPortal('PUBLIC_WEBSITE');
   };
 
-  // Student CRUD with Immediate Cloud Sync
-  const addStudent = (stData: Omit<Student, 'id'>): Student => {
-    hasPendingLocalMutation.current = true;
+  // Student CRUD with Immediate Verified Cloud Sync & Duplicate Prevention
+  const buildNewStudentState = (stData: Omit<Student, 'id'>) => {
     const cleanRoll = normalizeDigits(stData.rollNo).trim();
+    const cleanRollNum = cleanRoll.replace(/^0+/, '');
+    const duplicate = stateRef.current.students.find(s => {
+      if (s.className.toLowerCase().trim() !== stData.className.toLowerCase().trim()) return false;
+      const existingRoll = normalizeDigits(s.rollNo || '').trim().replace(/^0+/, '');
+      if (cleanRollNum && existingRoll && existingRoll === cleanRollNum) return true;
+      return (
+        s.name.toLowerCase().trim() === stData.name.toLowerCase().trim() &&
+        s.fatherName.toLowerCase().trim() === stData.fatherName.toLowerCase().trim()
+      );
+    });
+    if (duplicate) {
+      return { duplicate, newStudent: null as Student | null, updatedStudents: stateRef.current.students, updatedFees: stateRef.current.feeRecords };
+    }
+
+    const nowTs = Date.now();
     const feeAmount = stData.monthlyFee || getDefaultMonthlyFee(stData.className);
     const newStudent: Student = {
       ...stData,
       rollNo: cleanRoll,
       monthlyFee: feeAmount,
-      id: `s-${Date.now()}`
+      id: `s-${nowTs}-${Math.random().toString(36).substring(2, 6)}`
     };
     const updatedStudents = [newStudent, ...stateRef.current.students];
-    setStudents(updatedStudents);
-    saveToStorage('students', updatedStudents);
 
     const activeMonth = stateRef.current.feeRecords[0]?.month || getCurrentMonthLabel();
     const newFeeRecord: FeeRecord = {
-      id: `fee-${Date.now()}`,
+      id: `fee-${nowTs}-${Math.random().toString(36).substring(2, 6)}`,
       studentId: newStudent.id,
       studentName: newStudent.name,
       fatherName: newStudent.fatherName,
@@ -984,9 +1001,22 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       paidAmount: 0,
       balanceRemaining: feeAmount,
       status: 'Unpaid',
-      receiptNo: `REC-BSS-${Date.now().toString().slice(-4)}`
+      receiptNo: `REC-BSS-${String(nowTs).slice(-4)}`
     };
     const updatedFees = [newFeeRecord, ...stateRef.current.feeRecords];
+    return { duplicate: null, newStudent, updatedStudents, updatedFees };
+  };
+
+  const addStudent = (stData: Omit<Student, 'id'>): Student => {
+    hasPendingLocalMutation.current = true;
+    const { duplicate, newStudent, updatedStudents, updatedFees } = buildNewStudentState(stData);
+    if (duplicate || !newStudent) {
+      return duplicate!;
+    }
+
+    stateRef.current = { ...stateRef.current, students: updatedStudents, feeRecords: updatedFees };
+    setStudents(updatedStudents);
+    saveToStorage('students', updatedStudents);
     setFeeRecords(updatedFees);
     saveToStorage('feeRecords', updatedFees);
 
@@ -998,11 +1028,52 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return newStudent;
   };
 
-  const updateStudent = (updated: Student) => {
+  const addStudentAsync = async (
+    stData: Omit<Student, 'id'>
+  ): Promise<{ success: boolean; student?: Student; error?: string }> => {
+    const prevStudents = stateRef.current.students;
+    const prevFees = stateRef.current.feeRecords;
+    const { duplicate, newStudent, updatedStudents, updatedFees } = buildNewStudentState(stData);
+    if (duplicate || !newStudent) {
+      return {
+        success: false,
+        error: `کلاس ${stData.className} میں رول نمبر ${stData.rollNo} یا یہی طالب علم (${duplicate?.name}) پہلے سے موجود ہے۔`
+      };
+    }
+
+    hasPendingLocalMutation.current = true;
+    stateRef.current = { ...stateRef.current, students: updatedStudents, feeRecords: updatedFees };
+    setStudents(updatedStudents);
+    saveToStorage('students', updatedStudents);
+    setFeeRecords(updatedFees);
+    saveToStorage('feeRecords', updatedFees);
+
+    const saved = await pushCurrentDataToCloud({
+      students: updatedStudents,
+      feeRecords: updatedFees
+    });
+
+    if (!saved) {
+      hasPendingLocalMutation.current = false;
+      stateRef.current = { ...stateRef.current, students: prevStudents, feeRecords: prevFees };
+      setStudents(prevStudents);
+      saveToStorage('students', prevStudents);
+      setFeeRecords(prevFees);
+      saveToStorage('feeRecords', prevFees);
+      return {
+        success: false,
+        error: 'آن لائن کلاؤڈ سرور سے رابطہ نہیں ہو سکا اور طالب علم سرور پر محفوظ نہیں ہوا۔ براہ کرم انٹرنیٹ چیک کر کے دوبارہ کوشش کریں۔'
+      };
+    }
+
+    return { success: true, student: newStudent };
+  };
+
+  const applyUpdateStudent = (updated: Student) => {
     hasPendingLocalMutation.current = true;
     const prev = stateRef.current.students.find(s => s.id === updated.id);
     const normalizedRoll = normalizeDigits(updated.rollNo).trim();
-    let finalStudent: Student = { ...updated, rollNo: normalizedRoll };
+    const finalStudent: Student = { ...updated, rollNo: normalizedRoll };
     let updatedFees = [...stateRef.current.feeRecords];
 
     const classChanged = prev && prev.className !== updated.className;
@@ -1048,11 +1119,37 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       settings: stateRef.current.settings
     });
 
+    stateRef.current = { ...stateRef.current, students: updatedList, feeRecords: reconciledFees };
     setStudents(updatedList);
     saveToStorage('students', updatedList);
     setFeeRecords(reconciledFees);
     saveToStorage('feeRecords', reconciledFees);
+    return { updatedList, reconciledFees };
+  };
+
+  const updateStudent = (updated: Student) => {
+    const { updatedList, reconciledFees } = applyUpdateStudent(updated);
     pushCurrentDataToCloud({ students: updatedList, feeRecords: reconciledFees });
+  };
+
+  const updateStudentAsync = async (updated: Student): Promise<{ success: boolean; error?: string }> => {
+    const prevStudents = stateRef.current.students;
+    const prevFees = stateRef.current.feeRecords;
+    const { updatedList, reconciledFees } = applyUpdateStudent(updated);
+    const saved = await pushCurrentDataToCloud({ students: updatedList, feeRecords: reconciledFees });
+    if (!saved) {
+      hasPendingLocalMutation.current = false;
+      stateRef.current = { ...stateRef.current, students: prevStudents, feeRecords: prevFees };
+      setStudents(prevStudents);
+      saveToStorage('students', prevStudents);
+      setFeeRecords(prevFees);
+      saveToStorage('feeRecords', prevFees);
+      return {
+        success: false,
+        error: 'تبدیلیاں آن لائن سرور پر محفوظ نہیں ہو سکیں۔ براہ کرم انٹرنیٹ چیک کر کے دوبارہ کوشش کریں۔'
+      };
+    }
+    return { success: true };
   };
 
   const deleteStudent = (id: string) => {
@@ -1574,12 +1671,16 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   // Official Student Exam Reports (Tests & Results Section)
-  const saveStudentExamReport = (report: StudentExamReport) => {
+  const applySaveStudentExamReport = (report: StudentExamReport) => {
     hasPendingLocalMutation.current = true;
+    const rawEnteredBy = (report.enteredByName || '').trim();
+    const safeEnteredBy =
+      /tasawar|principal/i.test(rawEnteredBy) ? 'Class Teacher' : rawEnteredBy || 'Class Teacher';
     const updated = [...stateRef.current.studentExamReports];
     const idx = updated.findIndex(r => r.id === report.id);
     const enriched: StudentExamReport = {
       ...report,
+      enteredByName: safeEnteredBy,
       updatedAt: new Date().toISOString()
     };
     if (idx >= 0) {
@@ -1587,9 +1688,28 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } else {
       updated.unshift(enriched);
     }
+    stateRef.current = { ...stateRef.current, studentExamReports: updated };
     setStudentExamReports(updated);
     saveToStorage('studentExamReports', updated);
+    return updated;
+  };
+
+  const saveStudentExamReport = (report: StudentExamReport) => {
+    const updated = applySaveStudentExamReport(report);
     pushCurrentDataToCloud({ studentExamReports: updated });
+  };
+
+  const saveStudentExamReportAsync = async (report: StudentExamReport): Promise<boolean> => {
+    const prevReports = stateRef.current.studentExamReports;
+    const updated = applySaveStudentExamReport(report);
+    const saved = await pushCurrentDataToCloud({ studentExamReports: updated });
+    if (!saved) {
+      hasPendingLocalMutation.current = false;
+      stateRef.current = { ...stateRef.current, studentExamReports: prevReports };
+      setStudentExamReports(prevReports);
+      saveToStorage('studentExamReports', prevReports);
+    }
+    return saved;
   };
 
   const deleteStudentExamReport = (reportId: string) => {
@@ -1928,7 +2048,9 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         logout,
         setSelectedStudentForModal,
         addStudent,
+        addStudentAsync,
         updateStudent,
+        updateStudentAsync,
         deleteStudent,
         toggleStudentActive,
         purgePlaceholderStudents,
@@ -1955,6 +2077,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         addTestResult,
         studentExamReports,
         saveStudentExamReport,
+        saveStudentExamReportAsync,
         deleteStudentExamReport,
         togglePublishExamReport,
         addNotice,

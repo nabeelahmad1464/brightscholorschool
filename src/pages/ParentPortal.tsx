@@ -1061,7 +1061,9 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                 <div className="pt-8 flex items-end justify-between px-4 text-center">
                   <div className="w-44">
                     <div className="border-b-2 border-slate-800 pb-1 mb-1 font-serif text-slate-700 italic text-xs">
-                      {selectedExamCard.enteredByName || 'Class Teacher'}
+                      {selectedExamCard.enteredByName && !/tasawar|principal/i.test(selectedExamCard.enteredByName)
+                        ? selectedExamCard.enteredByName
+                        : 'Class Teacher'}
                     </div>
                     <span className="text-[10px] text-slate-500 font-bold block uppercase">
                       کلاس ٹیچر دستخط (Class Teacher)
@@ -1079,9 +1081,12 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                   </div>
 
                   <div className="w-44">
-                    <div className="border-b-2 border-slate-800 pb-1 mb-1 font-serif text-[#0D285F] font-bold text-xs">
-                      Sir Tasawar (Principal)
+                    <div className="inline-block border-2 border-[#0D285F] rounded-md px-3 py-0.5 mb-1.5 bg-[#0D285F]/5">
+                      <span className="font-black text-[#0D285F] tracking-[0.2em] text-xs uppercase">
+                        PRINCIPAL
+                      </span>
                     </div>
+                    <div className="border-b-2 border-slate-800 pb-1 mb-1"></div>
                     <span className="text-[10px] text-slate-500 font-bold block uppercase">
                       پرنسپل مہر و دستخط (Principal Stamp)
                     </span>

@@ -64,11 +64,12 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
   const {
     students,
     studentExamReports,
-    saveStudentExamReport,
+    saveStudentExamReportAsync,
     deleteStudentExamReport,
     togglePublishExamReport,
     openWhatsApp
   } = useSchool();
+  const [isSavingReport, setIsSavingReport] = useState(false);
 
   // Filter students to real enrolled students only
   const validStudents = useMemo(() => {
@@ -300,7 +301,8 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
   }, [calculatedPercentage, hasAnyObtainedMarks, calculatedGrandTotal]);
 
   // Save report
-  const handleSaveReport = (publishImmediate: boolean) => {
+  const handleSaveReport = async (publishImmediate: boolean) => {
+    if (isSavingReport) return;
     if (!selectedStudent) {
       alert('براہ کرم طالب علم کا انتخاب کریں!');
       return;
@@ -324,6 +326,11 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
       };
     });
 
+    const safeEnteredBy =
+      role === 'admin' || /tasawar|principal/i.test(teacherName || '')
+        ? 'Class Teacher'
+        : teacherName;
+
     const report: StudentExamReport = {
       id: editingReportId || `exam-${Date.now()}-${selectedStudent.id}`,
       examTitle: formExamTitle.trim() || 'Term Examination 2026',
@@ -344,14 +351,21 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
       isPublished: publishImmediate,
       updatedAt: new Date().toISOString(),
       enteredByRole: role === 'admin' ? 'Admin' : 'Teacher',
-      enteredByName: teacherName
+      enteredByName: safeEnteredBy
     };
 
-    saveStudentExamReport(report);
+    setIsSavingReport(true);
+    const saved = await saveStudentExamReportAsync(report);
+    setIsSavingReport(false);
+
+    if (!saved) {
+      alert('خرابی: امتحانی نتیجہ آن لائن سرور پر محفوظ نہیں ہو سکا! براہ کرم انٹرنیٹ چیک کر کے دوبارہ کوشش کریں۔');
+      return;
+    }
 
     const msg = publishImmediate
-      ? `امتحانی نتیجہ کامیابی سے محفوظ ہو گیا اور پیرنٹ پورٹل پر شائع ہو گیا ہے!\nطالب علم: ${selectedStudent.name} (${selectedStudent.className})\nکل نمبر: ${calculatedTotalObtained} / ${calculatedGrandTotal} (${calculatedPercentage}%) • گریڈ: ${calculatedGrade}`
-      : `امتحانی نتیجہ بطور ڈرافٹ محفوظ ہو گیا ہے! والدین کو صرف اس وقت نظر آئے گا جب آپ شائع (Publish) کریں گے۔`;
+      ? `امتحانی نتیجہ کامیابی سے آن لائن سرور پر محفوظ ہو گیا اور پیرنٹ پورٹل پر شائع ہو گیا ہے!\nطالب علم: ${selectedStudent.name} (${selectedStudent.className})\nکل نمبر: ${calculatedTotalObtained} / ${calculatedGrandTotal} (${calculatedPercentage}%) • گریڈ: ${calculatedGrade}`
+      : `امتحانی نتیجہ آن لائن سرور پر بطور ڈرافٹ محفوظ ہو گیا ہے! والدین کو صرف اس وقت نظر آئے گا جب آپ شائع (Publish) کریں گے۔`;
 
     alert(msg);
     setCurrentView('list');
@@ -793,20 +807,22 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
+                disabled={isSavingReport}
                 onClick={() => handleSaveReport(false)}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs px-4 py-2.5 rounded-xl border border-slate-300 flex items-center gap-1.5 transition"
+                className="bg-slate-100 hover:bg-slate-200 disabled:opacity-60 text-slate-800 font-bold text-xs px-4 py-2.5 rounded-xl border border-slate-300 flex items-center gap-1.5 transition"
               >
                 <Clock className="w-4 h-4 text-amber-600" />
-                <span>ڈرافٹ محفوظ کریں (Save as Draft - Only Teachers See)</span>
+                <span>{isSavingReport ? 'محفوظ ہو رہا ہے...' : 'ڈرافٹ محفوظ کریں (Save as Draft - Only Teachers See)'}</span>
               </button>
 
               <button
                 type="button"
+                disabled={isSavingReport}
                 onClick={() => handleSaveReport(true)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>شائع کریں اور محفوظ کریں (Save & Publish to Parent Portal)</span>
+                <span>{isSavingReport ? 'سرور پر محفوظ ہو رہا ہے...' : 'شائع کریں اور محفوظ کریں (Save & Publish to Parent Portal)'}</span>
               </button>
             </div>
           </div>
@@ -1211,7 +1227,9 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
                 <div className="pt-8 flex items-end justify-between px-4 text-center">
                   <div className="w-44">
                     <div className="border-b-2 border-slate-800 pb-1 mb-1 font-serif text-slate-700 italic text-xs">
-                      {selectedExamCard.enteredByName || 'Class Teacher'}
+                      {selectedExamCard.enteredByName && !/tasawar|principal/i.test(selectedExamCard.enteredByName)
+                        ? selectedExamCard.enteredByName
+                        : 'Class Teacher'}
                     </div>
                     <span className="text-[10px] text-slate-500 font-bold block uppercase">
                       کلاس ٹیچر دستخط (Class Teacher)
@@ -1229,9 +1247,12 @@ export const StudentMarksAndResultsSection: React.FC<StudentMarksAndResultsSecti
                   </div>
 
                   <div className="w-44">
-                    <div className="border-b-2 border-slate-800 pb-1 mb-1 font-serif text-[#0D285F] font-bold text-xs">
-                      Sir Tasawar (Principal)
+                    <div className="inline-block border-2 border-[#0D285F] rounded-md px-3 py-0.5 mb-1.5 bg-[#0D285F]/5">
+                      <span className="font-black text-[#0D285F] tracking-[0.2em] text-xs uppercase">
+                        PRINCIPAL
+                      </span>
                     </div>
+                    <div className="border-b-2 border-slate-800 pb-1 mb-1"></div>
                     <span className="text-[10px] text-slate-500 font-bold block uppercase">
                       پرنسپل مہر و دستخط (Principal Stamp)
                     </span>
