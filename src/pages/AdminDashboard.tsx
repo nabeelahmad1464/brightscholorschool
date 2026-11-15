@@ -51,6 +51,7 @@ import {
 import { FeeReceiptModal } from '../components/FeeReceiptModal';
 import { StudentMarksAndResultsSection } from '../components/StudentMarksAndResultsSection';
 import { getCurrentMonthLabel, normalizeDigits } from '../utils/schoolSync';
+import { calculateSchoolFeeSummary, deduplicateAndCleanFeeRecords } from '../utils/feeCalculations';
 
 interface AdminDashboardProps {
   onSelectStudent: (student: Student) => void;
@@ -216,6 +217,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
   const [teacherGeneralPassInput, setTeacherGeneralPassInput] = useState(settings.teacherPassword);
   const [showAdminPass, setShowAdminPass] = useState(false);
   const [voucherMonth, setVoucherMonth] = useState(feeRecords[0]?.month || getCurrentMonthLabel());
+  const [feeSearchQuery, setFeeSearchQuery] = useState('');
+  const [feeFilterClass, setFeeFilterClass] = useState<string>('All');
+  const [feeFilterStatus, setFeeFilterStatus] = useState<'All' | 'Unpaid' | 'Partial' | 'Paid'>('All');
+  const [feeFilterMonth, setFeeFilterMonth] = useState<string>('All');
 
   useEffect(() => {
     setFineInput(settings.finePerAbsentDay);
@@ -228,22 +233,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
     setTempStatusMap({});
   }, [attClass, attDate]);
 
-  // KPI Calculations (PG-Class 4 = Rs. 2,000; Class 5-Class 8 = Rs. 3,000; plus attendance-linked fines)
-  const validFeeRecords = feeRecords.filter(f => !isDummyStudent(f));
-  const totalStudents = students.length;
-  const activeStudents = students.filter(s => s.isActive).length;
+  // Accurate Student-Wise & Class-Wise Fee Calculations (excludes duplicates/orphans; includes all 53 students)
+  const validRealStudents = students.filter(s => !isDummyStudent(s));
+  const validFeeRecords = deduplicateAndCleanFeeRecords(
+    feeRecords.filter(f => !isDummyStudent(f)),
+    validRealStudents
+  );
+  const feeSummary = calculateSchoolFeeSummary({
+    students: validRealStudents,
+    feeRecords: validFeeRecords
+  });
+  const ledgerFeeSummary =
+    feeFilterMonth === 'All'
+      ? feeSummary
+      : calculateSchoolFeeSummary({
+          students: validRealStudents,
+          feeRecords: validFeeRecords,
+          monthFilter: feeFilterMonth
+        });
+
+  const totalStudents = feeSummary.totalStudents;
+  const activeStudents = feeSummary.activeStudents;
   const totalTeachers = teachers.length;
   const pendingLeavesCount = leaves.filter(l => l.status === 'Pending').length;
   const pendingAdmissionsCount = onlineAdmissions.filter(a => a.status === 'Pending').length;
-  const totalMonthlyFees = students.reduce((sum, s) => sum + (s.monthlyFee || getDefaultMonthlyFee(s.className)), 0);
-  const totalFinesAmount = validFeeRecords.reduce((acc, curr) => acc + (curr.fineAmount || 0), 0);
-  const totalPayableWithFines = validFeeRecords.length > 0
-    ? validFeeRecords.reduce((acc, curr) => acc + (curr.totalPayable || 0), 0)
-    : totalMonthlyFees;
-  const totalFeesCollected = validFeeRecords.reduce((acc, curr) => acc + (curr.paidAmount || 0), 0);
-  const totalFeesPending = validFeeRecords.length > 0
-    ? validFeeRecords.reduce((acc, curr) => acc + (curr.balanceRemaining || 0), 0)
-    : Math.max(0, totalMonthlyFees - totalFeesCollected);
+  const totalMonthlyFees = feeSummary.totalExpectedTuition;
+  const totalFinesAmount = feeSummary.totalFinesAmount;
+  const totalPayableWithFines = feeSummary.totalExpectedFee;
+  const totalFeesCollected = feeSummary.totalReceivedFee;
+  const totalFeesPending = feeSummary.totalRemainingFee;
 
   // Class students for folder view
   const classStudents = students.filter(s => s.className === selectedClassFolder);
@@ -470,7 +488,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
       const target = feeRecords.find(f => f.id === paymentFeeId);
       recordFeePayment(paymentFeeId, paymentAmount, receiptNo);
       if (target) {
-        const newPaid = target.paidAmount + paymentAmount;
+        const newPaid = Math.min(target.totalPayable, target.paidAmount + paymentAmount);
         const newBal = Math.max(0, target.totalPayable - newPaid);
         setSelectedFeeForReceipt({
           ...target,
@@ -628,7 +646,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
       {activeTab === 'overview' && (
         <div className="space-y-6">
           {/* Quick KPI Stat Cards */}
-          {/* Quick KPI Stat Cards: 50 Students & Fee Structure */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm border-t-4 border-t-[#0D285F]">
               <span className="text-xs text-slate-500 font-bold block">کل رجسٹرڈ طلباء (Total Students)</span>
@@ -637,30 +654,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm border-t-4 border-t-blue-600">
-              <span className="text-xs text-slate-500 font-bold block">کل ماہانہ فیس (Total Monthly Fees)</span>
+              <span className="text-xs text-slate-500 font-bold block">کل متوقع فیس (Total Expected Fee)</span>
               <span className="text-2xl font-black text-blue-900 mt-1 block">
-                Rs. {totalMonthlyFees.toLocaleString()}
+                Rs. {totalPayableWithFines.toLocaleString()}
               </span>
-              <span className="text-[11px] text-slate-500 font-medium">PG-C4: Rs. 2,000 | C5-C8: Rs. 3,000</span>
+              <span className="text-[11px] text-slate-500 font-medium">
+                {totalFinesAmount > 0
+                  ? `ماہانہ فیس: Rs. ${totalMonthlyFees.toLocaleString()} + جرمانہ: Rs. ${totalFinesAmount.toLocaleString()}`
+                  : `${totalStudents} طلباء کی کلاس وار کل فیس`}
+              </span>
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm border-t-4 border-t-emerald-600">
-              <span className="text-xs text-slate-500 font-bold block">وصول شدہ فیس (Received Fees)</span>
+              <span className="text-xs text-slate-500 font-bold block">وصول شدہ فیس (Total Received Fee)</span>
               <span className="text-2xl font-black text-emerald-700 mt-1 block">
                 Rs. {totalFeesCollected.toLocaleString()}
               </span>
               <span className="text-[11px] text-slate-500 font-medium">
-                {totalFeesCollected === 0 ? 'کوئی فیس وصول نہیں ہوئی (0 روپے)' : 'وصول شدہ واؤچرز'}
+                {totalFeesCollected === 0
+                  ? 'کوئی فیس وصول نہیں ہوئی (Rs. 0)'
+                  : `${feeSummary.paidVoucherCount + feeSummary.partialVoucherCount} طلباء کی فیس موصول`}
               </span>
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm border-t-4 border-t-amber-500">
-              <span className="text-xs text-slate-500 font-bold block">بقایا واجب الادا فیس (Pending Fees)</span>
+              <span className="text-xs text-slate-500 font-bold block">بقایا واجب الادا فیس (Remaining / Due)</span>
               <span className="text-2xl font-black text-amber-700 mt-1 block">
                 Rs. {totalFeesPending.toLocaleString()}
               </span>
               <span className="text-[11px] text-amber-700 font-medium">
-                باقی بقایا رقم (خودکار حساب)
+                کل متوقع منفی وصول شدہ (Rs. {totalPayableWithFines.toLocaleString()} − Rs. {totalFeesCollected.toLocaleString()})
               </span>
             </div>
           </div>
@@ -955,9 +978,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
                             <td className="p-3">
                               {report ? (
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  report.feeStatus === 'Paid'
+                                  report.balanceRemaining === 0
                                     ? 'bg-emerald-100 text-emerald-800'
-                                    : report.feeStatus === 'Partial'
+                                    : report.paidAmount > 0
                                     ? 'bg-amber-100 text-amber-800'
                                     : 'bg-red-100 text-red-800'
                                 }`}>
@@ -983,7 +1006,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
                               </button>
                               <button
                                 onClick={() => {
-                                  let record = feeRecords.find(f => f.studentId === st.id);
+                                  let record = validFeeRecords.find(f => f.studentId === st.id);
                                   if (!record) {
                                     record = {
                                       id: `fee-${st.id}`,
@@ -991,13 +1014,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
                                       studentName: st.name,
                                       fatherName: st.fatherName,
                                       className: st.className,
-                                      month: 'October 2026',
-                                      tuitionFee: st.monthlyFee,
+                                      month: voucherMonth || getCurrentMonthLabel(),
+                                      tuitionFee: st.monthlyFee || getDefaultMonthlyFee(st.className),
                                       absentDays: 0,
                                       fineAmount: 0,
-                                      totalPayable: st.monthlyFee,
+                                      totalPayable: st.monthlyFee || getDefaultMonthlyFee(st.className),
                                       paidAmount: 0,
-                                      balanceRemaining: st.monthlyFee,
+                                      balanceRemaining: st.monthlyFee || getDefaultMonthlyFee(st.className),
                                       status: 'Unpaid',
                                       receiptNo: `REC-BSS-${st.id.slice(-4)}`
                                     };
@@ -1894,253 +1917,427 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
       )}
 
       {/* TAB 5: FEES */}
-      {activeTab === 'fees' && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h3 className="font-bold text-slate-900 text-base">Fee Management & Absence Fine Ledger</h3>
-              <p className="text-xs text-slate-500">
-                Track tuition fees, absent fines (Rs. {settings.finePerAbsentDay}/day), and issue receipts.
-              </p>
+      {activeTab === 'fees' && (() => {
+        const studentLookup = new Map(validRealStudents.map(s => [s.id, s]));
+        const availableMonths = Array.from(
+          new Set(validFeeRecords.map(f => f.month).filter(Boolean))
+        );
+        const filteredFeeList = validFeeRecords.filter(f => {
+          if (feeFilterMonth !== 'All' && f.month !== feeFilterMonth) return false;
+          if (feeFilterClass !== 'All' && f.className !== feeFilterClass) return false;
+          if (feeFilterStatus !== 'All' && f.status !== feeFilterStatus) return false;
+          if (feeSearchQuery.trim()) {
+            const q = feeSearchQuery.toLowerCase().trim();
+            const st = studentLookup.get(f.studentId);
+            const matchName = (f.studentName || '').toLowerCase().includes(q);
+            const matchFather = (f.fatherName || '').toLowerCase().includes(q);
+            const matchRoll = (st?.rollNo || '').toLowerCase().includes(q);
+            if (!matchName && !matchFather && !matchRoll) return false;
+          }
+          return true;
+        });
+
+        return (
+          <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">
+                  Fee Management &amp; Absence Fine Ledger
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Track all {totalStudents} students&apos; class-wise fees, absent fines (Rs. {settings.finePerAbsentDay}/day), payments, and receipts.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => {
+                    recalculateAllFeeFines();
+                    alert('تمام واؤچرز کے فیس ریکارڈ اور جرمانے طلباء کی اصل کلاس فیس و حاضری کے مطابق سنک اور درست کر دیے گئے!');
+                  }}
+                  className="bg-blue-50 hover:bg-blue-100 text-[#0D285F] font-bold text-xs px-3 py-2 rounded-xl border border-blue-200 transition flex items-center gap-1.5 cursor-pointer"
+                  title="طلباء کی کلاس فیس اور حاضری کے مطابق تمام واؤچرز دوبارہ سنک کریں"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>فیس و جرمانے سنک کریں (Sync Fees)</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const dummies = feeRecords.filter(f => isDummyStudent(f));
+                    const validCountBefore = feeRecords.length;
+                    recalculateAllFeeFines();
+                    const removedCount = Math.max(0, validCountBefore - validFeeRecords.length) + dummies.length;
+                    if (removedCount === 0) {
+                      alert('تمام فیس واؤچرز پہلے سے صاف اور ہر طالب علم کے مطابق بالکل درست ہیں۔');
+                    } else {
+                      dummies.forEach(d => deleteFeeRecord(d.id));
+                      alert(`کامیابی! ڈپلیکیٹ اور غیر متعلقہ واؤچرز صاف کر دیے گئے۔`);
+                    }
+                  }}
+                  className="bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs px-3 py-2 rounded-xl border border-red-200 transition flex items-center gap-1.5 cursor-pointer"
+                  title="ڈپلیکیٹ یا فرضی واؤچرز صاف کریں"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>ڈپلیکیٹ / ڈمی صاف کریں</span>
+                </button>
+
+                <select
+                  value={voucherMonth}
+                  onChange={(e) => setVoucherMonth(e.target.value)}
+                  className="bg-white border border-slate-300 rounded-xl px-2.5 py-2 text-xs font-bold text-[#0D285F]"
+                >
+                  {Array.from(
+                    new Set([
+                      voucherMonth,
+                      getCurrentMonthLabel(),
+                      'October 2026',
+                      'November 2026',
+                      'December 2026',
+                      'January 2027'
+                    ])
+                  ).map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+
+                <button
+                  onClick={() => {
+                    const count = generateMonthlyFeeVouchers(voucherMonth);
+                    alert(
+                      count > 0
+                        ? `Generated ${count} monthly vouchers for ${voucherMonth}!`
+                        : `${voucherMonth} کے تمام طلباء کے واؤچرز پہلے سے موجود ہیں۔`
+                    );
+                  }}
+                  className="bg-amber-400 hover:bg-amber-300 text-[#07193B] font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer"
+                >
+                  + Generate {voucherMonth} Vouchers
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => {
-                  recalculateAllFeeFines();
-                  alert('تمام واؤچرز کے غیر حاضری جرمانے حاضری و رخصت ریکارڈ کے مطابق خودکار سنک ہو گئے!');
-                }}
-                className="bg-blue-50 hover:bg-blue-100 text-[#0D285F] font-bold text-xs px-3 py-2 rounded-xl border border-blue-200 transition flex items-center gap-1.5"
-                title="حاضری اور منظور شدہ چھٹیوں کے مطابق جرمانے دوبارہ شمار کریں"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>جرمانے سنک کریں (Sync Fines)</span>
-              </button>
+            {/* Fee Breakdown Summary Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <span className="text-[11px] font-bold text-slate-500 block">
+                  کل رجسٹرڈ طلباء (Total Students)
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-[#0D285F] mt-0.5 block">
+                  {ledgerFeeSummary.totalStudents} Students
+                </span>
+                <span className="text-[10px] text-slate-500 font-medium">
+                  {ledgerFeeSummary.activeStudents} طلباء زیر تعلیم • {ledgerFeeSummary.classBreakdown.length} کلاسز
+                </span>
+              </div>
 
-              <button
-                onClick={() => {
-                  const dummies = feeRecords.filter(f => isDummyStudent(f));
-                  if (dummies.length === 0) {
-                    alert('تمام ڈمی اور غیر متعلقہ فیس واؤچرز پہلے سے صاف ہیں۔');
-                  } else {
-                    dummies.forEach(d => deleteFeeRecord(d.id));
-                    alert(`کامیابی! ${dummies.length} ڈمی فیس واؤچرز مستقل ڈیلیٹ کر دیئے گئے۔`);
-                  }
-                }}
-                className="bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs px-3 py-2 rounded-xl border border-red-200 transition flex items-center gap-1.5"
-                title="تمام فرضی فیس واؤچرز ڈیلیٹ کریں"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>ڈمی واؤچرز صاف کریں</span>
-              </button>
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                <span className="text-[11px] font-bold text-blue-900 block">
+                  کل متوقع فیس (Total Expected Fee)
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-blue-950 mt-0.5 block">
+                  Rs. {ledgerFeeSummary.totalExpectedFee.toLocaleString()}
+                </span>
+                <span className="text-[10px] text-blue-700 font-medium">
+                  ماہانہ فیس: Rs. {ledgerFeeSummary.totalExpectedTuition.toLocaleString()}
+                  {ledgerFeeSummary.totalFinesAmount > 0
+                    ? ` + جرمانہ: Rs. ${ledgerFeeSummary.totalFinesAmount.toLocaleString()}`
+                    : ' • بغیر کسی اضافی چارج کے'}
+                </span>
+              </div>
+
+              <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+                <span className="text-[11px] font-bold text-emerald-900 block">
+                  وصول شدہ فیس (Total Received Fee)
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-emerald-800 mt-0.5 block">
+                  Rs. {ledgerFeeSummary.totalReceivedFee.toLocaleString()}
+                </span>
+                <span className="text-[10px] text-emerald-700 font-medium">
+                  {ledgerFeeSummary.totalReceivedFee === 0
+                    ? 'ابھی کوئی فیس وصول نہیں ہوئی (Rs. 0)'
+                    : `${ledgerFeeSummary.paidVoucherCount} مکمل ادا شدہ • ${ledgerFeeSummary.partialVoucherCount} جزوی`}
+                </span>
+              </div>
+
+              <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+                <span className="text-[11px] font-bold text-amber-900 block">
+                  بقایا / واجب الادا فیس (Remaining / Due)
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-amber-800 mt-0.5 block">
+                  Rs. {ledgerFeeSummary.totalRemainingFee.toLocaleString()}
+                </span>
+                <span className="text-[10px] text-amber-700 font-medium">
+                  {ledgerFeeSummary.totalReceivedFee === 0
+                    ? `مکمل متوقع فیس کے برابر (${ledgerFeeSummary.totalStudents} طلباء)`
+                    : `${ledgerFeeSummary.unpaidVoucherCount + ledgerFeeSummary.partialVoucherCount} طلباء کے ذمے بقایا`}
+                </span>
+              </div>
+            </div>
+
+            {/* Class-Wise Expected Fee Breakdown Strip */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-extrabold text-[#0D285F]">
+                  کلاس وار فیس کا حساب (Class-Wise Fee Breakdown — {ledgerFeeSummary.totalStudents} طلباء):
+                </span>
+                <span className="text-[11px] font-bold text-blue-800">
+                  کل متوقع ماہانہ فیس: Rs. {ledgerFeeSummary.totalExpectedTuition.toLocaleString()}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+                {ledgerFeeSummary.classBreakdown.map(cb => (
+                  <button
+                    key={cb.className}
+                    type="button"
+                    onClick={() =>
+                      setFeeFilterClass(prev => (prev === cb.className ? 'All' : cb.className))
+                    }
+                    className={`p-2 rounded-lg border text-left transition cursor-pointer ${
+                      feeFilterClass === cb.className
+                        ? 'bg-[#0D285F] text-white border-[#0D285F]'
+                        : 'bg-white text-slate-800 border-slate-200 hover:border-blue-300'
+                    }`}
+                  >
+                    <span className="text-[11px] font-extrabold block truncate">{cb.className}</span>
+                    <span
+                      className={`text-[10px] block ${
+                        feeFilterClass === cb.className ? 'text-amber-300' : 'text-slate-500'
+                      }`}
+                    >
+                      {cb.studentCount} × {cb.feePerStudentLabel}
+                    </span>
+                    <span className="text-xs font-black block mt-0.5">
+                      Rs. {cb.expectedTuition.toLocaleString()}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="flex flex-wrap items-center gap-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={feeSearchQuery}
+                  onChange={(e) => setFeeSearchQuery(e.target.value)}
+                  placeholder="طالب علم کا نام، ولدیت یا رول نمبر تلاش کریں..."
+                  className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-[#0D285F]"
+                />
+              </div>
 
               <select
-                value={voucherMonth}
-                onChange={(e) => setVoucherMonth(e.target.value)}
-                className="bg-white border border-slate-300 rounded-xl px-2.5 py-2 text-xs font-bold text-[#0D285F]"
+                value={feeFilterClass}
+                onChange={(e) => setFeeFilterClass(e.target.value)}
+                className="text-xs font-semibold px-3 py-2 bg-white border border-slate-300 rounded-xl outline-none"
               >
-                {Array.from(
-                  new Set([
-                    voucherMonth,
-                    getCurrentMonthLabel(),
-                    'October 2026',
-                    'November 2026',
-                    'December 2026',
-                    'January 2027'
-                  ])
-                ).map(m => (
-                  <option key={m} value={m}>{m}</option>
+                <option value="All">تمام کلاسز (All Classes)</option>
+                {SCHOOL_CLASSES.map(cls => (
+                  <option key={cls} value={cls}>{cls}</option>
                 ))}
               </select>
 
-              <button
-                onClick={() => {
-                  const count = generateMonthlyFeeVouchers(voucherMonth);
-                  alert(`Generated ${count} monthly vouchers for ${voucherMonth}!`);
-                }}
-                className="bg-amber-400 hover:bg-amber-300 text-[#07193B] font-bold text-xs px-4 py-2 rounded-xl transition"
+              <select
+                value={feeFilterStatus}
+                onChange={(e) => setFeeFilterStatus(e.target.value as any)}
+                className="text-xs font-semibold px-3 py-2 bg-white border border-slate-300 rounded-xl outline-none"
               >
-                + Generate {voucherMonth} Vouchers
-              </button>
-            </div>
-          </div>
+                <option value="All">تمام اسٹیٹس (All Status)</option>
+                <option value="Unpaid">واجب الادا (Unpaid)</option>
+                <option value="Partial">جزوی ادا شدہ (Partial)</option>
+                <option value="Paid">مکمل ادا شدہ (Paid)</option>
+              </select>
 
-          {/* Fee Breakdown Summary */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-              <span className="text-[11px] font-bold text-slate-500 block">کل رجسٹرڈ طلباء</span>
-              <span className="text-xl font-black text-[#0D285F] mt-0.5 block">{totalStudents} Students</span>
-              <span className="text-[10px] text-slate-500 font-medium">{activeStudents} طلباء زیر تعلیم</span>
-            </div>
-
-            <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
-              <span className="text-[11px] font-bold text-blue-900 block">کل قابل ادا رقم (Tuition + Fines)</span>
-              <span className="text-xl font-black text-blue-950 mt-0.5 block">
-                Rs. {totalPayableWithFines.toLocaleString()}
-              </span>
-              <span className="text-[10px] text-blue-700 font-medium">
-                فیس: Rs. {totalMonthlyFees.toLocaleString()} + جرمانہ: Rs. {totalFinesAmount.toLocaleString()}
-              </span>
-            </div>
-
-            <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
-              <span className="text-[11px] font-bold text-emerald-900 block">وصول شدہ فیس (Received)</span>
-              <span className="text-xl font-black text-emerald-800 mt-0.5 block">
-                Rs. {totalFeesCollected.toLocaleString()}
-              </span>
-              <span className="text-[10px] text-emerald-700 font-medium">
-                {totalFeesCollected === 0 ? 'کوئی فیس وصول نہیں ہوئی (0 روپے)' : 'وصول شدہ واؤچرز'}
-              </span>
-            </div>
-
-            <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
-              <span className="text-[11px] font-bold text-amber-900 block">بقایا واجب الادا فیس (Pending)</span>
-              <span className="text-xl font-black text-amber-800 mt-0.5 block">
-                Rs. {totalFeesPending.toLocaleString()}
-              </span>
-              <span className="text-[10px] text-amber-700 font-medium">
-                باقی بقایا رقم (خودکار حساب)
-              </span>
-            </div>
-          </div>
-
-          {feeRecords.filter(f => !isDummyStudent(f)).length === 0 ? (
-            <div className="text-center py-12 text-slate-500 text-xs italic bg-slate-50 rounded-xl border border-dashed border-slate-300">
-              ابھی کوئی فیس واؤچر یا ریکارڈ موجود نہیں ہے۔ جیسے ہی آپ نئے طلباء داخل کریں گے، ان کا فیس ریکارڈ یہاں خود بخود آ جائے گا۔
-            </div>
-          ) : (
-            <div className="overflow-x-auto border border-slate-200 rounded-xl">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#07193B] text-white">
-                  <tr>
-                    <th className="p-3">Student</th>
-                    <th className="p-3">Class</th>
-                    <th className="p-3">Month</th>
-                    <th className="p-3">Tuition</th>
-                    <th className="p-3">Absents (Fine)</th>
-                    <th className="p-3">Total Payable</th>
-                    <th className="p-3">Paid</th>
-                    <th className="p-3">Balance</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Collect & Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {feeRecords.filter(f => !isDummyStudent(f)).map(f => (
-                    <tr key={f.id} className="hover:bg-slate-50">
-                      <td className="p-3 font-semibold text-slate-900">{f.studentName}</td>
-                      <td className="p-3">{f.className}</td>
-                      <td className="p-3 text-slate-500">{f.month}</td>
-                      <td className="p-3">Rs. {f.tuitionFee}</td>
-                      <td className="p-3 text-red-600 font-bold">
-                        {f.absentDays} days (Rs. {f.fineAmount})
-                      </td>
-                      <td className="p-3 font-bold text-slate-900">Rs. {f.totalPayable}</td>
-                      <td className="p-3 text-emerald-600 font-bold">Rs. {f.paidAmount}</td>
-                      <td className="p-3 font-bold">Rs. {f.balanceRemaining}</td>
-                      <td className="p-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          f.status === 'Paid'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : f.status === 'Partial'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {f.status}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => {
-                              setSelectedFeeForReceipt(f);
-                              setFeeReceiptEditMode(false);
-                            }}
-                            className="bg-blue-50 hover:bg-blue-100 text-[#0D285F] border border-blue-200 px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1 shadow-sm"
-                            title="Print / View Fee Receipt"
-                          >
-                            <Printer className="w-3.5 h-3.5 text-blue-700" />
-                            <span>رسید</span>
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedFeeForReceipt(f);
-                              setFeeReceiptEditMode(true);
-                            }}
-                            className="bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1 shadow-sm"
-                            title="فیس کم یا زیادہ کریں"
-                          >
-                            <Edit3 className="w-3.5 h-3.5 text-amber-800" />
-                            <span>فیس کم/زیادہ</span>
-                          </button>
-                          {f.balanceRemaining > 0 && (
-                            <button
-                              onClick={() => {
-                                setPaymentFeeId(f.id);
-                                setPaymentAmount(f.balanceRemaining);
-                              }}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded text-xs font-semibold transition shadow-sm"
-                            >
-                              Collect
-                            </button>
-                          )}
-                          <button
-                            onClick={() => {
-                              if (confirm(`کیا آپ ${f.studentName} کا یہ فیس واؤچر مستقل ڈیلیٹ کرنا چاہتے ہیں؟`)) {
-                                deleteFeeRecord(f.id);
-                              }
-                            }}
-                            className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 p-1 rounded text-xs transition shadow-sm"
-                            title="فیس واؤچر ڈیلیٹ کریں (Delete)"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {paymentFeeId && (
-            <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl">
-              <h4 className="font-bold text-xs text-emerald-900 mb-2">Record Fee Payment</h4>
-              <form onSubmit={handleRecordPayment} className="flex flex-wrap items-center gap-3">
-                <input
-                  type="number"
-                  required
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(Number(e.target.value))}
-                  placeholder="Amount"
-                  className="px-3 py-1.5 text-xs border rounded-lg bg-white"
-                />
-                <input
-                  type="text"
-                  value={receiptNo}
-                  onChange={(e) => setReceiptNo(e.target.value)}
-                  placeholder="Receipt # (Optional)"
-                  className="px-3 py-1.5 text-xs border rounded-lg bg-white"
-                />
-                <button
-                  type="submit"
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-1.5 rounded-lg text-xs font-bold"
+              {availableMonths.length > 1 && (
+                <select
+                  value={feeFilterMonth}
+                  onChange={(e) => setFeeFilterMonth(e.target.value)}
+                  className="text-xs font-semibold px-3 py-2 bg-white border border-slate-300 rounded-xl outline-none"
                 >
-                  Save Payment Receipt
-                </button>
+                  <option value="All">تمام مہینے (All Months)</option>
+                  {availableMonths.map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              )}
+
+              <span className="text-[11px] font-bold text-slate-600 ml-auto">
+                دکھائے جا رہے واؤچرز: <strong>{filteredFeeList.length}</strong> / {validFeeRecords.length}
+              </span>
+            </div>
+
+            {ledgerFeeSummary.missingVoucherStudentsCount > 0 && (
+              <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="font-bold text-amber-900">
+                  نوٹ: {ledgerFeeSummary.missingVoucherStudentsCount} طلباء کے اس مہینے کے واؤچر ابھی جنریٹ نہیں ہوئے (متوقع کل فیس میں ان کی فیس شامل ہے)۔
+                </span>
                 <button
                   type="button"
-                  onClick={() => setPaymentFeeId(null)}
-                  className="text-slate-600 text-xs hover:underline"
+                  onClick={() => generateMonthlyFeeVouchers(voucherMonth)}
+                  className="bg-amber-400 hover:bg-amber-300 text-[#07193B] font-extrabold px-3 py-1.5 rounded-lg cursor-pointer"
                 >
-                  Cancel
+                  + باقی واؤچرز بنائیں
                 </button>
-              </form>
-            </div>
-          )}
-        </div>
-      )}
+              </div>
+            )}
+
+            {filteredFeeList.length === 0 ? (
+              <div className="text-center py-12 text-slate-500 text-xs italic bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                {validFeeRecords.length === 0
+                  ? 'ابھی کوئی فیس واؤچر موجود نہیں ہے۔ اوپر "+ Generate Vouchers" بٹن دبائیں۔'
+                  : 'تلاش کے مطابق کوئی فیس واؤچر نہیں ملا۔'}
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#07193B] text-white">
+                    <tr>
+                      <th className="p-3">Student</th>
+                      <th className="p-3">Class</th>
+                      <th className="p-3">Month</th>
+                      <th className="p-3">Tuition</th>
+                      <th className="p-3">Absents (Fine)</th>
+                      <th className="p-3">Total Payable</th>
+                      <th className="p-3">Paid</th>
+                      <th className="p-3">Balance</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3 text-right">Collect &amp; Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredFeeList.map(f => {
+                      const st = studentLookup.get(f.studentId);
+                      return (
+                        <tr key={f.id} className="hover:bg-slate-50">
+                          <td className="p-3">
+                            <span className="font-semibold text-slate-900 block">{f.studentName}</span>
+                            <span className="text-[10px] text-slate-500">
+                              {st ? `Roll #${st.rollNo} • S/O ${st.fatherName}` : `S/O ${f.fatherName}`}
+                            </span>
+                          </td>
+                          <td className="p-3">{f.className}</td>
+                          <td className="p-3 text-slate-500">{f.month}</td>
+                          <td className="p-3 font-semibold">Rs. {f.tuitionFee.toLocaleString()}</td>
+                          <td className="p-3 text-red-600 font-bold">
+                            {f.absentDays} days (Rs. {f.fineAmount.toLocaleString()})
+                          </td>
+                          <td className="p-3 font-bold text-slate-900">Rs. {f.totalPayable.toLocaleString()}</td>
+                          <td className="p-3 text-emerald-600 font-bold">Rs. {f.paidAmount.toLocaleString()}</td>
+                          <td className="p-3 font-bold">Rs. {f.balanceRemaining.toLocaleString()}</td>
+                          <td className="p-3">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                f.status === 'Paid'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : f.status === 'Partial'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              {f.status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => {
+                                  setSelectedFeeForReceipt(f);
+                                  setFeeReceiptEditMode(false);
+                                }}
+                                className="bg-blue-50 hover:bg-blue-100 text-[#0D285F] border border-blue-200 px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1 shadow-sm cursor-pointer"
+                                title="Print / View Fee Receipt"
+                              >
+                                <Printer className="w-3.5 h-3.5 text-blue-700" />
+                                <span>رسید</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedFeeForReceipt(f);
+                                  setFeeReceiptEditMode(true);
+                                }}
+                                className="bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1 shadow-sm cursor-pointer"
+                                title="فیس کم یا زیادہ کریں"
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-amber-800" />
+                                <span>فیس کم/زیادہ</span>
+                              </button>
+                              {f.balanceRemaining > 0 && (
+                                <button
+                                  onClick={() => {
+                                    setPaymentFeeId(f.id);
+                                    setPaymentAmount(f.balanceRemaining);
+                                  }}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded text-xs font-semibold transition shadow-sm cursor-pointer"
+                                >
+                                  Collect
+                                </button>
+                              )}
+                              <button
+                                onClick={() => {
+                                  if (
+                                    confirm(
+                                      `کیا آپ ${f.studentName} کا یہ فیس واؤچر مستقل ڈیلیٹ کرنا چاہتے ہیں؟`
+                                    )
+                                  ) {
+                                    deleteFeeRecord(f.id);
+                                  }
+                                }}
+                                className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 p-1 rounded text-xs transition shadow-sm cursor-pointer"
+                                title="فیس واؤچر ڈیلیٹ کریں (Delete)"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {paymentFeeId && (
+              <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl">
+                <h4 className="font-bold text-xs text-emerald-900 mb-2">Record Fee Payment</h4>
+                <form onSubmit={handleRecordPayment} className="flex flex-wrap items-center gap-3">
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                    placeholder="Amount"
+                    className="px-3 py-1.5 text-xs border rounded-lg bg-white"
+                  />
+                  <input
+                    type="text"
+                    value={receiptNo}
+                    onChange={(e) => setReceiptNo(e.target.value)}
+                    placeholder="Receipt # (Optional)"
+                    className="px-3 py-1.5 text-xs border rounded-lg bg-white"
+                  />
+                  <button
+                    type="submit"
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
+                  >
+                    Save Payment Receipt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentFeeId(null)}
+                    className="text-slate-600 text-xs hover:underline cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* TAB 6: TESTS & RESULTS */}
       {activeTab === 'tests' && (

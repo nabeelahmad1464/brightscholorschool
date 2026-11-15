@@ -11,43 +11,44 @@ interface FeeReceiptModalProps {
 }
 
 export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onClose, initialEditMode }) => {
-  const { settings, openWhatsApp, students, updateFeeRecord, updateStudent, getStudentFullReport } = useSchool();
+  const { settings, openWhatsApp, students, feeRecords, updateFeeRecord, updateStudent, getStudentFullReport } = useSchool();
+  const activeFee = (feeRecord ? feeRecords.find(f => f.id === feeRecord.id) : null) || feeRecord;
 
   const [isEditingCustomFee, setIsEditingCustomFee] = useState(initialEditMode || false);
-  const [customTuitionInput, setCustomTuitionInput] = useState<number>(feeRecord?.tuitionFee || 0);
-  const [customFineInput, setCustomFineInput] = useState<number>(feeRecord?.fineAmount || 0);
-  const [customPaidInput, setCustomPaidInput] = useState<number>(feeRecord?.paidAmount || 0);
-  const [manualFineFlag, setManualFineFlag] = useState<boolean>(Boolean(feeRecord?.manualFineOverride));
+  const [customTuitionInput, setCustomTuitionInput] = useState<number>(activeFee?.tuitionFee || 0);
+  const [customFineInput, setCustomFineInput] = useState<number>(activeFee?.fineAmount || 0);
+  const [customPaidInput, setCustomPaidInput] = useState<number>(activeFee?.paidAmount || 0);
+  const [manualFineFlag, setManualFineFlag] = useState<boolean>(Boolean(activeFee?.manualFineOverride));
   const [isDownloadingImage, setIsDownloadingImage] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState(false);
 
   useEffect(() => {
-    if (feeRecord) {
-      setCustomTuitionInput(feeRecord.tuitionFee);
-      setCustomFineInput(feeRecord.fineAmount);
-      setCustomPaidInput(feeRecord.paidAmount);
-      setManualFineFlag(Boolean(feeRecord.manualFineOverride));
+    if (activeFee) {
+      setCustomTuitionInput(activeFee.tuitionFee);
+      setCustomFineInput(activeFee.fineAmount);
+      setCustomPaidInput(activeFee.paidAmount);
+      setManualFineFlag(Boolean(activeFee.manualFineOverride));
     }
     setIsEditingCustomFee(initialEditMode || false);
-  }, [feeRecord, initialEditMode]);
+  }, [activeFee?.id, activeFee?.tuitionFee, activeFee?.fineAmount, activeFee?.paidAmount, initialEditMode]);
 
-  if (!feeRecord) return null;
+  if (!activeFee) return null;
 
-  const student = students.find(s => s.id === feeRecord.studentId);
+  const student = students.find(s => s.id === activeFee.studentId);
   const contactNo = student?.whatsappNo || student?.contactNo || '';
   const finePerDay = settings.finePerAbsentDay || 50;
-  const studentReport = getStudentFullReport(feeRecord.studentId);
+  const studentReport = getStudentFullReport(activeFee.studentId);
 
   const handleSaveCustomFee = () => {
     const tuition = Math.max(0, Number(customTuitionInput) || 0);
     const fine = Math.max(0, Number(customFineInput) || 0);
-    const paid = Math.max(0, Number(customPaidInput) || 0);
     const total = tuition + fine;
+    const paid = Math.min(total, Math.max(0, Number(customPaidInput) || 0));
     const balance = Math.max(0, total - paid);
     const status: 'Paid' | 'Partial' | 'Unpaid' = balance === 0 ? 'Paid' : (paid > 0 ? 'Partial' : 'Unpaid');
 
     const updated: FeeRecord = {
-      ...feeRecord,
+      ...activeFee,
       tuitionFee: tuition,
       fineAmount: fine,
       manualFineOverride: manualFineFlag,
@@ -72,14 +73,14 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
   };
 
   const handleDownloadPicture = async () => {
-    if (!feeRecord) return;
+    if (!activeFee) return;
     setIsDownloadingImage(true);
-    const fileName = `BSS_Fee_Receipt_${feeRecord.studentName.replace(/\s+/g, '_')}_${feeRecord.className}`;
+    const fileName = `BSS_Fee_Receipt_${activeFee.studentName.replace(/\s+/g, '_')}_${activeFee.className}`;
     let ok = await downloadReceiptElementAsImage('printable-receipt', fileName);
     if (!ok && student) {
       ok = generateAndDownloadReceiptCanvas(
         student,
-        feeRecord,
+        activeFee,
         finePerDay,
         settings.schoolName,
         settings.schoolAddress
@@ -98,18 +99,18 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
   const handleShareWhatsApp = () => {
     const text = `*BRIGHT SCHOLAR SCHOOL - CHAK 47 GB SAMUNDRI*\n` +
       `*OFFICIAL FEE RECEIPT / واؤچر رسید*\n\n` +
-      `طالب علم: *${feeRecord.studentName}*\n` +
-      `ولدیت: *${feeRecord.fatherName}*\n` +
-      `کلاس: *${feeRecord.className}*\n` +
-      `مہینہ: *${feeRecord.month}*\n` +
-      `رسید نمبر: *${feeRecord.receiptNo || 'BSS-REC-' + feeRecord.id.slice(-5)}*\n` +
+      `طالب علم: *${activeFee.studentName}*\n` +
+      `ولدیت: *${activeFee.fatherName}*\n` +
+      `کلاس: *${activeFee.className}*\n` +
+      `مہینہ: *${activeFee.month}*\n` +
+      `رسید نمبر: *${activeFee.receiptNo || 'BSS-REC-' + activeFee.id.slice(-5)}*\n` +
       `--------------------------------\n` +
-      `ماہانہ فیس: Rs. ${feeRecord.tuitionFee}\n` +
-      `غیر حاضری فائن (${feeRecord.absentDays} چھٹیاں @ Rs. ${finePerDay}): Rs. ${feeRecord.fineAmount}\n` +
-      `کل واجب الادا رقم: *Rs. ${feeRecord.totalPayable}*\n` +
-      `ادا شدہ رقم: *Rs. ${feeRecord.paidAmount}*\n` +
-      `بقیہ واجبات: *Rs. ${feeRecord.balanceRemaining}*\n` +
-      `اسٹیٹس: *${feeRecord.status === 'Paid' ? 'ادا شدہ (Paid)' : (feeRecord.status === 'Partial' ? 'جزوی (Partial)' : 'غیر ادا شدہ (Unpaid)')}*\n` +
+      `ماہانہ فیس: Rs. ${activeFee.tuitionFee}\n` +
+      `غیر حاضری فائن (${activeFee.absentDays} چھٹیاں @ Rs. ${finePerDay}): Rs. ${activeFee.fineAmount}\n` +
+      `کل واجب الادا رقم: *Rs. ${activeFee.totalPayable}*\n` +
+      `ادا شدہ رقم: *Rs. ${activeFee.paidAmount}*\n` +
+      `بقیہ واجبات: *Rs. ${activeFee.balanceRemaining}*\n` +
+      `اسٹیٹس: *${activeFee.status === 'Paid' ? 'ادا شدہ (Paid)' : (activeFee.status === 'Partial' ? 'جزوی (Partial)' : 'غیر ادا شدہ (Unpaid)')}*\n` +
       `--------------------------------\n` +
       `پہلے تربیت، پھر تعلیم • برائٹ اسکالر اسکول چک 47 گ ب سمندری`;
 
@@ -134,9 +135,9 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
             {/* Custom Fee Edit Button */}
             <button
               onClick={() => {
-                setCustomTuitionInput(feeRecord.tuitionFee);
-                setCustomFineInput(feeRecord.fineAmount);
-                setCustomPaidInput(feeRecord.paidAmount);
+                setCustomTuitionInput(activeFee.tuitionFee);
+                setCustomFineInput(activeFee.fineAmount);
+                setCustomPaidInput(activeFee.paidAmount);
                 setIsEditingCustomFee(!isEditingCustomFee);
               }}
               className="bg-blue-50 hover:bg-blue-100 text-[#0D285F] border border-blue-300 px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1"
@@ -192,7 +193,7 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
                 اس بچے کی فیس علیحدہ سے درج کریں (Set Custom Fee for Student):
               </span>
               <span className="text-[10px] text-amber-800 font-bold">
-                {feeRecord.className}
+                {activeFee.className}
               </span>
             </div>
 
@@ -250,7 +251,7 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
                   <button
                     type="button"
                     onClick={() => {
-                      const autoDays = studentReport ? studentReport.absentDays : feeRecord.absentDays;
+                      const autoDays = studentReport ? studentReport.absentDays : activeFee.absentDays;
                       setCustomFineInput(autoDays * finePerDay);
                       setManualFineFlag(false);
                     }}
@@ -343,12 +344,12 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
               {student?.photo ? (
                 <img
                   src={student.photo}
-                  alt={feeRecord.studentName}
+                  alt={activeFee.studentName}
                   className="w-14 h-16 object-cover rounded-lg border border-slate-300 shadow-sm bg-white flex-shrink-0"
                 />
               ) : (
                 <div className="w-14 h-16 rounded-lg bg-amber-100 border border-amber-300 flex flex-col items-center justify-center text-[#0D285F] font-bold text-lg flex-shrink-0">
-                  {feeRecord.studentName.charAt(0)}
+                  {activeFee.studentName.charAt(0)}
                   <span className="text-[9px] font-mono text-slate-500">#{student?.rollNo || '01'}</span>
                 </div>
               )}
@@ -356,35 +357,35 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
                 <div>
                   <span className="text-slate-500 block text-[10px]">Receipt No / رسید نمبر:</span>
                   <span className="font-mono font-bold text-slate-900">
-                    {feeRecord.receiptNo || `REC-BSS-${feeRecord.id.slice(-5)}`}
+                    {activeFee.receiptNo || `REC-BSS-${activeFee.id.slice(-5)}`}
                   </span>
                 </div>
                 <div className="text-right">
                   <span className="text-slate-500 block text-[10px]">Billing Month / مہینہ:</span>
-                  <span className="font-bold text-[#0D285F]">{feeRecord.month}</span>
+                  <span className="font-bold text-[#0D285F]">{activeFee.month}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[10px]">Student Name / طالب علم:</span>
-                  <span className="font-extrabold text-slate-900 text-sm">{feeRecord.studentName}</span>
+                  <span className="font-extrabold text-slate-900 text-sm">{activeFee.studentName}</span>
                 </div>
                 <div className="text-right">
                   <span className="text-slate-500 block text-[10px]">Father Name / ولدیت:</span>
-                  <span className="font-semibold text-slate-800">{feeRecord.fatherName}</span>
+                  <span className="font-semibold text-slate-800">{activeFee.fatherName}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[10px]">Class / کلاس:</span>
-                  <span className="font-bold text-[#0D285F]">{feeRecord.className} {student?.rollNo ? `(Roll #${student.rollNo})` : ''}</span>
+                  <span className="font-bold text-[#0D285F]">{activeFee.className} {student?.rollNo ? `(Roll #${student.rollNo})` : ''}</span>
                 </div>
                 <div className="text-right">
                   <span className="text-slate-500 block text-[10px]">Status / کیفیت:</span>
                   <span className={`inline-block px-2 py-0.5 rounded font-black text-[10px] ${
-                    feeRecord.status === 'Paid'
+                    activeFee.status === 'Paid'
                       ? 'bg-emerald-100 text-emerald-800'
-                      : feeRecord.status === 'Partial'
+                      : activeFee.status === 'Partial'
                       ? 'bg-amber-100 text-amber-800'
                       : 'bg-red-100 text-red-800'
                   }`}>
-                    {feeRecord.status === 'Paid' ? '✓ PAID' : feeRecord.status === 'Partial' ? 'PARTIAL' : 'UNPAID'}
+                    {activeFee.status === 'Paid' ? '✓ PAID' : activeFee.status === 'Partial' ? 'PARTIAL' : 'UNPAID'}
                   </span>
                 </div>
               </div>
@@ -402,10 +403,10 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
             <tbody className="divide-y divide-slate-200">
               <tr>
                 <td className="p-2.5 font-medium text-slate-800">
-                  Monthly Tuition Fee (ماہانہ فیس برائے {feeRecord.month})
+                  Monthly Tuition Fee (ماہانہ فیس برائے {activeFee.month})
                 </td>
                 <td className="p-2.5 text-right font-bold text-slate-900">
-                  Rs. {feeRecord.tuitionFee.toLocaleString()}
+                  Rs. {activeFee.tuitionFee.toLocaleString()}
                 </td>
               </tr>
               <tr className="bg-red-50/50">
@@ -414,12 +415,12 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
                     Unapproved Absence Fine (غیر حاضری جرمانہ)
                   </div>
                   <div className="text-[10px] text-red-700">
-                    {feeRecord.absentDays} دن غیر حاضر × Rs. {finePerDay} فی دن
-                    {(feeRecord.leaveDays || 0) > 0 ? ` (${feeRecord.leaveDays} منظور شدہ چھٹی - کوئی جرمانہ نہیں)` : ''}
+                    {activeFee.absentDays} دن غیر حاضر × Rs. {finePerDay} فی دن
+                    {(activeFee.leaveDays || 0) > 0 ? ` (${activeFee.leaveDays} منظور شدہ چھٹی - کوئی جرمانہ نہیں)` : ''}
                   </div>
                 </td>
                 <td className="p-2.5 text-right font-bold text-red-700">
-                  Rs. {feeRecord.fineAmount.toLocaleString()}
+                  Rs. {activeFee.fineAmount.toLocaleString()}
                 </td>
               </tr>
               <tr className="bg-slate-100 font-extrabold text-slate-900">
@@ -427,7 +428,7 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
                   Total Payable (کل واجب الادا رقم)
                 </td>
                 <td className="p-2.5 text-right text-sm font-black text-[#0D285F]">
-                  Rs. {feeRecord.totalPayable.toLocaleString()}
+                  Rs. {activeFee.totalPayable.toLocaleString()}
                 </td>
               </tr>
               <tr>
@@ -435,7 +436,7 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
                   Amount Received / Paid (وصول شدہ رقم)
                 </td>
                 <td className="p-2.5 text-right font-black text-emerald-700 text-sm">
-                  Rs. {feeRecord.paidAmount.toLocaleString()}
+                  Rs. {activeFee.paidAmount.toLocaleString()}
                 </td>
               </tr>
               <tr className="bg-amber-50/60 font-black">
@@ -443,7 +444,7 @@ export const FeeReceiptModal: React.FC<FeeReceiptModalProps> = ({ feeRecord, onC
                   Balance Remaining (بقیہ واجبات)
                 </td>
                 <td className="p-2.5 text-right text-base text-red-700 font-black">
-                  Rs. {feeRecord.balanceRemaining.toLocaleString()}
+                  Rs. {activeFee.balanceRemaining.toLocaleString()}
                 </td>
               </tr>
             </tbody>

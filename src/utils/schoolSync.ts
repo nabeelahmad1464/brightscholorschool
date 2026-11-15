@@ -6,6 +6,7 @@ import {
   SystemSettings,
   getDefaultMonthlyFee
 } from '../types';
+import { deduplicateAndCleanFeeRecords } from './feeCalculations';
 
 /**
  * Extracts clean root JSON object from raw HTTP response text.
@@ -132,10 +133,10 @@ export function deduplicateAttendance(records: StudentAttendance[]): StudentAtte
 
 /**
  * Reconciles fee vouchers deterministically with attendance, approved leaves, student class tiers, and fine settings.
+ * - Deduplicates vouchers per (studentId, month) and excludes orphaned vouchers for non-existent students.
+ * - Scopes attendance fines accurately to the voucher's month when valid.
  * - Preserves paidAmount, paymentDate, receiptNo, and existing payment history.
- * - Avoids duplicate fine calculation across repeated runs.
- * - Respects manualFineOverride when admin explicitly sets a custom fine.
- * - Creates missing vouchers for active students if targetMonth is specified and voucher list is non-empty or requested.
+ * - Syncs unpaid vouchers with each student's actual assigned monthlyFee.
  */
 export function reconcileFeesWithAttendance(params: {
   students: Student[];
@@ -160,21 +161,15 @@ export function reconcileFeesWithAttendance(params: {
   const chargeLeaveFine = Boolean(settings?.chargeFineOnApprovedLeave);
   const cleanAtt = deduplicateAttendance(attendance);
   const studentMap = new Map(students.map(s => [s.id, s]));
+  const deduplicatedFees = deduplicateAndCleanFeeRecords(feeRecords, students);
 
-  // Count vouchers per student to decide month scoping vs active-voucher reconciliation
-  const voucherCountByStudent = new Map<string, number>();
-  feeRecords.forEach(f => {
-    voucherCountByStudent.set(f.studentId, (voucherCountByStudent.get(f.studentId) || 0) + 1);
-  });
-
-  const reconciled = feeRecords.map(fee => {
+  const reconciled = deduplicatedFees.map(fee => {
     const st = studentMap.get(fee.studentId);
-    const hasMultipleMonths = (voucherCountByStudent.get(fee.studentId) || 0) > 1;
     const feeYearMonth = monthLabelToYearMonth(fee.month);
 
     const relevantAtt = cleanAtt.filter(a => {
       if (a.studentId !== fee.studentId) return false;
-      if (hasMultipleMonths && feeYearMonth) {
+      if (feeYearMonth) {
         return (a.month || a.date.substring(0, 7)) === feeYearMonth;
       }
       return true;
@@ -195,15 +190,21 @@ export function reconcileFeesWithAttendance(params: {
     const billableDays = chargeLeaveFine ? unapprovedAbsents + leaveCount : unapprovedAbsents;
     const computedFine = fee.manualFineOverride ? fee.fineAmount : billableDays * fineRate;
 
-    // Preserve tuitionFee if already paid or custom; sync class/name updates cleanly
-    const tuition =
-      fee.tuitionFee && fee.tuitionFee > 0
-        ? fee.tuitionFee
-        : st
-        ? st.monthlyFee || getDefaultMonthlyFee(st.className)
-        : 0;
+    const paid = Math.max(0, Number(fee.paidAmount) || 0);
+    const assignedStudentFee = st
+      ? st.monthlyFee && st.monthlyFee > 0
+        ? st.monthlyFee
+        : getDefaultMonthlyFee(st.className)
+      : 0;
 
-    const paid = Number(fee.paidAmount) || 0;
+    // For unpaid vouchers, always align tuition with the student's actual assigned fee; preserve settled tuition once paid
+    const tuition =
+      paid === 0
+        ? assignedStudentFee
+        : fee.tuitionFee && fee.tuitionFee > 0
+        ? fee.tuitionFee
+        : assignedStudentFee;
+
     const totalPayable = tuition + computedFine;
     const balanceRemaining = Math.max(0, totalPayable - paid);
     const status: 'Paid' | 'Partial' | 'Unpaid' =
@@ -219,6 +220,7 @@ export function reconcileFeesWithAttendance(params: {
       leaveDays: leaveCount,
       fineAmount: computedFine,
       totalPayable,
+      paidAmount: paid,
       balanceRemaining,
       status
     };

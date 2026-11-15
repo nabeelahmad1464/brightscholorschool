@@ -45,6 +45,7 @@ import {
   deduplicateAttendance,
   reconcileFeesWithAttendance
 } from '../utils/schoolSync';
+import { deduplicateAndCleanFeeRecords } from '../utils/feeCalculations';
 
 export interface StudentFullReport {
   student: Student;
@@ -291,8 +292,9 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [feeRecords, setFeeRecords] = useState<FeeRecord[]>(() => {
     const raw = loadFromStorage<FeeRecord[]>("feeRecords", []);
     const clean = Array.isArray(raw) ? raw.filter(f => !isDummyStudent(f)) : [];
-    saveToStorage("feeRecords", clean);
-    return clean;
+    const deduped = students.length > 0 ? deduplicateAndCleanFeeRecords(clean, students) : clean;
+    saveToStorage("feeRecords", deduped);
+    return deduped;
   });
   const [dailyReports, setDailyReports] = useState<DailyReport[]>(() => {
     const raw = loadFromStorage<DailyReport[]>('dailyReports', initialDailyReports);
@@ -2080,9 +2082,11 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     hasPendingLocalMutation.current = true;
     const newRecord: FeeRecord = {
       ...record,
-      id: `fee-${Date.now()}`
+      id: `fee-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`
     };
-    const updated = [newRecord, ...stateRef.current.feeRecords];
+    const combined = [newRecord, ...stateRef.current.feeRecords];
+    const updated = deduplicateAndCleanFeeRecords(combined, stateRef.current.students);
+    stateRef.current = { ...stateRef.current, feeRecords: updated };
     setFeeRecords(updated);
     saveToStorage('feeRecords', updated);
     pushCurrentDataToCloud({ feeRecords: updated });
@@ -2090,7 +2094,11 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const updateFeeRecord = (updated: FeeRecord) => {
     hasPendingLocalMutation.current = true;
-    const updatedList = stateRef.current.feeRecords.map(f => (f.id === updated.id ? updated : f));
+    const updatedList = deduplicateAndCleanFeeRecords(
+      stateRef.current.feeRecords.map(f => (f.id === updated.id ? updated : f)),
+      stateRef.current.students
+    );
+    stateRef.current = { ...stateRef.current, feeRecords: updatedList };
     setFeeRecords(updatedList);
     saveToStorage('feeRecords', updatedList);
     pushCurrentDataToCloud({ feeRecords: updatedList });
@@ -2100,30 +2108,37 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     hasPendingLocalMutation.current = true;
     const nextDeleted = recordDeletedIds([feeRecordId]);
     const updatedList = stateRef.current.feeRecords.filter(f => f.id !== feeRecordId);
+    stateRef.current = { ...stateRef.current, feeRecords: updatedList };
     setFeeRecords(updatedList);
     saveToStorage('feeRecords', updatedList);
     pushCurrentDataToCloud({ feeRecords: updatedList, deletedIds: nextDeleted });
   };
 
   const recordFeePayment = (feeRecordId: string, amount: number, receiptNo: string) => {
+    const cleanAmount = Math.max(0, Number(amount) || 0);
+    if (cleanAmount <= 0) return;
     hasPendingLocalMutation.current = true;
     const today = new Date().toISOString().split('T')[0];
     const updated = stateRef.current.feeRecords.map(f => {
       if (f.id === feeRecordId) {
-        const newPaid = f.paidAmount + amount;
-        const newBalance = Math.max(0, f.totalPayable - newPaid);
-        const status: 'Paid' | 'Partial' | 'Unpaid' = newBalance === 0 ? 'Paid' : newPaid > 0 ? 'Partial' : 'Unpaid';
+        const currentPaid = Math.max(0, Number(f.paidAmount) || 0);
+        const totalPayable = Math.max(0, Number(f.totalPayable) || 0);
+        const newPaid = Math.min(totalPayable, currentPaid + cleanAmount);
+        const newBalance = Math.max(0, totalPayable - newPaid);
+        const status: 'Paid' | 'Partial' | 'Unpaid' =
+          newBalance === 0 ? 'Paid' : newPaid > 0 ? 'Partial' : 'Unpaid';
         return {
           ...f,
           paidAmount: newPaid,
           balanceRemaining: newBalance,
           status,
           paymentDate: today,
-          receiptNo: receiptNo || `REC-BSS-${Date.now().toString().slice(-4)}`
+          receiptNo: receiptNo || f.receiptNo || `REC-BSS-${Date.now().toString().slice(-4)}`
         };
       }
       return f;
     });
+    stateRef.current = { ...stateRef.current, feeRecords: updated };
     setFeeRecords(updated);
     saveToStorage('feeRecords', updated);
     pushCurrentDataToCloud({ feeRecords: updated });
@@ -2139,7 +2154,9 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const cleanAtt = deduplicateAttendance(stateRef.current.attendance);
 
     stateRef.current.students.forEach(st => {
-      const exists = stateRef.current.feeRecords.some(f => f.studentId === st.id && f.month === monthName);
+      const exists = stateRef.current.feeRecords.some(
+        f => f.studentId === st.id && f.month.trim().toLowerCase() === monthName.trim().toLowerCase()
+      );
       if (!exists) {
         const relevantAtt = cleanAtt.filter(a => {
           if (a.studentId !== st.id) return false;
@@ -2183,7 +2200,14 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     if (newRecords.length > 0) {
-      const updated = [...newRecords, ...stateRef.current.feeRecords];
+      const updated = reconcileFeesWithAttendance({
+        students: stateRef.current.students,
+        feeRecords: [...newRecords, ...stateRef.current.feeRecords],
+        attendance: stateRef.current.attendance,
+        leaves: stateRef.current.leaves,
+        settings: stateRef.current.settings
+      });
+      stateRef.current = { ...stateRef.current, feeRecords: updated };
       setFeeRecords(updated);
       saveToStorage('feeRecords', updated);
       pushCurrentDataToCloud({ feeRecords: updated });
@@ -2200,6 +2224,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       leaves: stateRef.current.leaves,
       settings: stateRef.current.settings
     });
+    stateRef.current = { ...stateRef.current, feeRecords: reconciled };
     setFeeRecords(reconciled);
     saveToStorage('feeRecords', reconciled);
     pushCurrentDataToCloud({ feeRecords: reconciled });
@@ -2569,19 +2594,26 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const chargeLeaveFine = Boolean(settings.chargeFineOnApprovedLeave);
     const computedFine = (chargeLeaveFine ? absentDays + leaveDays : absentDays) * fineRate;
 
-    const studentFees = feeRecords.filter(f => f.studentId === studentId);
+    const studentFees = deduplicateAndCleanFeeRecords(feeRecords, students).filter(
+      f => f.studentId === studentId
+    );
     const totalFineAmount = studentFees.length > 0
-      ? studentFees.reduce((acc, curr) => acc + curr.fineAmount, 0)
-      : computedFine;
-    const monthlyFee = studentFees.length > 0 ? studentFees[0].tuitionFee : student.monthlyFee;
+      ? studentFees.reduce((acc, curr) => acc + (Number(curr.fineAmount) || 0), 0)
+      : 0;
+    const monthlyFee = student.monthlyFee || getDefaultMonthlyFee(student.className);
     const totalPayable = studentFees.length > 0
-      ? studentFees.reduce((acc, curr) => acc + curr.totalPayable, 0)
-      : student.monthlyFee + computedFine;
-    const paidAmount = studentFees.reduce((acc, curr) => acc + curr.paidAmount, 0);
+      ? studentFees.reduce((acc, curr) => acc + (Number(curr.totalPayable) || 0), 0)
+      : monthlyFee;
+    const paidAmount = studentFees.reduce((acc, curr) => acc + (Number(curr.paidAmount) || 0), 0);
     const balanceRemaining = studentFees.length > 0
-      ? studentFees.reduce((acc, curr) => acc + curr.balanceRemaining, 0)
+      ? studentFees.reduce((acc, curr) => acc + (Number(curr.balanceRemaining) || 0), 0)
       : Math.max(0, totalPayable - paidAmount);
-    const feeStatus = balanceRemaining === 0 ? 'Clear (Paid)' : `Due Rs. ${balanceRemaining.toLocaleString()}`;
+    const feeStatus =
+      balanceRemaining === 0
+        ? 'Clear (Paid)'
+        : paidAmount > 0
+        ? `Partial (Due Rs. ${balanceRemaining.toLocaleString()})`
+        : `Unpaid (Due Rs. ${balanceRemaining.toLocaleString()})`;
 
     const studentTestScores = testResults.filter(t => t.studentId === studentId);
     const studentDailyReports = dailyReports.filter(d => d.studentId === studentId);
