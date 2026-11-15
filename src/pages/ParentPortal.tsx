@@ -1065,14 +1065,10 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                   </p>
                 </div>
 
-                {/* Official Signatures & Seal (NO personal principal name - only PRINCIPAL stamp) */}
+                {/* Official Signatures & Seal (NO teacher or principal personal names - only Class Teacher label & PRINCIPAL stamp) */}
                 <div className="pt-6 sm:pt-8 flex flex-wrap items-end justify-between gap-4 px-2 sm:px-4 text-center">
                   <div className="w-36 sm:w-44">
-                    <div className="border-b-2 border-slate-800 pb-1 mb-1 font-serif text-slate-700 italic text-xs">
-                      {liveSelectedExamCard.enteredByName && !/tasawar|principal/i.test(liveSelectedExamCard.enteredByName)
-                        ? liveSelectedExamCard.enteredByName
-                        : 'Class Teacher'}
-                    </div>
+                    <div className="border-b-2 border-slate-800 pb-1 mb-1 h-6"></div>
                     <span className="text-[10px] text-slate-500 font-bold block uppercase">
                       کلاس ٹیچر دستخط (Class Teacher)
                     </span>
