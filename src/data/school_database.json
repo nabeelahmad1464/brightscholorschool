@@ -1,6 +1,22 @@
 {
   "students": [
     {
+      "admissionNo": "BSS-7751",
+      "rollNo": "01",
+      "name": "Maryam",
+      "fatherName": "Qaiser mehmood",
+      "className": "Class 4",
+      "dob": "2016-04-10",
+      "contactNo": "0302-5053993",
+      "whatsappNo": "0302-5053993",
+      "address": "Chak No. 47 GB, Samundri",
+      "admissionDate": "2026-11-13",
+      "gender": "Male",
+      "monthlyFee": 2000,
+      "isActive": true,
+      "id": "s-1794552387752"
+    },
+    {
       "admissionNo": "BSS-9348",
       "rollNo": "04",
       "name": "Mehak",
@@ -831,22 +847,6 @@
       "monthlyFee": 2000,
       "isActive": true,
       "id": "s-1793961260492"
-    },
-    {
-      "admissionNo": "BSS-5740",
-      "rollNo": "01",
-      "name": "Maryam",
-      "fatherName": "Qaiser mehmood",
-      "className": "Class 4",
-      "dob": "2016-04-10",
-      "contactNo": "0302-5053993",
-      "whatsappNo": "0302-5053993",
-      "address": "Chak No. 47 GB, Samundri",
-      "admissionDate": "2026-11-14",
-      "gender": "Male",
-      "monthlyFee": 2000,
-      "isActive": true,
-      "id": "s-1794677175743-tjw4"
     }
   ],
   "teachers": [
@@ -939,21 +939,21 @@
   "leaves": [],
   "feeRecords": [
     {
-      "id": "fee-1794562666399-54023",
-      "studentId": "s-1793963654023",
-      "studentName": "Samra",
-      "fatherName": "Shehzad ali",
-      "className": "Class 7",
+      "id": "fee-1794552387757",
+      "studentId": "s-1794552387752",
+      "studentName": "Maryam",
+      "fatherName": "Qaiser mehmood",
+      "className": "Class 4",
       "month": "October 2026",
-      "tuitionFee": 3000,
+      "tuitionFee": 2000,
       "absentDays": 0,
-      "leaveDays": 0,
       "fineAmount": 0,
-      "totalPayable": 3000,
+      "totalPayable": 2000,
       "paidAmount": 0,
-      "balanceRemaining": 3000,
+      "balanceRemaining": 2000,
       "status": "Unpaid",
-      "receiptNo": "REC-BSS-4023"
+      "receiptNo": "REC-BSS-7757",
+      "leaveDays": 0
     },
     {
       "id": "fee-1793963709400",
@@ -966,11 +966,10 @@
       "absentDays": 1,
       "fineAmount": 50,
       "totalPayable": 3050,
-      "paidAmount": 3000,
-      "balanceRemaining": 50,
-      "status": "Partial",
-      "receiptNo": "REC-BSS-4415",
-      "paymentDate": "2026-11-13",
+      "paidAmount": 0,
+      "balanceRemaining": 3050,
+      "status": "Unpaid",
+      "receiptNo": "REC-BSS-9400",
       "leaveDays": 0
     },
     {
@@ -988,6 +987,23 @@
       "balanceRemaining": 3000,
       "status": "Unpaid",
       "receiptNo": "REC-BSS-9576",
+      "leaveDays": 0
+    },
+    {
+      "id": "fee-1793963654028",
+      "studentId": "s-1793963654023",
+      "studentName": "Samra",
+      "fatherName": "Shehzad ali",
+      "className": "Class 7",
+      "month": "October 2026",
+      "tuitionFee": 3000,
+      "absentDays": 0,
+      "fineAmount": 0,
+      "totalPayable": 3000,
+      "paidAmount": 0,
+      "balanceRemaining": 3000,
+      "status": "Unpaid",
+      "receiptNo": "REC-BSS-4028",
       "leaveDays": 0
     },
     {
@@ -1824,7 +1840,7 @@
       "leaveDays": 0
     },
     {
-      "id": "fee-1793963654028",
+      "id": "fee-1794562666399-54023",
       "studentId": "s-1793963654023",
       "studentName": "Samra",
       "fatherName": "Shehzad ali",
@@ -1832,30 +1848,13 @@
       "month": "October 2026",
       "tuitionFee": 3000,
       "absentDays": 0,
+      "leaveDays": 0,
       "fineAmount": 0,
       "totalPayable": 3000,
       "paidAmount": 0,
       "balanceRemaining": 3000,
       "status": "Unpaid",
-      "receiptNo": "REC-BSS-4028",
-      "leaveDays": 0
-    },
-    {
-      "id": "fee-1794677175743-2esu",
-      "studentId": "s-1794677175743-tjw4",
-      "studentName": "Maryam",
-      "fatherName": "Qaiser mehmood",
-      "className": "Class 4",
-      "month": "October 2026",
-      "tuitionFee": 2000,
-      "absentDays": 0,
-      "leaveDays": 0,
-      "fineAmount": 0,
-      "totalPayable": 2000,
-      "paidAmount": 0,
-      "balanceRemaining": 2000,
-      "status": "Unpaid",
-      "receiptNo": "REC-BSS-5743"
+      "receiptNo": "REC-BSS-4023"
     }
   ],
   "dailyReports": [],
@@ -1909,6 +1908,9 @@
   },
   "salaryTransactions": [],
   "teacherSalaryPayments": [],
-  "deletedIds": [],
-  "updatedAt": "2026-11-14T17:26:16.902Z"
+  "deletedIds": [
+    "s-1794677175743-tjw4",
+    "fee-1794677175743-2esu"
+  ],
+  "updatedAt": "2026-11-15T17:24:40.303Z"
 }

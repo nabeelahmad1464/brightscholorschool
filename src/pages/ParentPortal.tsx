@@ -24,6 +24,7 @@ import { Student, ClassLevel, SCHOOL_CLASSES, FeeRecord, StudentExamReport } fro
 import { downloadReceiptElementAsImage, generateAndDownloadReceiptCanvas } from '../utils/downloadReceiptImage';
 import { downloadResultCardAsImage, printResultCard } from '../utils/resultCardExport';
 import { normalizeDigits } from '../utils/schoolSync';
+import { calculateGrade } from '../utils/resultCalculations';
 
 interface ParentPortalProps {
   onSelectStudent: (student: Student) => void;
@@ -173,6 +174,9 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
     ? studentExamReports.filter(r => r.studentId === activeStudent.id && r.isPublished)
     : [];
   const [selectedExamCard, setSelectedExamCard] = useState<StudentExamReport | null>(null);
+  const liveSelectedExamCard = selectedExamCard
+    ? childExamReports.find(r => r.id === selectedExamCard.id) || selectedExamCard
+    : null;
   const [isExportingResultImage, setIsExportingResultImage] = useState<boolean>(false);
 
   const handleApplyLeave = (e: React.FormEvent) => {
@@ -348,7 +352,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                 className="w-full bg-[#0D285F] hover:bg-[#07193B] text-amber-300 font-black text-xs sm:text-sm py-3 rounded-xl transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-75"
               >
                 <Search className={`w-4 h-4 ${isSearching ? 'animate-spin' : ''}`} />
-                <span>{isSearching ? 'براہ راست تلاش...' : 'رسید دیکھیں'}</span>
+                <span>{isSearching ? 'براہ راست تلاش...' : 'نتیجہ و رسید دیکھیں'}</span>
               </button>
             </div>
           </div>
@@ -367,10 +371,10 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
         <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-6 sm:p-8 text-center space-y-3 print:hidden">
           <GraduationCap className="w-12 h-12 text-[#0D285F] mx-auto opacity-75" />
           <h3 className="text-base font-extrabold text-slate-800">
-            محترم والدین! بچے کا تعلیمی ریکارڈ اور فیس رسید
+            محترم والدین! بچے کا تعلیمی ریکارڈ، امتحانی نتیجہ اور فیس رسید
           </h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto">
-            براہ کرم اوپر اپنے بچے کی کلاس منتخب کریں اور درست رول نمبر درج کر کے "رسید دیکھیں" کا بٹن دبائیں۔ رازداری کے اصول کے تحت صرف آپ کے اپنے بچے کا ریکارڈ ظاہر ہوگا۔
+            براہ کرم اوپر اپنے بچے کی کلاس منتخب کریں اور درست رول نمبر درج کر کے "نتیجہ و رسید دیکھیں" کا بٹن دبائیں۔ رازداری کے اصول کے تحت صرف آپ کے اپنے بچے کا ریکارڈ ظاہر ہوگا۔
           </p>
         </div>
       )}
@@ -849,11 +853,11 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
       )}
 
       {/* MODAL: OFFICIAL RESULT CARD MARKSHEET (پرنٹ و تصویر ڈاؤن لوڈ) */}
-      {selectedExamCard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full my-6 overflow-hidden border border-slate-200 flex flex-col max-h-[92vh]">
+      {liveSelectedExamCard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-2 sm:p-3 overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full my-4 sm:my-6 overflow-hidden border border-slate-200 flex flex-col max-h-[94vh]">
             {/* Modal Top Control Bar */}
-            <div className="bg-[#0D285F] text-white px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 border-b-2 border-amber-400 flex-shrink-0">
+            <div className="bg-[#0D285F] text-white px-4 sm:px-5 py-3 flex flex-wrap items-center justify-between gap-2.5 border-b-2 border-amber-400 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <Award className="w-5 h-5 text-amber-400" />
                 <h3 className="font-bold text-sm sm:text-base">
@@ -861,14 +865,14 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                 </h3>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => printResultCard('printable-parent-result-card')}
                   className="bg-white/15 hover:bg-white/25 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1 border border-white/20 cursor-pointer"
                 >
                   <Printer className="w-3.5 h-3.5 text-amber-300" />
-                  <span>پرنٹ کریں (Print)</span>
+                  <span>پرنٹ کریں</span>
                 </button>
 
                 <button
@@ -878,8 +882,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                     setIsExportingResultImage(true);
                     await downloadResultCardAsImage(
                       'printable-parent-result-card',
-                      selectedExamCard.studentName,
-                      selectedExamCard.examTitle,
+                      liveSelectedExamCard.studentName,
+                      liveSelectedExamCard.examTitle,
                       'png'
                     );
                     setIsExportingResultImage(false);
@@ -887,13 +891,13 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                   className="bg-amber-400 hover:bg-amber-300 text-[#07193B] font-extrabold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1 shadow cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>{isExportingResultImage ? 'ڈاؤن لوڈ ہو رہا ہے...' : 'تصویر محفوظ کریں (Save Image)'}</span>
+                  <span>{isExportingResultImage ? 'ڈاؤن لوڈ...' : 'تصویر محفوظ کریں'}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => {
-                    const msg = `*BRIGHT SCHOLAR SCHOOL* - نتیجہ کارڈ\nطالب علم: *${selectedExamCard.studentName}*\nکلاس: *${selectedExamCard.className}* (Roll: ${selectedExamCard.rollNo})\nامتحان: *${selectedExamCard.examTitle}*\nنمبر: *${selectedExamCard.totalObtained} / ${selectedExamCard.grandTotal}* (${selectedExamCard.percentage}%)\nگریڈ: *${selectedExamCard.grade}* (${selectedExamCard.status})`;
+                    const msg = `*BRIGHT SCHOLAR SCHOOL* - نتیجہ کارڈ\nطالب علم: *${liveSelectedExamCard.studentName}*\nکلاس: *${liveSelectedExamCard.className}* (Roll: ${liveSelectedExamCard.rollNo})\nامتحان: *${liveSelectedExamCard.examTitle}*\nنمبر: *${liveSelectedExamCard.totalObtained} / ${liveSelectedExamCard.grandTotal}* (${liveSelectedExamCard.percentage}%)\nگریڈ: *${liveSelectedExamCard.grade}* (${liveSelectedExamCard.status})`;
                     openWhatsApp('0302-5053993', msg);
                   }}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1 cursor-pointer"
@@ -905,7 +909,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                 <button
                   type="button"
                   onClick={() => setSelectedExamCard(null)}
-                  className="text-slate-300 hover:text-white p-1 rounded-lg"
+                  className="text-slate-300 hover:text-white p-1 rounded-lg cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -913,25 +917,24 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
             </div>
 
             {/* Scrollable Printable Marksheet Area */}
-            <div className="p-4 sm:p-6 overflow-y-auto bg-slate-100 flex-1">
+            <div className="p-3 sm:p-6 overflow-y-auto bg-slate-100 flex-1">
               <div
                 id="printable-parent-result-card"
-                className="bg-white rounded-2xl border-4 border-[#0D285F] shadow-lg p-6 sm:p-8 max-w-2xl mx-auto text-slate-800 space-y-6 relative"
-                style={{ minHeight: '850px' }}
+                className="bg-white rounded-2xl border-4 border-[#0D285F] shadow-lg p-4 sm:p-8 max-w-2xl mx-auto text-slate-800 space-y-5 relative"
               >
                 <div className="absolute inset-1.5 border border-amber-400 rounded-xl pointer-events-none"></div>
 
                 {/* Marksheet Header */}
                 <div className="text-center pb-4 border-b-2 border-[#0D285F]">
                   <div className="flex items-center justify-center gap-3 mb-2">
-                    <div className="w-14 h-14 rounded-2xl bg-[#0D285F] border-2 border-amber-400 flex items-center justify-center text-amber-300 shadow-md">
-                      <GraduationCap className="w-8 h-8 text-amber-400" />
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-[#0D285F] border-2 border-amber-400 flex items-center justify-center text-amber-300 shadow-md flex-shrink-0">
+                      <GraduationCap className="w-7 h-7 sm:w-8 sm:h-8 text-amber-400" />
                     </div>
                     <div>
-                      <h1 className="text-2xl sm:text-3xl font-black text-[#0D285F] tracking-tight uppercase font-serif-crest">
+                      <h1 className="text-xl sm:text-3xl font-black text-[#0D285F] tracking-tight uppercase font-serif-crest">
                         BRIGHT SCHOLAR SCHOOL
                       </h1>
-                      <div className="text-xs font-bold text-amber-700 tracking-wider">
+                      <div className="text-[11px] sm:text-xs font-bold text-amber-700 tracking-wider">
                         “پہلے تربیت، پھر تعلیم” • Character First, Then Education
                       </div>
                     </div>
@@ -939,62 +942,65 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                   <p className="text-[11px] text-slate-600">
                     Chak No. 47 GB, Samundri, Faisalabad, Punjab • Ph / WhatsApp: 0302-5053993
                   </p>
-                  <div className="inline-block mt-3 bg-[#0D285F] text-amber-300 font-extrabold text-xs px-6 py-1.5 rounded-full shadow tracking-wider uppercase">
+                  <div className="inline-block mt-3 bg-[#0D285F] text-amber-300 font-extrabold text-[11px] sm:text-xs px-4 sm:px-6 py-1.5 rounded-full shadow tracking-wider uppercase">
                     STUDENT PROGRESS REPORT & MARKSHEET (امتحانی نتیجہ کارڈ)
                   </div>
                 </div>
 
                 {/* Bio Grid */}
-                <div className="bg-slate-50 border border-slate-300 rounded-xl p-4 grid grid-cols-2 gap-y-2.5 gap-x-4 text-xs">
+                <div className="bg-slate-50 border border-slate-300 rounded-xl p-3.5 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-y-2.5 gap-x-4 text-xs">
                   <div>
                     <span className="text-slate-500 font-medium block text-[10px]">طالب علم کا نام (Student Name):</span>
-                    <strong className="text-sm font-extrabold text-[#0D285F]">{selectedExamCard.studentName}</strong>
+                    <strong className="text-sm font-extrabold text-[#0D285F]">{liveSelectedExamCard.studentName}</strong>
                   </div>
 
                   <div>
                     <span className="text-slate-500 font-medium block text-[10px]">ولدیت (Father's Name):</span>
-                    <strong className="text-sm font-extrabold text-slate-800">{selectedExamCard.fatherName}</strong>
+                    <strong className="text-sm font-extrabold text-slate-800">{liveSelectedExamCard.fatherName}</strong>
                   </div>
 
                   <div>
                     <span className="text-slate-500 font-medium block text-[10px]">کلاس (Class):</span>
-                    <strong className="text-xs font-bold text-[#0D285F]">{selectedExamCard.className}</strong>
+                    <strong className="text-xs font-bold text-[#0D285F]">{liveSelectedExamCard.className}</strong>
                   </div>
 
                   <div>
                     <span className="text-slate-500 font-medium block text-[10px]">رول نمبر (Roll No):</span>
-                    <strong className="text-xs font-bold text-amber-700">Roll No. {selectedExamCard.rollNo}</strong>
+                    <strong className="text-xs font-bold text-amber-700">Roll No. {liveSelectedExamCard.rollNo}</strong>
                   </div>
 
                   <div>
                     <span className="text-slate-500 font-medium block text-[10px]">داخلہ نمبر (Admission No):</span>
-                    <span className="text-xs font-mono font-semibold">{selectedExamCard.admissionNo}</span>
+                    <span className="text-xs font-mono font-semibold">{liveSelectedExamCard.admissionNo}</span>
                   </div>
 
                   <div>
                     <span className="text-slate-500 font-medium block text-[10px]">امتحان اور تاریخ (Examination & Date):</span>
                     <span className="text-xs font-bold text-slate-700">
-                      {selectedExamCard.examTitle} ({selectedExamCard.examDate})
+                      {liveSelectedExamCard.examTitle} ({liveSelectedExamCard.examDate})
                     </span>
                   </div>
                 </div>
 
                 {/* Subjects Table */}
-                <div className="border border-slate-300 rounded-xl overflow-hidden">
-                  <table className="w-full text-xs text-left">
+                <div className="border border-slate-300 rounded-xl overflow-x-auto">
+                  <table className="w-full text-xs text-left min-w-[460px]">
                     <thead className="bg-[#0D285F] text-white">
                       <tr>
                         <th className="p-2.5 w-10 text-center">#</th>
                         <th className="p-2.5">مضمون / کتاب (Subject Name)</th>
-                        <th className="p-2.5 w-24 text-center">کل نمبر</th>
+                        <th className="p-2.5 w-20 text-center">کل نمبر</th>
                         <th className="p-2.5 w-24 text-center">حاصل کردہ</th>
                         <th className="p-2.5 w-20 text-center">فیصد</th>
                         <th className="p-2.5 w-16 text-center">گریڈ</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {selectedExamCard.subjects.map((sub, idx) => {
-                        const pct = Math.round((sub.obtainedMarks / sub.totalMarks) * 100);
+                      {liveSelectedExamCard.subjects.map((sub, idx) => {
+                        const pct =
+                          sub.totalMarks > 0
+                            ? Math.round((sub.obtainedMarks / sub.totalMarks) * 1000) / 10
+                            : 0;
                         return (
                           <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}>
                             <td className="p-2.5 text-center text-slate-500 font-bold">{idx + 1}</td>
@@ -1005,7 +1011,9 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                             </td>
                             <td className="p-2.5 text-center font-bold text-slate-700">{pct}%</td>
                             <td className="p-2.5 text-center">
-                              <span className="font-extrabold text-amber-700">{sub.grade || 'A'}</span>
+                              <span className="font-extrabold text-amber-700">
+                                {sub.grade && sub.grade !== '-' ? sub.grade : calculateGrade(pct)}
+                              </span>
                             </td>
                           </tr>
                         );
@@ -1016,34 +1024,34 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                         <td colSpan={2} className="p-3 text-right uppercase tracking-wider text-[#0D285F]">
                           گرینڈ ٹوٹل (Grand Total):
                         </td>
-                        <td className="p-3 text-center text-slate-800">{selectedExamCard.grandTotal}</td>
-                        <td className="p-3 text-center text-[#0D285F] text-base">{selectedExamCard.totalObtained}</td>
-                        <td className="p-3 text-center text-emerald-800">{selectedExamCard.percentage}%</td>
-                        <td className="p-3 text-center text-base text-amber-800">{selectedExamCard.grade}</td>
+                        <td className="p-3 text-center text-slate-800">{liveSelectedExamCard.grandTotal}</td>
+                        <td className="p-3 text-center text-[#0D285F] text-base">{liveSelectedExamCard.totalObtained}</td>
+                        <td className="p-3 text-center text-emerald-800">{liveSelectedExamCard.percentage}%</td>
+                        <td className="p-3 text-center text-base text-amber-800">{liveSelectedExamCard.grade}</td>
                       </tr>
                     </tfoot>
                   </table>
                 </div>
 
                 {/* Performance Summary */}
-                <div className="grid grid-cols-3 gap-3 text-center bg-slate-50 p-3.5 rounded-xl border border-slate-300">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3 text-center bg-slate-50 p-3 sm:p-3.5 rounded-xl border border-slate-300">
                   <div>
                     <span className="text-[10px] text-slate-500 block">امتحانی نتیجہ (Status)</span>
                     <strong
-                      className={`text-sm font-extrabold ${
-                        selectedExamCard.status === 'Pass' ? 'text-emerald-700' : 'text-rose-700'
+                      className={`text-xs sm:text-sm font-extrabold ${
+                        liveSelectedExamCard.status === 'Pass' ? 'text-emerald-700' : 'text-rose-700'
                       }`}
                     >
-                      {selectedExamCard.status === 'Pass' ? 'کامیاب (PASSED)' : 'توجہ طلب (FAILED)'}
+                      {liveSelectedExamCard.status === 'Pass' ? 'کامیاب (PASSED)' : 'توجہ طلب (FAILED)'}
                     </strong>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 block">حاصل کردہ گریڈ (Overall Grade)</span>
-                    <strong className="text-xl font-black text-amber-600">{selectedExamCard.grade}</strong>
+                    <strong className="text-lg sm:text-xl font-black text-amber-600">{liveSelectedExamCard.grade}</strong>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 block">مجموعی فیصد (Percentage)</span>
-                    <strong className="text-sm font-extrabold text-[#0D285F]">{selectedExamCard.percentage}%</strong>
+                    <strong className="text-xs sm:text-sm font-extrabold text-[#0D285F]">{liveSelectedExamCard.percentage}%</strong>
                   </div>
                 </div>
 
@@ -1053,16 +1061,16 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                     استاد کے مشاہدات و اخلاقی تربیت (Teacher Remarks & Character Evaluation):
                   </span>
                   <p className="text-slate-700 italic">
-                    "{selectedExamCard.generalRemarks || 'Shows keen commitment to moral character and academic excellence.'}"
+                    "{liveSelectedExamCard.generalRemarks || 'Shows keen commitment to moral character and academic excellence.'}"
                   </p>
                 </div>
 
-                {/* Official Signatures & Seal */}
-                <div className="pt-8 flex items-end justify-between px-4 text-center">
-                  <div className="w-44">
+                {/* Official Signatures & Seal (NO personal principal name - only PRINCIPAL stamp) */}
+                <div className="pt-6 sm:pt-8 flex flex-wrap items-end justify-between gap-4 px-2 sm:px-4 text-center">
+                  <div className="w-36 sm:w-44">
                     <div className="border-b-2 border-slate-800 pb-1 mb-1 font-serif text-slate-700 italic text-xs">
-                      {selectedExamCard.enteredByName && !/tasawar|principal/i.test(selectedExamCard.enteredByName)
-                        ? selectedExamCard.enteredByName
+                      {liveSelectedExamCard.enteredByName && !/tasawar|principal/i.test(liveSelectedExamCard.enteredByName)
+                        ? liveSelectedExamCard.enteredByName
                         : 'Class Teacher'}
                     </div>
                     <span className="text-[10px] text-slate-500 font-bold block uppercase">
@@ -1071,8 +1079,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                   </div>
 
                   {/* School Seal Stamp */}
-                  <div className="w-24 h-24 rounded-full border-4 border-double border-[#0D285F] p-1 flex items-center justify-center text-center">
-                    <div className="text-[8px] font-bold text-[#0D285F] leading-tight">
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-double border-[#0D285F] p-1 flex items-center justify-center text-center">
+                    <div className="text-[7px] sm:text-[8px] font-bold text-[#0D285F] leading-tight">
                       ★ BRIGHT SCHOLAR ★<br />
                       OFFICIAL SEAL<br />
                       CHAK 47 GB<br />
@@ -1080,7 +1088,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                     </div>
                   </div>
 
-                  <div className="w-44">
+                  <div className="w-36 sm:w-44">
                     <div className="inline-block border-2 border-[#0D285F] rounded-md px-3 py-0.5 mb-1.5 bg-[#0D285F]/5">
                       <span className="font-black text-[#0D285F] tracking-[0.2em] text-xs uppercase">
                         PRINCIPAL

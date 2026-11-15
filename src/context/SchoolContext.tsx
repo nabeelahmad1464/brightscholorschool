@@ -379,42 +379,58 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [pendingTeacherAttQueue, setPendingTeacherAttQueue] = useState<TeacherAttendance[]>(() =>
     loadFromStorage<TeacherAttendance[]>('pending_teacher_att_queue', [])
   );
+  const [pendingExamReportsQueue, setPendingExamReportsQueue] = useState<StudentExamReport[]>(() =>
+    loadFromStorage<StudentExamReport[]>('pending_exam_reports_queue', [])
+  );
   const [pendingGeneralSync, setPendingGeneralSync] = useState<boolean>(() =>
     loadFromStorage<boolean>('pending_sync', false)
   );
 
   const pendingAttQueueRef = React.useRef<StudentAttendance[]>(pendingAttQueue);
   const pendingTeacherAttQueueRef = React.useRef<TeacherAttendance[]>(pendingTeacherAttQueue);
+  const pendingExamReportsQueueRef = React.useRef<StudentExamReport[]>(pendingExamReportsQueue);
   const pendingGeneralSyncRef = React.useRef<boolean>(pendingGeneralSync);
   pendingAttQueueRef.current = pendingAttQueue;
   pendingTeacherAttQueueRef.current = pendingTeacherAttQueue;
+  pendingExamReportsQueueRef.current = pendingExamReportsQueue;
   pendingGeneralSyncRef.current = pendingGeneralSync;
 
   const hasPendingOfflineSync =
-    pendingGeneralSync || pendingAttQueue.length > 0 || pendingTeacherAttQueue.length > 0;
-  const pendingOfflineCount = pendingAttQueue.length + pendingTeacherAttQueue.length;
+    pendingGeneralSync ||
+    pendingAttQueue.length > 0 ||
+    pendingTeacherAttQueue.length > 0 ||
+    pendingExamReportsQueue.length > 0;
+  const pendingOfflineCount =
+    pendingAttQueue.length + pendingTeacherAttQueue.length + pendingExamReportsQueue.length;
 
   const isApplyingRemoteUpdate = React.useRef(false);
   const lastKnownServerUpdatedAt = React.useRef<string | null>(null);
   const hasInitializedFromCloud = React.useRef(false);
   const hasPendingLocalMutation = React.useRef(
-    pendingGeneralSync || pendingAttQueue.length > 0 || pendingTeacherAttQueue.length > 0
+    pendingGeneralSync ||
+      pendingAttQueue.length > 0 ||
+      pendingTeacherAttQueue.length > 0 ||
+      pendingExamReportsQueue.length > 0
   );
   const isFlushingOfflineRef = React.useRef(false);
 
   const persistPendingQueues = (
     nextAttQ: StudentAttendance[],
     nextTeacherAttQ: TeacherAttendance[],
-    nextGenSync: boolean
+    nextGenSync: boolean,
+    nextExamReportsQ: StudentExamReport[] = pendingExamReportsQueueRef.current
   ) => {
     pendingAttQueueRef.current = nextAttQ;
     pendingTeacherAttQueueRef.current = nextTeacherAttQ;
+    pendingExamReportsQueueRef.current = nextExamReportsQ;
     pendingGeneralSyncRef.current = nextGenSync;
     setPendingAttQueue(nextAttQ);
     setPendingTeacherAttQueue(nextTeacherAttQ);
+    setPendingExamReportsQueue(nextExamReportsQ);
     setPendingGeneralSync(nextGenSync);
     saveToStorage('pending_att_queue', nextAttQ);
     saveToStorage('pending_teacher_att_queue', nextTeacherAttQ);
+    saveToStorage('pending_exam_reports_queue', nextExamReportsQ);
     saveToStorage('pending_sync', nextGenSync);
   };
 
@@ -679,12 +695,46 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return Array.from(map.values());
   };
 
-  // Flush offline queued attendance cleanly onto freshest cloud state without overwriting other teachers
+  const overlayExamReports = (
+    baseList: StudentExamReport[],
+    incomingReports: StudentExamReport[],
+    deletedSet?: Set<string>
+  ): StudentExamReport[] => {
+    const map = new Map<string, StudentExamReport>();
+    (Array.isArray(baseList) ? baseList : []).forEach(rep => {
+      if (rep && rep.id && (!deletedSet || !deletedSet.has(rep.id))) {
+        map.set(rep.id, rep);
+      }
+    });
+    incomingReports.forEach(rep => {
+      if (rep && rep.id && (!deletedSet || !deletedSet.has(rep.id))) {
+        const existing = map.get(rep.id);
+        if (!existing) {
+          map.set(rep.id, rep);
+        } else {
+          const existingTime = new Date(existing.updatedAt || 0).getTime();
+          const incomingTime = new Date(rep.updatedAt || 0).getTime();
+          map.set(rep.id, incomingTime >= existingTime ? rep : existing);
+        }
+      }
+    });
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+    );
+  };
+
+  // Flush offline queued attendance & exam reports cleanly onto freshest cloud state without overwriting other teachers
   const flushPendingOfflineSync = async (): Promise<boolean> => {
     const queuedAtt = pendingAttQueueRef.current;
     const queuedTeacherAtt = pendingTeacherAttQueueRef.current;
+    const queuedExamReports = pendingExamReportsQueueRef.current;
     const hasGen = pendingGeneralSyncRef.current;
-    if (queuedAtt.length === 0 && queuedTeacherAtt.length === 0 && !hasGen) {
+    if (
+      queuedAtt.length === 0 &&
+      queuedTeacherAtt.length === 0 &&
+      queuedExamReports.length === 0 &&
+      !hasGen
+    ) {
       return true;
     }
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -699,35 +749,54 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return false;
       }
 
+      const mergedDeletedIds = Array.from(
+        new Set<string>([
+          ...(Array.isArray(best?.deletedIds) ? best.deletedIds : []),
+          ...stateRef.current.deletedIds
+        ])
+      ).slice(-500);
+      const deletedSet = new Set(mergedDeletedIds);
+
       const baseStudents =
         best && Array.isArray(best.students) && best.students.length > 0
-          ? best.students.filter((s: any) => !isDummyStudent(s))
+          ? best.students.filter((s: any) => !isDummyStudent(s) && !deletedSet.has(s.id))
           : stateRef.current.students;
       const baseTeachers =
         best && Array.isArray(best.teachers) && best.teachers.length > 0
-          ? best.teachers
+          ? best.teachers.filter((t: any) => !deletedSet.has(t.id))
           : stateRef.current.teachers;
       const baseLeaves =
-        best && Array.isArray(best.leaves) ? best.leaves : stateRef.current.leaves;
+        best && Array.isArray(best.leaves)
+          ? best.leaves.filter((l: any) => !deletedSet.has(l.id))
+          : stateRef.current.leaves;
       const baseSettings: SystemSettings =
         best && best.settings && typeof best.settings === 'object'
           ? { ...initialSettings, ...best.settings }
           : stateRef.current.settings;
       const baseAtt =
         best && Array.isArray(best.attendance)
-          ? best.attendance.filter((a: any) => !isDummyStudent(a))
+          ? best.attendance.filter((a: any) => !isDummyStudent(a) && !deletedSet.has(a.id))
           : stateRef.current.attendance;
       const baseTeacherAtt =
         best && Array.isArray(best.teacherAttendance)
-          ? best.teacherAttendance
+          ? best.teacherAttendance.filter((a: any) => !deletedSet.has(a.id))
           : stateRef.current.teacherAttendance;
       const baseFees =
         best && Array.isArray(best.feeRecords)
-          ? best.feeRecords.filter((f: any) => !isDummyStudent(f))
+          ? best.feeRecords.filter((f: any) => !isDummyStudent(f) && !deletedSet.has(f.id))
           : stateRef.current.feeRecords;
+      const baseExamReports =
+        best && Array.isArray(best.studentExamReports)
+          ? best.studentExamReports.filter((r: any) => !deletedSet.has(r.id))
+          : stateRef.current.studentExamReports.filter(r => !deletedSet.has(r.id));
 
       const mergedAtt = overlayStudentAttendance(baseAtt, queuedAtt);
       const mergedTeacherAtt = overlayTeacherAttendance(baseTeacherAtt, queuedTeacherAtt);
+      const mergedExamReports = overlayExamReports(
+        baseExamReports,
+        [...stateRef.current.studentExamReports, ...queuedExamReports],
+        deletedSet
+      );
       const reconciledFees = reconcileFeesWithAttendance({
         students: baseStudents,
         feeRecords: baseFees,
@@ -743,24 +812,32 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         settings: baseSettings,
         attendance: mergedAtt,
         teacherAttendance: mergedTeacherAtt,
-        feeRecords: reconciledFees
+        feeRecords: reconciledFees,
+        studentExamReports: mergedExamReports,
+        deletedIds: mergedDeletedIds
       });
 
       if (pushed) {
         isApplyingRemoteUpdate.current = true;
         stateRef.current = {
           ...stateRef.current,
+          deletedIds: mergedDeletedIds,
           attendance: mergedAtt,
           teacherAttendance: mergedTeacherAtt,
-          feeRecords: reconciledFees
+          feeRecords: reconciledFees,
+          studentExamReports: mergedExamReports
         };
+        setDeletedIds(mergedDeletedIds);
+        saveToStorage('deletedIds', mergedDeletedIds);
         setAttendance(mergedAtt);
         saveToStorage('attendance', mergedAtt);
         setTeacherAttendance(mergedTeacherAtt);
         saveToStorage('teacherAttendance', mergedTeacherAtt);
         setFeeRecords(reconciledFees);
         saveToStorage('feeRecords', reconciledFees);
-        persistPendingQueues([], [], false);
+        setStudentExamReports(mergedExamReports);
+        saveToStorage('studentExamReports', mergedExamReports);
+        persistPendingQueues([], [], false, []);
         setTimeout(() => {
           isApplyingRemoteUpdate.current = false;
         }, 200);
@@ -812,7 +889,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         hasInitializedFromCloud.current &&
         !hasPendingLocalMutation.current &&
         pendingAttQueueRef.current.length === 0 &&
-        pendingTeacherAttQueueRef.current.length === 0
+        pendingTeacherAttQueueRef.current.length === 0 &&
+        pendingExamReportsQueueRef.current.length === 0
       ) {
         return stateRef.current.students.filter(s => !isDummyStudent(s));
       }
@@ -894,7 +972,18 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const mergedReports = mergeEntities<DailyReport>(data.dailyReports, currentLocal.dailyReports);
       const mergedTests = mergeEntities<Test>(data.tests, currentLocal.tests);
       const mergedTestResults = mergeEntities<TestResult>(data.testResults, currentLocal.testResults);
-      const mergedExamReports = mergeEntities<StudentExamReport>(data.studentExamReports, currentLocal.studentExamReports);
+      let mergedExamReports = overlayExamReports(
+        Array.isArray(data.studentExamReports) ? data.studentExamReports : [],
+        currentLocal.studentExamReports,
+        deletedSet
+      );
+      if (pendingExamReportsQueueRef.current.length > 0) {
+        mergedExamReports = overlayExamReports(
+          mergedExamReports,
+          pendingExamReportsQueueRef.current,
+          deletedSet
+        );
+      }
       const mergedNotices = mergeNotices(data.notices, currentLocal.notices);
       const mergedAdmissions = mergeEntities<OnlineAdmission>(data.onlineAdmissions, currentLocal.onlineAdmissions);
       const mergedSalaryTx = mergeEntities<SalaryTransaction>(data.salaryTransactions, currentLocal.salaryTransactions);
@@ -1046,6 +1135,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (
       pendingAttQueueRef.current.length > 0 ||
       pendingTeacherAttQueueRef.current.length > 0 ||
+      pendingExamReportsQueueRef.current.length > 0 ||
       pendingGeneralSyncRef.current
     ) {
       await flushPendingOfflineSync();
@@ -1089,6 +1179,7 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (
         pendingAttQueueRef.current.length > 0 ||
         pendingTeacherAttQueueRef.current.length > 0 ||
+        pendingExamReportsQueueRef.current.length > 0 ||
         pendingGeneralSyncRef.current
       ) {
         await flushPendingOfflineSync();
@@ -2156,64 +2247,204 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   // Official Student Exam Reports (Tests & Results Section)
-  const applySaveStudentExamReport = (report: StudentExamReport) => {
-    hasPendingLocalMutation.current = true;
+  const sanitizeExamReport = (report: StudentExamReport): StudentExamReport => {
     const rawEnteredBy = (report.enteredByName || '').trim();
     const safeEnteredBy =
       /tasawar|principal/i.test(rawEnteredBy) ? 'Class Teacher' : rawEnteredBy || 'Class Teacher';
-    const updated = [...stateRef.current.studentExamReports];
-    const idx = updated.findIndex(r => r.id === report.id);
-    const enriched: StudentExamReport = {
+    return {
       ...report,
       enteredByName: safeEnteredBy,
       updatedAt: new Date().toISOString()
     };
-    if (idx >= 0) {
-      updated[idx] = enriched;
-    } else {
-      updated.unshift(enriched);
-    }
+  };
+
+  const applySaveStudentExamReport = (report: StudentExamReport) => {
+    hasPendingLocalMutation.current = true;
+    const enriched = sanitizeExamReport(report);
+    const updated = overlayExamReports(stateRef.current.studentExamReports, [enriched]);
     stateRef.current = { ...stateRef.current, studentExamReports: updated };
     setStudentExamReports(updated);
     saveToStorage('studentExamReports', updated);
-    return updated;
+    return { updated, enriched };
   };
 
   const saveStudentExamReport = (report: StudentExamReport) => {
-    const updated = applySaveStudentExamReport(report);
-    pushCurrentDataToCloud({ studentExamReports: updated });
+    void saveStudentExamReportAsync(report);
   };
 
   const saveStudentExamReportAsync = async (report: StudentExamReport): Promise<boolean> => {
-    const prevReports = stateRef.current.studentExamReports;
-    const updated = applySaveStudentExamReport(report);
-    const saved = await pushCurrentDataToCloud({ studentExamReports: updated });
-    if (!saved) {
-      hasPendingLocalMutation.current = false;
-      stateRef.current = { ...stateRef.current, studentExamReports: prevReports };
-      setStudentExamReports(prevReports);
-      saveToStorage('studentExamReports', prevReports);
+    const { updated: localUpdated, enriched } = applySaveStudentExamReport(report);
+
+    try {
+      const { best, reachable } = await fetchFreshestCloudSnapshot(2800);
+      if (reachable && best) {
+        const mergedDeleted = Array.from(
+          new Set<string>([
+            ...(Array.isArray(best.deletedIds) ? best.deletedIds : []),
+            ...stateRef.current.deletedIds
+          ].filter(id => id !== enriched.id))
+        ).slice(-500);
+        const deletedSet = new Set(mergedDeleted);
+
+        const baseStudents =
+          Array.isArray(best.students) && best.students.length > 0
+            ? best.students.filter((s: any) => !isDummyStudent(s) && !deletedSet.has(s.id))
+            : stateRef.current.students;
+        const baseTeachers =
+          Array.isArray(best.teachers) && best.teachers.length > 0
+            ? best.teachers.filter((t: any) => !deletedSet.has(t.id))
+            : stateRef.current.teachers;
+        const baseAtt = Array.isArray(best.attendance)
+          ? deduplicateAttendance(best.attendance.filter((a: any) => !isDummyStudent(a) && !deletedSet.has(a.id)))
+          : stateRef.current.attendance;
+        const baseFees = Array.isArray(best.feeRecords)
+          ? best.feeRecords.filter((f: any) => !isDummyStudent(f) && !deletedSet.has(f.id))
+          : stateRef.current.feeRecords;
+        const baseExamReports = Array.isArray(best.studentExamReports)
+          ? best.studentExamReports.filter((r: any) => !deletedSet.has(r.id))
+          : [];
+
+        const mergedReports = overlayExamReports(
+          baseExamReports,
+          [...pendingExamReportsQueueRef.current, enriched],
+          deletedSet
+        );
+
+        stateRef.current = {
+          ...stateRef.current,
+          deletedIds: mergedDeleted,
+          studentExamReports: mergedReports
+        };
+        setDeletedIds(mergedDeleted);
+        saveToStorage('deletedIds', mergedDeleted);
+        setStudentExamReports(mergedReports);
+        saveToStorage('studentExamReports', mergedReports);
+
+        const pushed = await pushCurrentDataToCloud({
+          students: baseStudents,
+          teachers: baseTeachers,
+          attendance: baseAtt,
+          feeRecords: baseFees,
+          studentExamReports: mergedReports,
+          deletedIds: mergedDeleted
+        });
+
+        if (pushed) {
+          const remainingQueue = pendingExamReportsQueueRef.current.filter(r => r.id !== enriched.id);
+          persistPendingQueues(
+            pendingAttQueueRef.current,
+            pendingTeacherAttQueueRef.current,
+            pendingGeneralSyncRef.current,
+            remainingQueue
+          );
+          return true;
+        }
+      } else {
+        const directPushed = await pushCurrentDataToCloud({ studentExamReports: localUpdated });
+        if (directPushed) {
+          const remainingQueue = pendingExamReportsQueueRef.current.filter(r => r.id !== enriched.id);
+          persistPendingQueues(
+            pendingAttQueueRef.current,
+            pendingTeacherAttQueueRef.current,
+            pendingGeneralSyncRef.current,
+            remainingQueue
+          );
+          return true;
+        }
+      }
+    } catch (err) {
+      console.warn('Exam report cloud save queued for retry:', err);
     }
-    return saved;
+
+    // Never lose entered marks when offline: keep locally and enqueue for automatic sync when online
+    const nextQueue = overlayExamReports(pendingExamReportsQueueRef.current, [enriched]);
+    persistPendingQueues(
+      pendingAttQueueRef.current,
+      pendingTeacherAttQueueRef.current,
+      true,
+      nextQueue
+    );
+    return false;
   };
 
   const deleteStudentExamReport = (reportId: string) => {
     hasPendingLocalMutation.current = true;
     const nextDeleted = recordDeletedIds([reportId]);
     const updated = stateRef.current.studentExamReports.filter(r => r.id !== reportId);
+    stateRef.current = { ...stateRef.current, studentExamReports: updated };
     setStudentExamReports(updated);
     saveToStorage('studentExamReports', updated);
-    pushCurrentDataToCloud({ studentExamReports: updated, deletedIds: nextDeleted });
+
+    const nextQueue = pendingExamReportsQueueRef.current.filter(r => r.id !== reportId);
+    persistPendingQueues(
+      pendingAttQueueRef.current,
+      pendingTeacherAttQueueRef.current,
+      true,
+      nextQueue
+    );
+
+    void (async () => {
+      try {
+        const { best, reachable } = await fetchFreshestCloudSnapshot(2500);
+        if (reachable && best) {
+          const mergedDeleted = Array.from(
+            new Set<string>([
+              ...(Array.isArray(best.deletedIds) ? best.deletedIds : []),
+              ...nextDeleted
+            ])
+          ).slice(-500);
+          const deletedSet = new Set(mergedDeleted);
+          const baseReports = Array.isArray(best.studentExamReports)
+            ? best.studentExamReports
+            : updated;
+          const mergedReports = overlayExamReports(baseReports, nextQueue, deletedSet).filter(
+            r => r.id !== reportId
+          );
+          const ok = await pushCurrentDataToCloud({
+            students:
+              Array.isArray(best.students) && best.students.length > 0
+                ? best.students.filter((s: any) => !isDummyStudent(s) && !deletedSet.has(s.id))
+                : stateRef.current.students,
+            studentExamReports: mergedReports,
+            deletedIds: mergedDeleted
+          });
+          if (ok) {
+            persistPendingQueues(
+              pendingAttQueueRef.current,
+              pendingTeacherAttQueueRef.current,
+              false,
+              nextQueue
+            );
+          }
+          return;
+        }
+        const ok = await pushCurrentDataToCloud({
+          studentExamReports: updated,
+          deletedIds: nextDeleted
+        });
+        if (ok) {
+          persistPendingQueues(
+            pendingAttQueueRef.current,
+            pendingTeacherAttQueueRef.current,
+            false,
+            nextQueue
+          );
+        }
+      } catch {
+        // Pending queue already marks offline sync needed
+      }
+    })();
   };
 
   const togglePublishExamReport = (reportId: string) => {
-    hasPendingLocalMutation.current = true;
-    const updated = stateRef.current.studentExamReports.map(r =>
-      r.id === reportId ? { ...r, isPublished: !r.isPublished, updatedAt: new Date().toISOString() } : r
-    );
-    setStudentExamReports(updated);
-    saveToStorage('studentExamReports', updated);
-    pushCurrentDataToCloud({ studentExamReports: updated });
+    const target = stateRef.current.studentExamReports.find(r => r.id === reportId);
+    if (!target) return;
+    const toggled: StudentExamReport = {
+      ...target,
+      isPublished: !target.isPublished,
+      updatedAt: new Date().toISOString()
+    };
+    void saveStudentExamReportAsync(toggled);
   };
 
   // Notices
