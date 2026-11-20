@@ -39,7 +39,10 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
     submitLeave,
     openWhatsApp,
     settings,
+    attendance,
+    leaves,
     feeRecords,
+    tests,
     testResults,
     dailyReports,
     studentExamReports,
@@ -167,7 +170,51 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
     receiptNo: `REC-BSS-${activeStudent.id.slice(-4)}`
   } as FeeRecord) : null;
 
-  const studentResults = activeStudent ? testResults.filter(r => r.studentId === activeStudent.id) : [];
+  const studentResults = activeStudent
+    ? testResults
+        .filter(r => r.studentId === activeStudent.id)
+        .map(r => {
+          const linkedTest = tests.find(t => t.id === r.testId);
+          const resolvedDate = r.testDate || linkedTest?.testDate || '';
+          const pct =
+            typeof r.percentage === 'number'
+              ? r.percentage
+              : r.totalMarks > 0
+              ? Math.round((r.marksObtained / r.totalMarks) * 1000) / 10
+              : 0;
+          return { ...r, testDate: resolvedDate, percentage: pct };
+        })
+        .sort((a, b) => (b.testDate || '').localeCompare(a.testDate || ''))
+    : [];
+
+  const studentAttendanceHistory = activeStudent
+    ? attendance
+        .filter(a => a.studentId === activeStudent.id)
+        .sort((a, b) => b.date.localeCompare(a.date))
+    : [];
+
+  const studentAbsentDates = studentAttendanceHistory.filter(a => a.status === 'Absent');
+  const studentLeaveRecords = activeStudent
+    ? leaves
+        .filter(l => l.applicantId === activeStudent.id && (!l.role || l.role === 'student'))
+        .sort((a, b) => b.fromDate.localeCompare(a.fromDate))
+    : [];
+
+  const monthlyAttendanceSummary = (() => {
+    const map = new Map<string, { present: number; absent: number; leave: number; late: number; total: number }>();
+    studentAttendanceHistory.forEach(a => {
+      const ym = a.month || a.date.substring(0, 7);
+      const entry = map.get(ym) || { present: 0, absent: 0, leave: 0, late: 0, total: 0 };
+      entry.total += 1;
+      if (a.status === 'Present') entry.present += 1;
+      else if (a.status === 'Absent') entry.absent += 1;
+      else if (a.status === 'Leave') entry.leave += 1;
+      else if (a.status === 'Late') entry.late += 1;
+      map.set(ym, entry);
+    });
+    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  })();
+
   const studentReports = activeStudent ? dailyReports.filter(d => d.studentId === activeStudent.id) : [];
   // Only published examination reports for this child (Parents cannot see drafts or other children)
   const childExamReports = activeStudent
@@ -620,16 +667,117 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
               </span>
             </div>
 
-            {/* Tarbiyat */}
+            {/* Academic Performance (Real Data Only) */}
             <div className="bg-white p-4 rounded-2xl border border-emerald-200 bg-emerald-50/20 shadow-sm text-center">
-              <span className="text-[11px] font-bold text-emerald-800 block uppercase">تربیت و اخلاقیات</span>
+              <span className="text-[11px] font-bold text-emerald-800 block uppercase">تعلیمی کارکردگی (Performance)</span>
               <span className="text-xl sm:text-2xl font-black text-emerald-700 mt-1 block">
-                شاندار (Good)
+                {childExamReports.length > 0
+                  ? `${childExamReports[0].percentage}% (${childExamReports[0].grade})`
+                  : studentResults.length > 0
+                  ? `${Math.round(
+                      (studentResults.reduce((acc, r) => acc + (r.percentage || 0), 0) /
+                        studentResults.length) *
+                        10
+                    ) / 10}%`
+                  : studentReports.length > 0
+                  ? studentReports[0].behaviour
+                  : 'No Record Yet'}
               </span>
               <span className="text-[11px] text-emerald-800 font-semibold">
-                ناظرہ قرآن و اخلاقیات
+                {childExamReports.length} Exams • {studentResults.length} Daily Tests
               </span>
             </div>
+          </div>
+
+          {/* SECTION 1B: ATTENDANCE HISTORY, ABSENT DATES & MONTHLY SUMMARY */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-4 print:hidden">
+            <div className="flex items-center justify-between border-b pb-3 flex-wrap gap-2">
+              <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+                <Calendar className="w-5 h-5 text-[#0D285F]" />
+                <span>حاضری اور غیر حاضری کا مکمل ریکارڈ (Attendance History &amp; Absent Dates)</span>
+              </div>
+              <span className="text-[11px] font-bold text-slate-500">
+                Total Recorded Days: {studentAttendanceHistory.length}
+              </span>
+            </div>
+
+            {studentAbsentDates.length > 0 ? (
+              <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 space-y-2">
+                <span className="text-xs font-extrabold text-rose-800 block">
+                  غیر حاضری کی تاریخیں (Absent Dates — {studentAbsentDates.length} Days):
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {studentAbsentDates.map(a => (
+                    <span
+                      key={a.id}
+                      className="bg-white border border-rose-300 text-rose-700 px-2.5 py-1 rounded-lg text-xs font-bold font-mono"
+                    >
+                      {a.date}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl p-3 font-semibold">
+                اس طالب علم کی کوئی غیر حاضری درج نہیں ہے (No absent dates recorded).
+              </p>
+            )}
+
+            {monthlyAttendanceSummary.length > 0 && (
+              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#07193B] text-white">
+                    <tr>
+                      <th className="p-2.5">Month</th>
+                      <th className="p-2.5 text-center">Present</th>
+                      <th className="p-2.5 text-center">Absent</th>
+                      <th className="p-2.5 text-center">Leave</th>
+                      <th className="p-2.5 text-center">Total Days</th>
+                      <th className="p-2.5 text-center">Attendance %</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {monthlyAttendanceSummary.map(([ym, stats]) => {
+                      const pct = stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0;
+                      return (
+                        <tr key={ym} className="hover:bg-slate-50">
+                          <td className="p-2.5 font-bold text-[#0D285F] font-mono">{ym}</td>
+                          <td className="p-2.5 text-center font-bold text-emerald-700">{stats.present}</td>
+                          <td className="p-2.5 text-center font-bold text-rose-700">{stats.absent}</td>
+                          <td className="p-2.5 text-center font-bold text-amber-700">{stats.leave}</td>
+                          <td className="p-2.5 text-center font-semibold">{stats.total}</td>
+                          <td className="p-2.5 text-center font-black text-[#0D285F]">{pct}%</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {studentLeaveRecords.length > 0 && (
+              <div className="space-y-1.5">
+                <span className="text-xs font-bold text-slate-700 block">
+                  رخصت کا ریکارڈ (Leave Applications):
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {studentLeaveRecords.map(l => (
+                    <span
+                      key={l.id}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
+                        l.status === 'Approved'
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                          : l.status === 'Rejected'
+                          ? 'bg-rose-50 border-rose-200 text-rose-800'
+                          : 'bg-amber-50 border-amber-200 text-amber-800'
+                      }`}
+                    >
+                      {l.fromDate} → {l.toDate} ({l.numberOfDays}d) • {l.status}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* SECTION 2: EXAM RESULTS & OFFICIAL MARKSHEETS */}
@@ -701,36 +849,42 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
               </div>
             )}
 
-            {/* Monthly Assessment Tests */}
+            {/* Daily Class Tests & Monthly Assessments */}
             <div className="space-y-3">
               <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                ماہانہ ٹیسٹ ریکارڈز (Monthly Assessment Tests):
+                روزانہ کلاس ٹیسٹ کا ریکارڈ (Daily Class Tests History — {studentResults.length}):
               </h4>
               {studentResults.length === 0 && childExamReports.length === 0 ? (
                 <p className="text-xs text-slate-400 italic py-4 text-center">
-                  اس طالب علم کا ابھی کوئی امتحانی نتیجہ یا ٹیسٹ رزلٹ شائع نہیں ہوا ہے۔
+                  اس طالب علم کا ابھی کوئی امتحانی نتیجہ یا ڈیلی ٹیسٹ رزلٹ درج نہیں ہوا ہے۔
                 </p>
               ) : studentResults.length > 0 ? (
                 <div className="overflow-x-auto border border-slate-200 rounded-xl">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-[#07193B] text-white">
                       <tr>
+                        <th className="p-3">تاریخ (Date)</th>
+                        <th className="p-3">ٹیسٹ کا نام (Test Name)</th>
                         <th className="p-3">مضمون (Subject)</th>
-                        <th className="p-3">ٹیسٹ کا نام (Test Title)</th>
-                        <th className="p-3">حاصل کردہ نمبر (Marks)</th>
-                        <th className="p-3">گریڈ (Grade)</th>
-                        <th className="p-3">استاد کا تبصرہ (Remarks)</th>
+                        <th className="p-3 text-center">نمبر (Obtained / Total)</th>
+                        <th className="p-3 text-center">فیصد (%)</th>
+                        <th className="p-3 text-center">گریڈ (Grade)</th>
+                        <th className="p-3">تبصرہ (Remarks)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {studentResults.map(r => (
                         <tr key={r.id} className="hover:bg-slate-50">
-                          <td className="p-3 font-bold text-slate-900">{r.subject}</td>
-                          <td className="p-3 text-slate-600">{r.testTitle}</td>
-                          <td className="p-3 font-black text-[#0D285F]">
+                          <td className="p-3 font-mono text-slate-600">{r.testDate || '-'}</td>
+                          <td className="p-3 font-bold text-slate-900">{r.testTitle}</td>
+                          <td className="p-3 text-slate-700 font-semibold">{r.subject}</td>
+                          <td className="p-3 text-center font-black text-[#0D285F]">
                             {r.marksObtained} / {r.totalMarks}
                           </td>
-                          <td className="p-3">
+                          <td className="p-3 text-center font-extrabold text-emerald-700">
+                            {r.percentage}%
+                          </td>
+                          <td className="p-3 text-center">
                             <span className={`px-2.5 py-0.5 rounded-full font-black text-[10px] ${
                               r.grade === 'A+' || r.grade === 'A'
                                 ? 'bg-emerald-100 text-emerald-800'
@@ -741,7 +895,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ onSelectStudent }) =
                               {r.grade}
                             </span>
                           </td>
-                          <td className="p-3 text-slate-500 italic">{r.remarks}</td>
+                          <td className="p-3 text-slate-500 italic">{r.remarks || '-'}</td>
                         </tr>
                       ))}
                     </tbody>

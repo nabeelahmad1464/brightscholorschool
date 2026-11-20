@@ -149,6 +149,11 @@ interface SchoolContextType {
 
   addTest: (test: Omit<Test, 'id'>) => Test;
   addTestResult: (result: Omit<TestResult, 'id'>) => void;
+  saveDailyTestWithResultsAsync: (
+    test: Test,
+    results: Array<Omit<TestResult, 'id' | 'testId' | 'testTitle' | 'testDate' | 'className' | 'subject' | 'totalMarks'>>
+  ) => Promise<{ success: boolean; test: Test; error?: string }>;
+  deleteTestAsync: (testId: string) => Promise<boolean>;
   addDailyReport: (report: Omit<DailyReport, 'id'>) => void;
 
   // Official Student Exam Reports (Tests & Results Section)
@@ -1530,44 +1535,209 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     const updatedList = stateRef.current.students.map(s => (s.id === finalStudent.id ? finalStudent : s));
+    const updatedAttendance = stateRef.current.attendance.map(a =>
+      a.studentId === finalStudent.id
+        ? { ...a, studentName: finalStudent.name, className: finalStudent.className }
+        : a
+    );
+    const updatedExamReports = stateRef.current.studentExamReports.map(r =>
+      r.studentId === finalStudent.id
+        ? {
+            ...r,
+            studentName: finalStudent.name,
+            fatherName: finalStudent.fatherName,
+            className: finalStudent.className,
+            rollNo: finalStudent.rollNo,
+            admissionNo: finalStudent.admissionNo,
+            updatedAt: new Date().toISOString()
+          }
+        : r
+    );
+    const updatedTestResults = stateRef.current.testResults.map(tr =>
+      tr.studentId === finalStudent.id
+        ? { ...tr, studentName: finalStudent.name, className: finalStudent.className }
+        : tr
+    );
+    const updatedDailyReports = stateRef.current.dailyReports.map(dr =>
+      dr.studentId === finalStudent.id
+        ? { ...dr, studentName: finalStudent.name, className: finalStudent.className }
+        : dr
+    );
+
     const reconciledFees = reconcileFeesWithAttendance({
       students: updatedList,
       feeRecords: updatedFees,
-      attendance: stateRef.current.attendance,
+      attendance: updatedAttendance,
       leaves: stateRef.current.leaves,
       settings: stateRef.current.settings
     });
 
-    stateRef.current = { ...stateRef.current, students: updatedList, feeRecords: reconciledFees };
+    stateRef.current = {
+      ...stateRef.current,
+      students: updatedList,
+      feeRecords: reconciledFees,
+      attendance: updatedAttendance,
+      studentExamReports: updatedExamReports,
+      testResults: updatedTestResults,
+      dailyReports: updatedDailyReports
+    };
     setStudents(updatedList);
     saveToStorage('students', updatedList);
     setFeeRecords(reconciledFees);
     saveToStorage('feeRecords', reconciledFees);
-    return { updatedList, reconciledFees };
+    setAttendance(updatedAttendance);
+    saveToStorage('attendance', updatedAttendance);
+    setStudentExamReports(updatedExamReports);
+    saveToStorage('studentExamReports', updatedExamReports);
+    setTestResults(updatedTestResults);
+    saveToStorage('testResults', updatedTestResults);
+    setDailyReports(updatedDailyReports);
+    saveToStorage('dailyReports', updatedDailyReports);
+
+    return {
+      finalStudent,
+      updatedList,
+      reconciledFees,
+      updatedAttendance,
+      updatedExamReports,
+      updatedTestResults,
+      updatedDailyReports
+    };
   };
 
   const updateStudent = (updated: Student) => {
-    const { updatedList, reconciledFees } = applyUpdateStudent(updated);
-    pushCurrentDataToCloud({ students: updatedList, feeRecords: reconciledFees });
+    const {
+      updatedList,
+      reconciledFees,
+      updatedAttendance,
+      updatedExamReports,
+      updatedTestResults,
+      updatedDailyReports
+    } = applyUpdateStudent(updated);
+    pushCurrentDataToCloud({
+      students: updatedList,
+      feeRecords: reconciledFees,
+      attendance: updatedAttendance,
+      studentExamReports: updatedExamReports,
+      testResults: updatedTestResults,
+      dailyReports: updatedDailyReports
+    });
   };
 
   const updateStudentAsync = async (updated: Student): Promise<{ success: boolean; error?: string }> => {
-    const prevStudents = stateRef.current.students;
-    const prevFees = stateRef.current.feeRecords;
-    const { updatedList, reconciledFees } = applyUpdateStudent(updated);
-    const saved = await pushCurrentDataToCloud({ students: updatedList, feeRecords: reconciledFees });
+    const prevSnapshot = { ...stateRef.current };
+    const {
+      finalStudent,
+      updatedList,
+      reconciledFees,
+      updatedAttendance,
+      updatedExamReports,
+      updatedTestResults,
+      updatedDailyReports
+    } = applyUpdateStudent(updated);
+
+    // Merge onto freshest cloud snapshot so concurrent teacher updates are never lost
+    let payloadToPush: Partial<typeof stateRef.current> = {
+      students: updatedList,
+      feeRecords: reconciledFees,
+      attendance: updatedAttendance,
+      studentExamReports: updatedExamReports,
+      testResults: updatedTestResults,
+      dailyReports: updatedDailyReports
+    };
+
+    try {
+      const { best, reachable } = await fetchFreshestCloudSnapshot(2800);
+      if (reachable && best && Array.isArray(best.students) && best.students.length > 0) {
+        const mergedStudents = best.students
+          .filter((s: any) => !isDummyStudent(s))
+          .map((s: Student) => (s.id === finalStudent.id ? finalStudent : s));
+        if (!mergedStudents.some((s: Student) => s.id === finalStudent.id)) {
+          mergedStudents.unshift(finalStudent);
+        }
+        const mergedAtt = (Array.isArray(best.attendance) ? best.attendance : updatedAttendance).map(
+          (a: StudentAttendance) =>
+            a.studentId === finalStudent.id
+              ? { ...a, studentName: finalStudent.name, className: finalStudent.className }
+              : a
+        );
+        const mergedExamReps = (Array.isArray(best.studentExamReports) ? best.studentExamReports : updatedExamReports).map(
+          (r: StudentExamReport) =>
+            r.studentId === finalStudent.id
+              ? {
+                  ...r,
+                  studentName: finalStudent.name,
+                  fatherName: finalStudent.fatherName,
+                  className: finalStudent.className,
+                  rollNo: finalStudent.rollNo,
+                  admissionNo: finalStudent.admissionNo,
+                  updatedAt: new Date().toISOString()
+                }
+              : r
+        );
+        const mergedTestRes = (Array.isArray(best.testResults) ? best.testResults : updatedTestResults).map(
+          (tr: TestResult) =>
+            tr.studentId === finalStudent.id
+              ? { ...tr, studentName: finalStudent.name, className: finalStudent.className }
+              : tr
+        );
+        const mergedDailyReps = (Array.isArray(best.dailyReports) ? best.dailyReports : updatedDailyReports).map(
+          (dr: DailyReport) =>
+            dr.studentId === finalStudent.id
+              ? { ...dr, studentName: finalStudent.name, className: finalStudent.className }
+              : dr
+        );
+        const mergedFees = reconcileFeesWithAttendance({
+          students: mergedStudents,
+          feeRecords: Array.isArray(best.feeRecords) ? best.feeRecords : reconciledFees,
+          attendance: mergedAtt,
+          leaves: Array.isArray(best.leaves) ? best.leaves : stateRef.current.leaves,
+          settings: best.settings ? { ...initialSettings, ...best.settings } : stateRef.current.settings
+        });
+
+        payloadToPush = {
+          students: mergedStudents,
+          feeRecords: mergedFees,
+          attendance: mergedAtt,
+          studentExamReports: mergedExamReps,
+          testResults: mergedTestRes,
+          dailyReports: mergedDailyReps
+        };
+      }
+    } catch {
+      // Fall back to local merged state
+    }
+
+    const saved = await pushCurrentDataToCloud(payloadToPush);
     if (!saved) {
       hasPendingLocalMutation.current = false;
-      stateRef.current = { ...stateRef.current, students: prevStudents, feeRecords: prevFees };
-      setStudents(prevStudents);
-      saveToStorage('students', prevStudents);
-      setFeeRecords(prevFees);
-      saveToStorage('feeRecords', prevFees);
+      stateRef.current = prevSnapshot;
+      setStudents(prevSnapshot.students);
+      saveToStorage('students', prevSnapshot.students);
+      setFeeRecords(prevSnapshot.feeRecords);
+      saveToStorage('feeRecords', prevSnapshot.feeRecords);
+      setAttendance(prevSnapshot.attendance);
+      saveToStorage('attendance', prevSnapshot.attendance);
+      setStudentExamReports(prevSnapshot.studentExamReports);
+      saveToStorage('studentExamReports', prevSnapshot.studentExamReports);
+      setTestResults(prevSnapshot.testResults);
+      saveToStorage('testResults', prevSnapshot.testResults);
+      setDailyReports(prevSnapshot.dailyReports);
+      saveToStorage('dailyReports', prevSnapshot.dailyReports);
       return {
         success: false,
         error: 'تبدیلیاں آن لائن سرور پر محفوظ نہیں ہو سکیں۔ براہ کرم انٹرنیٹ چیک کر کے دوبارہ کوشش کریں۔'
       };
     }
+
+    stateRef.current = { ...stateRef.current, ...payloadToPush };
+    if (payloadToPush.students) { setStudents(payloadToPush.students); saveToStorage('students', payloadToPush.students); }
+    if (payloadToPush.feeRecords) { setFeeRecords(payloadToPush.feeRecords); saveToStorage('feeRecords', payloadToPush.feeRecords); }
+    if (payloadToPush.attendance) { setAttendance(payloadToPush.attendance); saveToStorage('attendance', payloadToPush.attendance); }
+    if (payloadToPush.studentExamReports) { setStudentExamReports(payloadToPush.studentExamReports); saveToStorage('studentExamReports', payloadToPush.studentExamReports); }
+    if (payloadToPush.testResults) { setTestResults(payloadToPush.testResults); saveToStorage('testResults', payloadToPush.testResults); }
+    if (payloadToPush.dailyReports) { setDailyReports(payloadToPush.dailyReports); saveToStorage('dailyReports', payloadToPush.dailyReports); }
+
     return { success: true };
   };
 
@@ -2243,14 +2413,16 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     pushCurrentDataToCloud({ dailyReports: updated });
   };
 
-  // Tests
+  // Tests & Daily Class Tests (Cloud-Confirmed)
   const addTest = (testData: Omit<Test, 'id'>): Test => {
     hasPendingLocalMutation.current = true;
     const newTest: Test = {
       ...testData,
-      id: `tst-${Date.now()}`
+      id: `tst-${Date.now()}`,
+      updatedAt: new Date().toISOString()
     };
     const updated = [newTest, ...stateRef.current.tests];
+    stateRef.current = { ...stateRef.current, tests: updated };
     setTests(updated);
     saveToStorage('tests', updated);
     pushCurrentDataToCloud({ tests: updated });
@@ -2266,9 +2438,158 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } else {
       updated.unshift({ ...resultData, id: `tr-${Date.now()}-${resultData.studentId}` });
     }
+    stateRef.current = { ...stateRef.current, testResults: updated };
     setTestResults(updated);
     saveToStorage('testResults', updated);
     pushCurrentDataToCloud({ testResults: updated });
+  };
+
+  const saveDailyTestWithResultsAsync = async (
+    test: Test,
+    results: Array<Omit<TestResult, 'id' | 'testId' | 'testTitle' | 'testDate' | 'className' | 'subject' | 'totalMarks'>>
+  ): Promise<{ success: boolean; test: Test; error?: string }> => {
+    const prevTests = stateRef.current.tests;
+    const prevTestResults = stateRef.current.testResults;
+    const nowIso = new Date().toISOString();
+    const enrichedTest: Test = {
+      ...test,
+      id: test.id || `tst-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      updatedAt: nowIso
+    };
+
+    const buildMergedTestsAndResults = (baseTests: Test[], baseResults: TestResult[]) => {
+      const nextTests = [
+        enrichedTest,
+        ...baseTests.filter(t => t.id !== enrichedTest.id)
+      ];
+      const existingForTest = new Map(
+        baseResults
+          .filter(r => r.testId === enrichedTest.id)
+          .map(r => [r.studentId, r.id])
+      );
+      const otherResults = baseResults.filter(r => r.testId !== enrichedTest.id);
+      const newTestResults: TestResult[] = results.map(r => {
+        const pct =
+          enrichedTest.totalMarks > 0
+            ? Math.round((r.marksObtained / enrichedTest.totalMarks) * 1000) / 10
+            : 0;
+        return {
+          id: existingForTest.get(r.studentId) || `tr-${Date.now()}-${r.studentId}-${Math.random().toString(36).substring(2, 5)}`,
+          testId: enrichedTest.id,
+          testTitle: enrichedTest.title,
+          testDate: enrichedTest.testDate,
+          studentId: r.studentId,
+          studentName: r.studentName,
+          className: enrichedTest.className,
+          subject: enrichedTest.subject,
+          marksObtained: r.marksObtained,
+          totalMarks: enrichedTest.totalMarks,
+          percentage: pct,
+          grade: r.grade,
+          remarks: r.remarks
+        };
+      });
+      return {
+        nextTests,
+        nextResults: [...newTestResults, ...otherResults]
+      };
+    };
+
+    hasPendingLocalMutation.current = true;
+    const localMerged = buildMergedTestsAndResults(prevTests, prevTestResults);
+    stateRef.current = {
+      ...stateRef.current,
+      tests: localMerged.nextTests,
+      testResults: localMerged.nextResults
+    };
+    setTests(localMerged.nextTests);
+    saveToStorage('tests', localMerged.nextTests);
+    setTestResults(localMerged.nextResults);
+    saveToStorage('testResults', localMerged.nextResults);
+
+    let payloadTests = localMerged.nextTests;
+    let payloadResults = localMerged.nextResults;
+
+    try {
+      const { best, reachable } = await fetchFreshestCloudSnapshot(2800);
+      if (reachable && best) {
+        const baseT = Array.isArray(best.tests) ? best.tests : prevTests;
+        const baseR = Array.isArray(best.testResults) ? best.testResults : prevTestResults;
+        const cloudMerged = buildMergedTestsAndResults(baseT, baseR);
+        payloadTests = cloudMerged.nextTests;
+        payloadResults = cloudMerged.nextResults;
+      }
+    } catch {
+      // Use local merged
+    }
+
+    const saved = await pushCurrentDataToCloud({
+      tests: payloadTests,
+      testResults: payloadResults
+    });
+
+    if (!saved) {
+      hasPendingLocalMutation.current = false;
+      stateRef.current = {
+        ...stateRef.current,
+        tests: prevTests,
+        testResults: prevTestResults
+      };
+      setTests(prevTests);
+      saveToStorage('tests', prevTests);
+      setTestResults(prevTestResults);
+      saveToStorage('testResults', prevTestResults);
+      return {
+        success: false,
+        test: enrichedTest,
+        error: 'ڈیلی ٹیسٹ آن لائن سرور پر محفوظ نہیں ہو سکا۔ براہ کرم انٹرنیٹ چیک کر کے دوبارہ کوشش کریں۔'
+      };
+    }
+
+    stateRef.current = {
+      ...stateRef.current,
+      tests: payloadTests,
+      testResults: payloadResults
+    };
+    setTests(payloadTests);
+    saveToStorage('tests', payloadTests);
+    setTestResults(payloadResults);
+    saveToStorage('testResults', payloadResults);
+    return { success: true, test: enrichedTest };
+  };
+
+  const deleteTestAsync = async (testId: string): Promise<boolean> => {
+    const prevTests = stateRef.current.tests;
+    const prevTestResults = stateRef.current.testResults;
+    const removedResultIds = prevTestResults.filter(r => r.testId === testId).map(r => r.id);
+    const nextDeleted = recordDeletedIds([testId, ...removedResultIds]);
+
+    const nextTests = prevTests.filter(t => t.id !== testId);
+    const nextResults = prevTestResults.filter(r => r.testId !== testId);
+
+    hasPendingLocalMutation.current = true;
+    stateRef.current = { ...stateRef.current, tests: nextTests, testResults: nextResults };
+    setTests(nextTests);
+    saveToStorage('tests', nextTests);
+    setTestResults(nextResults);
+    saveToStorage('testResults', nextResults);
+
+    const saved = await pushCurrentDataToCloud({
+      tests: nextTests,
+      testResults: nextResults,
+      deletedIds: nextDeleted
+    });
+
+    if (!saved) {
+      hasPendingLocalMutation.current = false;
+      stateRef.current = { ...stateRef.current, tests: prevTests, testResults: prevTestResults };
+      setTests(prevTests);
+      saveToStorage('tests', prevTests);
+      setTestResults(prevTestResults);
+      saveToStorage('testResults', prevTestResults);
+      return false;
+    }
+    return true;
   };
 
   // Official Student Exam Reports (Tests & Results Section)
@@ -2825,6 +3146,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         addDailyReport,
         addTest,
         addTestResult,
+        saveDailyTestWithResultsAsync,
+        deleteTestAsync,
         studentExamReports,
         saveStudentExamReport,
         saveStudentExamReportAsync,

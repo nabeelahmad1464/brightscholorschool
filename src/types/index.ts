@@ -191,6 +191,9 @@ export interface Test {
   totalMarks: number;
   testDate: string;
   description: string;
+  createdByTeacherId?: string;
+  createdByTeacherName?: string;
+  updatedAt?: string;
 }
 
 export interface SubjectMarkEntry {
@@ -229,12 +232,14 @@ export interface TestResult {
   id: string;
   testId: string;
   testTitle: string;
+  testDate?: string;
   studentId: string;
   studentName: string;
   className: string;
   subject: string;
   marksObtained: number;
   totalMarks: number;
+  percentage?: number;
   grade: string;
   remarks: string;
 }

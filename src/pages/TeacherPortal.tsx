@@ -24,6 +24,7 @@ import {
 import { useSchool } from '../context/SchoolContext';
 import { Student, ClassLevel, SCHOOL_CLASSES, SCHOOL_SUBJECTS } from '../types';
 import { StudentMarksAndResultsSection } from '../components/StudentMarksAndResultsSection';
+import { TeacherDailyTestSection } from '../components/TeacherDailyTestSection';
 import { normalizeDigits } from '../utils/schoolSync';
 
 interface TeacherPortalProps {
@@ -59,7 +60,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
 
   const teacher = teachers.find(t => t.id === currentTeacherId) || teachers[0];
 
-  const [activeTab, setActiveTab] = useState<'attendance' | 'students_list' | 'tarbiyat' | 'tests' | 'leave' | 'notices'>('attendance');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'students_list' | 'tarbiyat' | 'daily_tests' | 'tests' | 'leave' | 'notices'>('attendance');
   const [selectedClass, setSelectedClass] = useState<ClassLevel>(() => {
     const firstWithStudents = SCHOOL_CLASSES.find(cls => students.some(s => s.className === cls));
     return firstWithStudents || 'Play Group';
@@ -402,7 +403,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
           { id: 'attendance', label: 'Mark Class Attendance', icon: <Calendar className="w-4 h-4" /> },
           { id: 'students_list', label: `رجسٹرڈ بچے (${students.length})`, icon: <Users className="w-4 h-4" /> },
           { id: 'tarbiyat', label: 'Tarbiyat & Homework Report', icon: <BookOpen className="w-4 h-4" /> },
-          { id: 'tests', label: 'Enter Test Marks', icon: <Award className="w-4 h-4" /> },
+          { id: 'daily_tests', label: 'Daily Class Tests (روزانہ ٹیسٹ)', icon: <FileText className="w-4 h-4" /> },
+          { id: 'tests', label: 'Exam Results (امتحانی نتائج)', icon: <Award className="w-4 h-4" /> },
           { id: 'leave', label: 'Submit Leave', icon: <FileText className="w-4 h-4" /> },
           { id: 'notices', label: 'School Notices', icon: <Bell className="w-4 h-4" /> },
         ].map(t => (
@@ -999,7 +1001,17 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ onSelectStudent })
         </form>
       )}
 
-      {/* 3: TESTS & RESULTS */}
+      {/* 3A: DAILY CLASS TESTS */}
+      {activeTab === 'daily_tests' && (
+        <TeacherDailyTestSection
+          role="teacher"
+          teacherId={teacher?.id}
+          teacherName={teacher?.name}
+          teacherAssignedClasses={teacher?.assignedClasses}
+        />
+      )}
+
+      {/* 3B: EXAM RESULTS */}
       {activeTab === 'tests' && (
         <StudentMarksAndResultsSection
           role="teacher"

@@ -891,6 +891,20 @@
       "allowances": 0,
       "deductions": 0,
       "personalPassword": "teacher123"
+    },
+    {
+      "name": "Sania sufyan",
+      "qualification": "MSC CS",
+      "subject": "CS, English",
+      "assignedClasses": "Clas",
+      "contactNo": "0302-5053993",
+      "whatsappNo": "0302-5053993",
+      "joiningDate": "2026-11-17",
+      "salary": 0,
+      "personalPassword": "teacher123",
+      "id": "t-1794892629710",
+      "allowances": 0,
+      "deductions": 0
     }
   ],
   "attendance": [
@@ -935,7 +949,17 @@
       "fineAmount": 50
     }
   ],
-  "teacherAttendance": [],
+  "teacherAttendance": [
+    {
+      "teacherId": "t-1794892629710",
+      "teacherName": "Sania sufyan",
+      "date": "2026-11-17",
+      "month": "2026-11",
+      "status": "Present",
+      "id": "ta-1794892978689-t-1794892629710",
+      "markedAt": "2026-11-17T05:23:32.127Z"
+    }
+  ],
   "leaves": [],
   "feeRecords": [
     {
@@ -963,11 +987,11 @@
       "className": "Class 7",
       "month": "October 2026",
       "tuitionFee": 3000,
-      "absentDays": 1,
-      "fineAmount": 50,
-      "totalPayable": 3050,
+      "absentDays": 0,
+      "fineAmount": 0,
+      "totalPayable": 3000,
       "paidAmount": 0,
-      "balanceRemaining": 3050,
+      "balanceRemaining": 3000,
       "status": "Unpaid",
       "receiptNo": "REC-BSS-9400",
       "leaveDays": 0
@@ -997,11 +1021,11 @@
       "className": "Class 7",
       "month": "October 2026",
       "tuitionFee": 3000,
-      "absentDays": 1,
-      "fineAmount": 50,
-      "totalPayable": 3050,
+      "absentDays": 0,
+      "fineAmount": 0,
+      "totalPayable": 3000,
       "paidAmount": 0,
-      "balanceRemaining": 3050,
+      "balanceRemaining": 3000,
       "status": "Unpaid",
       "receiptNo": "REC-BSS-4028",
       "leaveDays": 0
@@ -1845,6 +1869,2451 @@
   "testResults": [],
   "studentExamReports": [
     {
+      "id": "exam-1794931838702-s-1793962580636",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793962580636",
+      "studentName": "Maryam",
+      "fatherName": "Noor ul mobeen",
+      "className": "Nursery",
+      "rollNo": "09",
+      "admissionNo": "BSS-0636",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 49,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 49,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 194,
+      "percentage": 97,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T16:10:38.703Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794931717157-s-1793962539575",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793962539575",
+      "studentName": "M.Maooz",
+      "fatherName": "M.Noman",
+      "className": "Nursery",
+      "rollNo": "08",
+      "admissionNo": "BSS-9575",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 46,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 46,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 40,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 43,
+          "grade": "A",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 175,
+      "percentage": 87.5,
+      "grade": "A",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T16:08:37.159Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794931592067-s-1793962506350",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793962506350",
+      "studentName": "M.Maaz",
+      "fatherName": "M.Noman",
+      "className": "Nursery",
+      "rollNo": "07",
+      "admissionNo": "BSS-6350",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 49,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 47,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 192,
+      "percentage": 96,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T16:06:32.067Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794931446479-s-1793962468522",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793962468522",
+      "studentName": "M.Ahmed",
+      "fatherName": "Dr. Sohail",
+      "className": "Nursery",
+      "rollNo": "06",
+      "admissionNo": "BSS-8522",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 200,
+      "percentage": 100,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T16:04:06.480Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794931340770-s-1793962415248",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793962415248",
+      "studentName": "Zeeshan",
+      "fatherName": "Gulzar ali",
+      "className": "Nursery",
+      "rollNo": "05",
+      "admissionNo": "BSS-5248",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 49,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 49,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 49,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 195,
+      "percentage": 97.5,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T16:02:20.771Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794931199769-s-1793962374619",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793962374619",
+      "studentName": "Noor Nabi",
+      "fatherName": "M.Nadeem",
+      "className": "Nursery",
+      "rollNo": "04",
+      "admissionNo": "BSS-4619",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 47,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 47,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 190,
+      "percentage": 95,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T15:59:59.770Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794930990355-s-1793962330136",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793962330136",
+      "studentName": "Husain",
+      "fatherName": "Siddique akbar",
+      "className": "Nursery",
+      "rollNo": "03",
+      "admissionNo": "BSS-0136",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 37,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 37,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 43,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 43,
+          "grade": "A",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 160,
+      "percentage": 80,
+      "grade": "A",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T15:56:30.356Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794930821183-s-1793962294050",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793962294050",
+      "studentName": "M.Awais",
+      "fatherName": "Mujhahid ali",
+      "className": "Nursery",
+      "rollNo": "02",
+      "admissionNo": "BSS-4050",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 38,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 39,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 44,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 32,
+          "grade": "C",
+          "remarks": "Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 153,
+      "percentage": 76.5,
+      "grade": "B",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T15:53:41.184Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794930642655-s-1793962251270",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793962251270",
+      "studentName": "Shumail",
+      "fatherName": "Zahid ali",
+      "className": "Nursery",
+      "rollNo": "01",
+      "admissionNo": "BSS-1266",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 34,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 39,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 37,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 35,
+          "grade": "B",
+          "remarks": "Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 145,
+      "percentage": 72.5,
+      "grade": "B",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T15:50:42.656Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794930420769-s-1793962096486",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793962096486",
+      "studentName": "Ali Hassan",
+      "fatherName": "Shehzad ali",
+      "className": "Play Group",
+      "rollNo": "18",
+      "admissionNo": "BSS-6486",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 35,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 35,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 40,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 0,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 110,
+      "percentage": 55,
+      "grade": "D",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T15:47:00.770Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794929719996-s-1793961965854",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793961965854",
+      "studentName": "Shuban",
+      "fatherName": "M. Faisal",
+      "className": "Play Group",
+      "rollNo": "15",
+      "admissionNo": "BSS-5854",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 49,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 47,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 192,
+      "percentage": 96,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T15:41:39.275Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794900011589-s-1793961902110",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793961902110",
+      "studentName": "Subhan",
+      "fatherName": "M.Faisal",
+      "className": "Play Group",
+      "rollNo": "13",
+      "admissionNo": "BSS-2110",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 40,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 39,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 44,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 38,
+          "grade": "B",
+          "remarks": "Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 161,
+      "percentage": 80.5,
+      "grade": "A",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T15:37:00.508Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794929520653-s-1793961932214",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793961932214",
+      "studentName": "Ibrahim",
+      "fatherName": "M.Faisal",
+      "className": "Play Group",
+      "rollNo": "14",
+      "admissionNo": "BSS-2207",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 38,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 34,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 43,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 37,
+          "grade": "B",
+          "remarks": "Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 152,
+      "percentage": 76,
+      "grade": "B",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T15:32:00.654Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794899432384-s-1793961800757",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793961800757",
+      "studentName": "Inza",
+      "fatherName": "M.Nasir",
+      "className": "Play Group",
+      "rollNo": "11",
+      "admissionNo": "BSS-0757",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 47,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 44,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 46,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 42,
+          "grade": "A",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 179,
+      "percentage": 89.5,
+      "grade": "A",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T15:27:56.673Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794896686626-s-1793961727286",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793961727286",
+      "studentName": "M.Arman",
+      "fatherName": "Abdul ghaffar",
+      "className": "Play Group",
+      "rollNo": "09",
+      "admissionNo": "BSS-7286",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 47,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 46,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 47,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 45,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 185,
+      "percentage": 92.5,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T07:05:19.386Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794896972181-s-1793961770140",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793961770140",
+      "studentName": "Noor Fatima",
+      "fatherName": "Shakeel Ahmed",
+      "className": "Play Group",
+      "rollNo": "10",
+      "admissionNo": "BSS-0140",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 46,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 40,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 43,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 40,
+          "grade": "A",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 169,
+      "percentage": 84.5,
+      "grade": "A",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T06:29:32.182Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794896374275-s-1793961677973",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793961677973",
+      "studentName": "Haram fatima",
+      "fatherName": "Abdul ghaffar",
+      "className": "Play Group",
+      "rollNo": "08",
+      "admissionNo": "BSS-7973",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 49,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 49,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 49,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 195,
+      "percentage": 97.5,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T06:19:34.276Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794896163322-s-1793961606161",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793961606161",
+      "studentName": "Rida",
+      "fatherName": "Azhar ali",
+      "className": "Play Group",
+      "rollNo": "07",
+      "admissionNo": "BSS-6161",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 44,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 40,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 46,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 44,
+          "grade": "A",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 174,
+      "percentage": 87,
+      "grade": "A",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T06:16:03.324Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794889064733-s-1793963709353",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793963709353",
+      "studentName": "Mehak",
+      "fatherName": "M.Nasir",
+      "className": "Class 7",
+      "rollNo": "04",
+      "admissionNo": "BSS-9348",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 70,
+          "obtainedMarks": 32,
+          "grade": "E",
+          "remarks": "Satisfactory"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 26,
+          "grade": "D",
+          "remarks": "Satisfactory"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 50,
+          "obtainedMarks": 32,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 31,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Geography",
+          "totalMarks": 50,
+          "obtainedMarks": 11,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 50,
+          "obtainedMarks": 17,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        }
+      ],
+      "grandTotal": 320,
+      "totalObtained": 149,
+      "percentage": 46.6,
+      "grade": "E",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T04:17:44.733Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Maham"
+    },
+    {
+      "id": "exam-1794888955015-s-1793963679571",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793963679571",
+      "studentName": "M.Fazan",
+      "fatherName": "M.Waqas",
+      "className": "Class 7",
+      "rollNo": "03",
+      "admissionNo": "BSS-9570",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 70,
+          "obtainedMarks": 16,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 28,
+          "grade": "D",
+          "remarks": "Satisfactory"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 50,
+          "obtainedMarks": 8,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 28,
+          "grade": "D",
+          "remarks": "Satisfactory"
+        },
+        {
+          "subject": "Geography",
+          "totalMarks": 50,
+          "obtainedMarks": 9,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 50,
+          "obtainedMarks": 15,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        }
+      ],
+      "grandTotal": 320,
+      "totalObtained": 104,
+      "percentage": 32.5,
+      "grade": "F",
+      "status": "Fail",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T04:15:55.015Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Maham"
+    },
+    {
+      "id": "exam-1794888835681-s-1793963615791",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793963615791",
+      "studentName": "M.Azaan",
+      "fatherName": "M.Azam",
+      "className": "Class 7",
+      "rollNo": "01",
+      "admissionNo": "BSS-5791",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 70,
+          "obtainedMarks": 66,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Geography",
+          "totalMarks": 50,
+          "obtainedMarks": 39,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 50,
+          "obtainedMarks": 42,
+          "grade": "A",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 320,
+      "totalObtained": 295,
+      "percentage": 92.2,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T04:13:55.681Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Maham"
+    },
+    {
+      "id": "exam-1794888630601-s-1793963552583",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793963552583",
+      "studentName": "Ihtisham",
+      "fatherName": "Abdul haq",
+      "className": "Class 4",
+      "rollNo": "02",
+      "admissionNo": "BSS-2583",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 3,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 2,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 30,
+          "obtainedMarks": 4,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 40,
+          "obtainedMarks": 15,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        },
+        {
+          "subject": "Social Studies",
+          "totalMarks": 30,
+          "obtainedMarks": 3,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 40,
+          "obtainedMarks": 7,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        }
+      ],
+      "grandTotal": 240,
+      "totalObtained": 34,
+      "percentage": 14.2,
+      "grade": "F",
+      "status": "Fail",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T04:10:30.602Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Maham"
+    },
+    {
+      "id": "exam-1794888518996-s-1794552387752",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1794552387752",
+      "studentName": "Maryam",
+      "fatherName": "Qaiser mehmood",
+      "className": "Class 4",
+      "rollNo": "01",
+      "admissionNo": "BSS-7751",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 30,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 33,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 30,
+          "obtainedMarks": 18,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 40,
+          "obtainedMarks": 38,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Social Studies",
+          "totalMarks": 30,
+          "obtainedMarks": 11,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 40,
+          "obtainedMarks": 31,
+          "grade": "B",
+          "remarks": "Good"
+        }
+      ],
+      "grandTotal": 240,
+      "totalObtained": 161,
+      "percentage": 67.1,
+      "grade": "C",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T04:08:38.997Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Maham"
+    },
+    {
+      "id": "exam-1794887250793-s-1793963451482",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793963451482",
+      "studentName": "Esha",
+      "fatherName": "M.Nasir",
+      "className": "Class 3",
+      "rollNo": "05",
+      "admissionNo": "BSS-1482",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 40,
+          "obtainedMarks": 33,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 30,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 40,
+          "obtainedMarks": 10,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 40,
+          "obtainedMarks": 32,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 50,
+          "obtainedMarks": 41,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 270,
+      "totalObtained": 196,
+      "percentage": 72.6,
+      "grade": "B",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T03:47:30.793Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Maham"
+    },
+    {
+      "id": "exam-1794887097126-s-1793963422676",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793963422676",
+      "studentName": "Ibrahim",
+      "fatherName": "Babar Hussain",
+      "className": "Class 3",
+      "rollNo": "04",
+      "admissionNo": "BSS-2676",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 40,
+          "obtainedMarks": 22,
+          "grade": "D",
+          "remarks": "Satisfactory"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 31,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 40,
+          "obtainedMarks": 18,
+          "grade": "E",
+          "remarks": "Satisfactory"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 40,
+          "obtainedMarks": 34,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 50,
+          "obtainedMarks": 35,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 270,
+      "totalObtained": 190,
+      "percentage": 70.4,
+      "grade": "B",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T03:44:57.127Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Maham"
+    },
+    {
+      "id": "exam-1794886772922-s-1793963363714",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793963363714",
+      "studentName": "Zohaib",
+      "fatherName": "Gulzar ali",
+      "className": "Class 3",
+      "rollNo": "02",
+      "admissionNo": "BSS-3714",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 40,
+          "obtainedMarks": 29,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 33,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 40,
+          "obtainedMarks": 14,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 40,
+          "obtainedMarks": 27,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 50,
+          "obtainedMarks": 31,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 270,
+      "totalObtained": 182,
+      "percentage": 67.4,
+      "grade": "C",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T03:42:54.072Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Maham"
+    },
+    {
+      "id": "exam-1794886897174-s-1793963393922",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793963393922",
+      "studentName": "Maryam Fatima",
+      "fatherName": "M.Rizwan",
+      "className": "Class 3",
+      "rollNo": "03",
+      "admissionNo": "BSS-3921",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 40,
+          "obtainedMarks": 33,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 36,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 40,
+          "obtainedMarks": 34,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 40,
+          "obtainedMarks": 36,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 50,
+          "obtainedMarks": 46,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 270,
+      "totalObtained": 235,
+      "percentage": 87,
+      "grade": "A",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T03:41:37.174Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Maham"
+    },
+    {
+      "id": "exam-1794886644627-s-1793963340512",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793963340512",
+      "studentName": "M.Rehan",
+      "fatherName": "Abdul ghaffar",
+      "className": "Class 3",
+      "rollNo": "01",
+      "admissionNo": "BSS-0512",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 40,
+          "obtainedMarks": 20,
+          "grade": "D",
+          "remarks": "Satisfactory"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 23,
+          "grade": "E",
+          "remarks": "Satisfactory"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 40,
+          "obtainedMarks": 18,
+          "grade": "E",
+          "remarks": "Satisfactory"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 40,
+          "obtainedMarks": 25,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 50,
+          "obtainedMarks": 32,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 270,
+      "totalObtained": 168,
+      "percentage": 62.2,
+      "grade": "C",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T03:37:24.628Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Maham"
+    },
+    {
+      "id": "exam-1794886259806-s-1793961553001",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793961553001",
+      "studentName": "M.Wali",
+      "fatherName": "Junaid ali",
+      "className": "Play Group",
+      "rollNo": "06",
+      "admissionNo": "BSS-3001",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 47,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 47,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 45,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 187,
+      "percentage": 93.5,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T03:30:59.807Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794885986722-s-1793961453789",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-17",
+      "studentId": "s-1793961453789",
+      "studentName": "M.Ali",
+      "fatherName": "Gulam abbas",
+      "className": "Play Group",
+      "rollNo": "05",
+      "admissionNo": "BSS-3788",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 200,
+      "percentage": 100,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-17T03:26:26.725Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794799841173-s-1793961390022",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-16",
+      "studentId": "s-1793961390022",
+      "studentName": "Shahzaib",
+      "fatherName": "Naeem raza",
+      "className": "Play Group",
+      "rollNo": "04",
+      "admissionNo": "BSS-0022",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 46,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 45,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 49,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 188,
+      "percentage": 94,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-16T03:30:41.174Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794799715249-s-1793961356315",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-16",
+      "studentId": "s-1793961356315",
+      "studentName": "Dua",
+      "fatherName": "M.faisal",
+      "className": "Play Group",
+      "rollNo": "03",
+      "admissionNo": "BSS-6315",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 45,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 40,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 45,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 39,
+          "grade": "B",
+          "remarks": "Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 169,
+      "percentage": 84.5,
+      "grade": "A",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-16T03:28:35.249Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794799421850-s-1793961314193",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-16",
+      "studentId": "s-1793961314193",
+      "studentName": "Abdul wahab",
+      "fatherName": "Sajjad akhtar",
+      "className": "Play Group",
+      "rollNo": "02",
+      "admissionNo": "BSS-4192",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 47,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 46,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 46,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 45,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 184,
+      "percentage": 92,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-16T03:23:41.851Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794799247769-s-1793961260492",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-16",
+      "studentId": "s-1793961260492",
+      "studentName": "M۔Faizan",
+      "fatherName": "M۔Nadeem",
+      "className": "Play Group",
+      "rollNo": "01",
+      "admissionNo": "BSS-0484",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 47,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 47,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 47,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 189,
+      "percentage": 94.5,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-16T03:20:47.770Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794767165130-s-1793963268283",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-15",
+      "studentId": "s-1793963268283",
+      "studentName": "M.Haseeb",
+      "fatherName": "M.Farooq",
+      "className": "Class 2",
+      "rollNo": "03",
+      "admissionNo": "BSS-8283",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 42,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 49,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 300,
+      "totalObtained": 289,
+      "percentage": 96.3,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-15T18:54:12.610Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794767512210-s-1793963178255",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-15",
+      "studentId": "s-1793963178255",
+      "studentName": "Husnain Ali",
+      "fatherName": "Khalil Ahmad",
+      "className": "Class 2",
+      "rollNo": "01",
+      "admissionNo": "BSS-8254",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 28,
+          "grade": "D",
+          "remarks": "Satisfactory"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 50,
+          "obtainedMarks": 31,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 39,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 50,
+          "obtainedMarks": 35,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 300,
+      "totalObtained": 233,
+      "percentage": 77.7,
+      "grade": "B",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-15T18:53:43.434Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794767644143-s-1793963240697",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-15",
+      "studentId": "s-1793963240697",
+      "studentName": "M.Danyal",
+      "fatherName": "M.Farooq",
+      "className": "Class 2",
+      "rollNo": "02",
+      "admissionNo": "BSS-0696",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 29,
+          "grade": "D",
+          "remarks": "Satisfactory"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 22,
+          "grade": "E",
+          "remarks": "Satisfactory"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 50,
+          "obtainedMarks": 6,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 39,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 50,
+          "obtainedMarks": 17,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 47,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 300,
+      "totalObtained": 160,
+      "percentage": 53.3,
+      "grade": "D",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-15T18:52:57.194Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794766586597-s-1793962935996",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-15",
+      "studentId": "s-1793962935996",
+      "studentName": "Saqaf rabi",
+      "fatherName": "M.Rizwan",
+      "className": "Class 1",
+      "rollNo": "02",
+      "admissionNo": "BSS-5996",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 43,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 50,
+          "obtainedMarks": 38,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 300,
+      "totalObtained": 281,
+      "percentage": 93.7,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-15T18:50:50.734Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794766918057-s-1793963055844",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-15",
+      "studentId": "s-1793963055844",
+      "studentName": "Nawa e ramzan",
+      "fatherName": "M.Faisal",
+      "className": "Class 1",
+      "rollNo": "05",
+      "admissionNo": "BSS-5844",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 22,
+          "grade": "E",
+          "remarks": "Satisfactory"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 30,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 50,
+          "obtainedMarks": 31,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 44,
+          "grade": "A",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 50,
+          "obtainedMarks": 38,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 45,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 300,
+      "totalObtained": 210,
+      "percentage": 70,
+      "grade": "B",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-15T18:50:15.024Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794766762688-s-1793963017829",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-15",
+      "studentId": "s-1793963017829",
+      "studentName": "Ubaidullah",
+      "fatherName": "M.irshad",
+      "className": "Class 1",
+      "rollNo": "04",
+      "admissionNo": "BSS-7829",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 30,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 38,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 50,
+          "obtainedMarks": 27,
+          "grade": "D",
+          "remarks": "Satisfactory"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 50,
+          "obtainedMarks": 47,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 300,
+      "totalObtained": 242,
+      "percentage": 80.7,
+      "grade": "A",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-15T18:49:35.115Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794767043966-s-1793963092968",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-15",
+      "studentId": "s-1793963092968",
+      "studentName": "Abdul Rahman",
+      "fatherName": "M. Waqas",
+      "className": "Class 1",
+      "rollNo": "06",
+      "admissionNo": "BSS-2968",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 34,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 34,
+          "grade": "C",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 50,
+          "obtainedMarks": 6,
+          "grade": "F",
+          "remarks": "Needs Practice"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 46,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 50,
+          "obtainedMarks": 35,
+          "grade": "B",
+          "remarks": "Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 40,
+          "grade": "A",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 300,
+      "totalObtained": 195,
+      "percentage": 65,
+      "grade": "C",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-15T18:47:45.732Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794768342375-s-1793962725761",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-15",
+      "studentId": "s-1793962725761",
+      "studentName": "Zainab",
+      "fatherName": "Noor ul mobeen",
+      "className": "Prep",
+      "rollNo": "03",
+      "admissionNo": "BSS-5761",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 45,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 200,
+      "totalObtained": 195,
+      "percentage": 97.5,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-15T18:45:42.376Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
+      "id": "exam-1794768200045-s-1793962896262",
+      "examTitle": "Term Examination 2026",
+      "examDate": "2026-11-15",
+      "studentId": "s-1793962896262",
+      "studentName": "M.Maaz",
+      "fatherName": "M.Asif",
+      "className": "Class 1",
+      "rollNo": "01",
+      "admissionNo": "BSS-6262",
+      "subjects": [
+        {
+          "subject": "English",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Urdu",
+          "totalMarks": 50,
+          "obtainedMarks": 48,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Islamiat",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Mathematics",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Science",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        },
+        {
+          "subject": "Drawing",
+          "totalMarks": 50,
+          "obtainedMarks": 50,
+          "grade": "A+",
+          "remarks": "Very Good"
+        }
+      ],
+      "grandTotal": 300,
+      "totalObtained": 298,
+      "percentage": 99.3,
+      "grade": "A+",
+      "status": "Pass",
+      "generalRemarks": "",
+      "isPublished": true,
+      "updatedAt": "2026-11-15T18:43:20.046Z",
+      "enteredByRole": "Teacher",
+      "enteredByName": "Mam Shahista"
+    },
+    {
       "id": "exam-1794766390981-s-1793962655634",
       "examTitle": "Term Examination 2026",
       "examDate": "2026-11-15",
@@ -2165,7 +4634,8 @@
     "s-1794677175743-tjw4",
     "fee-1794677175743-2esu",
     "exam-1794764805371-s-1793962655634",
-    "fee-1794562666399-54023"
+    "fee-1794562666399-54023",
+    "exam-1794897443489-s-1793961800757"
   ],
-  "updatedAt": "2026-11-15T18:13:21.493Z"
+  "updatedAt": "2026-11-17T16:11:27.072Z"
 }

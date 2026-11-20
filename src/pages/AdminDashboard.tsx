@@ -50,6 +50,7 @@ import {
 } from '../types';
 import { FeeReceiptModal } from '../components/FeeReceiptModal';
 import { StudentMarksAndResultsSection } from '../components/StudentMarksAndResultsSection';
+import { TeacherDailyTestSection } from '../components/TeacherDailyTestSection';
 import { getCurrentMonthLabel, normalizeDigits } from '../utils/schoolSync';
 import { calculateSchoolFeeSummary, deduplicateAndCleanFeeRecords } from '../utils/feeCalculations';
 
@@ -2341,7 +2342,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onSelectStudent 
 
       {/* TAB 6: TESTS & RESULTS */}
       {activeTab === 'tests' && (
-        <StudentMarksAndResultsSection role="admin" />
+        <div className="space-y-8">
+          <StudentMarksAndResultsSection role="admin" />
+          <TeacherDailyTestSection role="admin" teacherName="Admin" />
+        </div>
       )}
 
       {/* TAB 7: TARBIYAT */}
